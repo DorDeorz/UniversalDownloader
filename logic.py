@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import re
@@ -47,6 +48,26 @@ class YtDlpLogger:
         self._emit(logging.ERROR, "", msg)
 
 
+# Options a platform adds to every YoutubeDL instance (see
+# set_platform_options). The Windows app adds none; the Android app points
+# yt-dlp at its bundled QuickJS because Deno is not available there.
+_platform_options = {}
+
+
+def set_platform_options(options):
+    """Add ``options`` to every YoutubeDL instance built from now on.
+
+    Replaces what an earlier call set. Keys that affect certificate checks
+    are refused, so a platform cannot switch HTTPS verification off.
+    """
+    global _platform_options
+    options = dict(options or {})
+    for key in ('nocheckcertificate', 'legacyserverconnect'):
+        if key in options:
+            raise ValueError(f"'{key}' cannot be set as a platform option")
+    _platform_options = options
+
+
 def base_ydl_options(log_callback=None):
     """Options shared by every YoutubeDL instance.
 
@@ -55,6 +76,8 @@ def base_ydl_options(log_callback=None):
     ``quiet``/``no_warnings``.
     """
     return {
+        # A copy, because yt-dlp may normalise nested option dicts in place.
+        **copy.deepcopy(_platform_options),
         'logger': YtDlpLogger(log_callback),
         'noprogress': True,
         # yt-dlp colours messages when stderr is a console (as on Windows),

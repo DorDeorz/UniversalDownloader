@@ -283,9 +283,24 @@ def test_mode_buttons_have_their_full_size_when_the_app_is_reopened(monkeypatch,
                     [(b.winfo_width(), b.winfo_height(), b._text_label.winfo_reqwidth()) for b in buttons])
 
         at_start = sizes()
+        m = window.cmb_mode
+        card = m.master
+        diag = {
+            "screen": (window.winfo_screenwidth(), window.winfo_screenheight()),
+            "window": window.geometry(), "window_req": window.winfo_reqwidth(),
+            "mode_req": m.winfo_reqwidth(), "buttons_req": [b.winfo_reqwidth() for b in m._buttons_dict.values()],
+            "button_propagate": [b.grid_propagate() for b in m._buttons_dict.values()],
+            "mode_propagate": m.grid_propagate(),
+            "card": (card.winfo_width(), card.winfo_reqwidth()),
+            "card_cols": [card.grid_bbox(c, 0) for c in range(4)],
+            "canvas": window._scroll_canvas.winfo_width(),
+            "frame": (window.main_frame.winfo_width(), window.main_frame.winfo_reqwidth()),
+            "mode_grid": m.grid_info(),
+        }
+        print("DIAG", diag)
         window.cmb_mode.relabel()
         pump(window, timeout=0.5)
-        assert at_start == sizes()
+        assert at_start == sizes(), diag
         assert at_start[0][1] == window.cmb_format.winfo_height()
     finally:
         window.destroy()

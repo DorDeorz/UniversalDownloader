@@ -16,26 +16,36 @@ import urls
 from logic import describe_error
 from results import ItemResult, ItemStatus, JobSummary
 
-# The two modes the Android preview offers, with the container or audio
-# format each uses.
+# The two modes the Android app offers and the formats each can use. WebM
+# and Opus are left out: the bundled FFmpeg has no VP9 or Opus encoder for
+# the videos that would need converting.
 VIDEO_AUDIO = formats.VIDEO_AUDIO
 AUDIO_ONLY = formats.AUDIO_ONLY
-MODE_FORMATS = {VIDEO_AUDIO: "mp4", AUDIO_ONLY: "mp3"}
-VIDEO_QUALITIES = ["Best", "1080p", "720p", "480p", "360p"]
+MODE_FORMATS = {
+    VIDEO_AUDIO: ("mp4", "mkv"),
+    AUDIO_ONLY: ("mp3", "m4a", "flac", "wav"),
+}
+VIDEO_QUALITIES = list(formats.VIDEO_QUALITIES)   # Best, 2160p (4K), ..., 360p
+AUDIO_QUALITIES = list(formats.AUDIO_QUALITIES)   # Best, 320 kbps, ...
 
 
-def build_options(mode, quality, save_path, audio_format=None):
-    """Options for ``DownloadManager.download_video`` (no trim on Android)."""
+def build_options(mode, save_path, fmt=None, quality="Best", trim_start=None, trim_end=None):
+    """Options for ``DownloadManager.download_video``.
+
+    ``quality`` is a video height limit for Video + Audio and a bitrate for
+    Audio Only. Empty trim texts mean the whole video.
+    """
     if mode not in MODE_FORMATS:
         raise ValueError(f"Unsupported mode '{mode}'")
-    fmt = audio_format if (mode == AUDIO_ONLY and audio_format) else MODE_FORMATS[mode]
+    allowed = MODE_FORMATS[mode]
+    qualities = VIDEO_QUALITIES if mode == VIDEO_AUDIO else AUDIO_QUALITIES
     return {
         "mode": mode,
-        "format": fmt,
-        "quality": quality if mode == VIDEO_AUDIO else "Best",
+        "format": fmt if fmt in allowed else allowed[0],
+        "quality": quality if quality in qualities else "Best",
         "save_path": save_path,
-        "trim_start": None,
-        "trim_end": None,
+        "trim_start": (trim_start or "").strip() or None,
+        "trim_end": (trim_end or "").strip() or None,
     }
 
 

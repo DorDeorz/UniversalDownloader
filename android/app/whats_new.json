@@ -1,0 +1,40 @@
+[
+  {
+    "version": "0.2.0",
+    "date": "2026-09-25",
+    "en": [
+      "New Material You design with Download, History and Settings tabs; colours follow your wallpaper on Android 12 and newer.",
+      "Settings: light, dark or system theme, accent colour, language, default quality and format, parallel connections and more.",
+      "Faster downloads: streamed videos (Instagram, X, live) download several parts at once.",
+      "TikTok works: the app now impersonates a browser like the Windows version.",
+      "Trim: download only part of a video by start and end time.",
+      "Share a link from YouTube, TikTok, Instagram or the browser straight to UniversalDownloader.",
+      "Download history: open, share or remove what you downloaded.",
+      "The screen stays on and downloads keep running while the app works.",
+      "More formats: MKV video, FLAC and WAV audio, audio bitrate choice.",
+      "Smaller app: FFmpeg's code is shared between its programs."
+    ],
+    "tr": [
+      "Yeni Material You tasarımı: İndir, Geçmiş ve Ayarlar sekmeleri; Android 12 ve üstünde renkler duvar kağıdınıza uyar.",
+      "Ayarlar: aydınlık, karanlık veya sistem teması, vurgu rengi, dil, varsayılan kalite ve biçim, paralel bağlantı sayısı ve daha fazlası.",
+      "Daha hızlı indirme: parça parça gelen videolar (Instagram, X, canlı yayın) aynı anda birkaç parçadan iner.",
+      "TikTok çalışıyor: uygulama artık Windows sürümü gibi tarayıcı taklidi yapıyor.",
+      "Kırpma: videonun yalnızca başlangıç ve bitiş zamanı verdiğiniz kısmını indirin.",
+      "YouTube, TikTok, Instagram veya tarayıcıdan bir bağlantıyı doğrudan UniversalDownloader'a paylaşın.",
+      "İndirme geçmişi: indirdiklerinizi açın, paylaşın veya listeden kaldırın.",
+      "İndirme sürerken ekran açık kalır ve indirme devam eder.",
+      "Daha fazla biçim: MKV video, FLAC ve WAV ses, ses bit hızı seçimi.",
+      "Daha küçük uygulama: FFmpeg'in kodu programları arasında paylaşılıyor."
+    ]
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-09-25",
+    "en": [
+      "First test version: paste a link, choose Video + Audio or Audio Only and download with progress."
+    ],
+    "tr": [
+      "İlk deneme sürümü: bağlantıyı yapıştırın, Video + Ses veya Yalnızca Ses seçin ve ilerlemeyi izleyerek indirin."
+    ]
+  }
+]

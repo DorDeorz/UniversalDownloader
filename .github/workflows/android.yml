@@ -1,8 +1,8 @@
 name: Android preview
 
 # Builds the Android preview APK (debug-signed) and tests it on an emulator:
-# the app downloads a local test video as Video + Audio and as MP3, which
-# runs the bundled FFmpeg, ffprobe and QuickJS on Android.
+# the app downloads a local test video as Video + Audio, as MP3 and trimmed,
+# which runs the bundled FFmpeg, ffprobe and QuickJS on Android.
 #
 # A manual run with "publish" ticked attaches the APK to a GitHub
 # pre-release tagged android-preview-<run number>. That is separate from
@@ -66,7 +66,7 @@ jobs:
         id: cache
         with:
           path: native-tools
-          key: native-${{ hashFiles('android/native/build_tools.sh') }}
+          key: native-${{ hashFiles('android/native/**') }}
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         run: ANDROID_NDK_ROOT="$ANDROID_NDK_LATEST_HOME" android/native/build_tools.sh native-tools arm64-v8a x86_64
@@ -112,6 +112,12 @@ jobs:
           path: ~/.buildozer
           key: buildozer-${{ matrix.arch }}-${{ env.BUILDOZER_VERSION }}-${{ env.P4A_VERSION }}-${{ hashFiles('android/buildozer.spec') }}
           restore-keys: buildozer-${{ matrix.arch }}-${{ env.BUILDOZER_VERSION }}-${{ env.P4A_VERSION }}-
+      # The same debug key for every build, so a new preview installs over
+      # the previous one instead of asking to uninstall it first.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
       - name: Build APK
         working-directory: android
         env:
@@ -125,7 +131,7 @@ jobs:
           cp bin/*.apk "../apk/UniversalDownloader-android-preview-${{ matrix.arch }}.apk"
       - name: Check the APK carries the tools
         run: |
-          unzip -l apk/*.apk | grep -E "lib/${{ matrix.arch }}/lib(ffmpeg|ffprobe|qjs)\.so"
+          unzip -l apk/*.apk | grep -E "lib/${{ matrix.arch }}/lib(ffmpeg|ffprobe|qjs|avcodec|avformat)\.so"
           ls -lh apk
       - uses: actions/upload-artifact@v4
         with:

@@ -40,7 +40,7 @@ def stage(dest=DEST):
     for name in SHARED_MODULES:
         shutil.copy2(os.path.join(ROOT, name), dest)
     for name in os.listdir(os.path.join(ANDROID, "app")):
-        if name.endswith(".py"):
+        if name.endswith((".py", ".json")):
             shutil.copy2(os.path.join(ANDROID, "app", name), dest)
     shutil.copytree(os.path.join(ROOT, "locales"), os.path.join(dest, "locales"))
     shutil.copy2(os.path.join(ROOT, "app.png"), os.path.join(dest, "icon.png"))

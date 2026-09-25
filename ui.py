@@ -90,7 +90,11 @@ class App(ctk.CTk):
 
         self.manager = DownloadManager()
         self.download_folder = os.path.join(os.path.expanduser("~"), "Downloads", "UniversalVideos")
-        self.download_queue = [] 
+        self.download_queue = []
+        self.analyzed_url = None
+        # Only one job (analysis or download) runs at a time; see _start_job.
+        self._job_thread = None
+        self._job_kind = None
 
         # Worker threads never touch widgets; they post events that are
         # dispatched here on the main thread (see events.py).
@@ -149,6 +153,7 @@ class App(ctk.CTk):
         self.url_frame.pack(fill="x", pady=(0, 10))
         self.url_entry = ctk.CTkEntry(self.url_frame, placeholder_text="Paste Link...", height=40)
         self.url_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.url_entry.bind("<KeyRelease>", self._on_url_changed)
         self.btn_analyze = ctk.CTkButton(self.url_frame, text="ANALYZE", width=100, height=40, command=self.start_analysis_thread, fg_color="#E9C46A", text_color="black")
         self.btn_analyze.pack(side="right")
 
@@ -200,11 +205,66 @@ class App(ctk.CTk):
         if folder:
             self.download_folder = folder
             self.log(f"Destination: {folder}")
+    def is_busy(self):
+        return self._job_kind is not None
+
+    def _start_job(self, kind, target, *args):
+        """Start a worker thread unless another job is running.
+
+        Returns False (and starts nothing) when a job is already active, so a
+        second click cannot run two workers against the same state.
+        """
+        if self.is_busy():
+            self._append_log(f"Busy: wait for the current {self._job_kind} to finish.")
+            return False
+        self._job_kind = kind
+        self._set_controls_busy(True)
+        self._job_thread = threading.Thread(target=target, args=args, name=f"uvd-{kind}", daemon=True)
+        self._job_thread.start()
+        return True
+
+    def _end_job(self):
+        self._job_kind = None
+        self._job_thread = None
+        self._set_controls_busy(False)
+
+    def _set_controls_busy(self, busy):
+        state = "disabled" if busy else "normal"
+        for widget in (self.url_entry, self.btn_analyze, self.btn_dest, self.cmb_mode,
+                       self.cmb_format, self.cmb_quality, self.chk_trim):
+            widget.configure(state=state)
+        trim_state = "normal" if (not busy and self.chk_trim.get()) else "disabled"
+        self.ent_start.configure(state=trim_state)
+        self.ent_end.configure(state=trim_state)
+        if busy:
+            self.btn_download.configure(state="disabled")
+        else:
+            self._refresh_download_button()
+
+    def _refresh_download_button(self):
+        count = len(self.download_queue)
+        if count:
+            self.btn_download.configure(state="normal", text=f"DOWNLOAD ({count})")
+        else:
+            self.btn_download.configure(state="disabled", text="START DOWNLOAD")
+
+    def _on_url_changed(self, _event=None):
+        """Drop the analysed queue as soon as the URL no longer matches it."""
+        if self.is_busy() or self.analyzed_url is None:
+            return
+        if self.url_entry.get().strip() != self.analyzed_url:
+            self.analyzed_url = None
+            self.set_queue([])
+
     def start_analysis_thread(self):
         url = self.url_entry.get().strip()
-        if not url: return
-        self.btn_analyze.configure(state="disabled", text="Checking...")
-        threading.Thread(target=self.run_analysis, args=(url,)).start()
+        if not url or self.is_busy(): return
+        # A new analysis invalidates the previous queue and progress.
+        self.analyzed_url = None
+        self.set_queue([])
+        self._show_progress(0, "0%")
+        if self._start_job("analysis", self.run_analysis, url):
+            self.btn_analyze.configure(text="Checking...")
     def run_analysis(self, url):
         """Worker thread: fetch info and post the result; no widget access."""
         try:
@@ -220,9 +280,12 @@ class App(ctk.CTk):
             self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
     def _on_analysis_failed(self, message):
         self._append_log(message)
-        self.btn_analyze.configure(state="normal", text="ANALYZE")
+        self.btn_analyze.configure(text="ANALYZE")
+        self._end_job()
     def _on_analysis_done(self, info, url):
-        self.btn_analyze.configure(state="normal", text="ANALYZE")
+        self.btn_analyze.configure(text="ANALYZE")
+        self._end_job()
+        self.analyzed_url = url
         if 'entries' in info:
             self._append_log("Playlist detected.")
             PlaylistSelector(self, list(info['entries']), self.set_queue)
@@ -231,15 +294,13 @@ class App(ctk.CTk):
             self._append_log(f"Single Video: {title}")
             self.set_queue([{'url': info.get('original_url', url), 'title': title}])
     def set_queue(self, items):
-        self.download_queue = items
-        count = len(items)
-        if count > 0:
-            self.log(f"Queue ready: {count} items.")
-            self.btn_download.configure(state="normal", text=f"DOWNLOAD ({count})")
-        else:
-            self.btn_download.configure(state="disabled", text="START DOWNLOAD")
+        self.download_queue = list(items)
+        if self.download_queue:
+            self.log(f"Queue ready: {len(self.download_queue)} items.")
+        if not self.is_busy():
+            self._refresh_download_button()
     def start_download_queue(self):
-        if not self.download_queue: return
+        if not self.download_queue or self.is_busy(): return
         if self.chk_trim.get():
             # Kötü trim değerleriyle kuyruğu hiç başlatma
             try:
@@ -249,7 +310,6 @@ class App(ctk.CTk):
                 self.log(f"Trim error: {e}")
                 messagebox.showerror("Invalid trim range", str(e))
                 return
-        self.btn_download.configure(state="disabled", text="DOWNLOADING...")
         self._show_progress(0, "0%")
         items = list(self.download_queue)
         opts = {
@@ -258,7 +318,8 @@ class App(ctk.CTk):
             'trim_start': self.ent_start.get() if self.chk_trim.get() else None,
             'trim_end': self.ent_end.get() if self.chk_trim.get() else None
         }
-        threading.Thread(target=self.run_queue, args=(items, opts)).start()
+        if self._start_job("download", self.run_queue, items, opts):
+            self.btn_download.configure(text="DOWNLOADING...")
     def run_queue(self, items, opts):
         """Worker thread: download each item and post events; no widget access."""
         total = len(items)
@@ -271,7 +332,7 @@ class App(ctk.CTk):
             self.events.post(events.JOB_DONE, total=total)
     def _on_job_done(self, total):
         self._append_log("FINISHED.")
-        self.btn_download.configure(state="disabled", text="FINISHED")
+        self._end_job()
         self._show_progress(1, "Complete")
         messagebox.showinfo("Done", "Finished!")
     def progress_hook(self, d):

@@ -25,6 +25,18 @@ events. `events.progress_from_hook` derives the progress fraction from
 yt-dlp's byte counters and falls back to `_percent_str` with ANSI colour codes
 stripped.
 
+## One job at a time
+
+`App._start_job()` is the only way a worker thread is started. It refuses to
+start a second job while one is running (`App.is_busy()`), keeps the thread
+handle in `_job_thread` (daemon, named `uvd-<kind>`), and disables the URL,
+folder, format and trim controls until the job's final event (`analysis_done`,
+`analysis_failed` or `job_done`) calls `_end_job()` on the main thread.
+
+Starting a new analysis clears the previous queue and progress, and editing the
+URL after an analysis drops the analysed queue, so a download can never use the
+results of a different URL.
+
 ## Running the tests
 
 ```

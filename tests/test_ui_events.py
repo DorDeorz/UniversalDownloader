@@ -151,7 +151,7 @@ def test_real_window_applies_worker_events_on_main_thread(monkeypatch):
             time.sleep(0.01)
 
         assert shown == [threading.get_ident()]
-        assert app.btn_download.cget("text") == "FINISHED"
+        assert app.btn_download.cget("text") == "DOWNLOAD (1)"
         assert app.lbl_progress.cget("text") == "Complete"
         assert app.progress_bar.get() == 1
         console = app.console.get("1.0", "end")

@@ -33,5 +33,13 @@ jobs:
       - name: Lint
         run: python -m ruff check .
 
-      - name: Test
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
         run: python -m pytest
+
+      # The UI tests drive a real Tk window, so give Linux a virtual display.
+      - name: Test (Linux, virtual display)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb
+          xvfb-run -a python -m pytest

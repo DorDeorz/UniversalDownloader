@@ -77,7 +77,7 @@ def test_second_analysis_is_refused_while_one_runs(app):
     assert pump(app, lambda: not app.is_busy())
     assert manager.calls == 1
     assert app.btn_analyze.cget("state") == "normal"
-    assert app.btn_download.cget("text") == "DOWNLOAD (1)"
+    assert app.btn_download.cget("text") == "Download"
 
 
 @needs_display
@@ -136,7 +136,7 @@ def test_missing_ffmpeg_disables_download(monkeypatch):
     try:
         app.set_queue([{"url": "a", "title": "A"}])
         assert app.btn_download.cget("state") == "disabled"
-        assert app.btn_download.cget("text") == "FFMPEG MISSING"
+        assert app.btn_download.cget("text") == "FFmpeg missing"
         assert "FFmpeg problem: bin/ffmpeg.exe is a Git LFS pointer" in app.console.get("1.0", "end")
     finally:
         app.destroy()

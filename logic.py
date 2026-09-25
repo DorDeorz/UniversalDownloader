@@ -257,6 +257,11 @@ class DownloadManager:
             if progress_hook:
                 progress_hook(d)
 
+        def on_postprocess(d):
+            check_cancel()
+            if progress_hook:
+                progress_hook(d)
+
         if is_cancelled():
             return ItemResult(url, title, ItemStatus.CANCELLED, error='Cancelled by user')
 
@@ -285,8 +290,9 @@ class DownloadManager:
             'overwrites': False,
             'ffmpeg_location': tools.directory,
             'progress_hooks': [on_progress],
-            # Postprocessing (merge, conversion) can take a while too.
-            'postprocessor_hooks': [check_cancel],
+            # Postprocessing (merge, conversion) can take a while too; the
+            # progress hook also sees these so the UI can show the stage.
+            'postprocessor_hooks': [on_postprocess],
         })
         ydl_opts.update(plan.options)
 

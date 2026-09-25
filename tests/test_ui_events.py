@@ -18,7 +18,7 @@ messagebox = pytest.importorskip("tkinter.messagebox")
 
 import events  # noqa: E402
 import ui  # noqa: E402
-from ui_helpers import ToolsOnlyManager, new_app, pump  # noqa: E402
+from ui_helpers import ToolsOnlyManager, isolate_settings, new_app, pump  # noqa: E402
 from results import ItemResult, ItemStatus  # noqa: E402
 
 
@@ -113,7 +113,7 @@ def test_run_queue_posts_logs_progress_and_job_done_without_widgets():
     logs = [e.payload["message"] for e in evs if e.kind == events.LOG]
     assert logs == ["[1/2] A", "[2/2] B"]
     progress = [e.payload for e in evs if e.kind == events.PROGRESS]
-    assert progress[0] == {"fraction": 0.5, "text": "50.0%"}
+    assert progress[0] == {"fraction": 0.5, "text": "50.0%", "detail": ""}
     items = [e.payload["result"] for e in evs if e.kind == events.ITEM_DONE]
     assert [(r.url, r.status) for r in items] == [("a", ItemStatus.COMPLETED), ("b", ItemStatus.FAILED)]
     assert items[1].error == "cannot download b"
@@ -140,6 +140,7 @@ def test_real_window_applies_worker_events_on_main_thread(monkeypatch):
     shown = []
     monkeypatch.setattr(ui.messagebox, "showinfo", lambda *a, **k: shown.append(threading.get_ident()))
     monkeypatch.setattr(ui.messagebox, "showwarning", lambda *a, **k: shown.append("warning"))
+    isolate_settings(monkeypatch)
     monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
     app = new_app()
     pump(app, lambda: app.tools is not None)
@@ -154,7 +155,7 @@ def test_real_window_applies_worker_events_on_main_thread(monkeypatch):
             time.sleep(0.01)
 
         assert shown == [threading.get_ident()]
-        assert app.btn_download.cget("text") == "DOWNLOAD (1)"
+        assert app.btn_download.cget("text") == "Download"
         assert app.lbl_progress.cget("text") == "Complete"
         assert app.progress_bar.get() == 1
         console = app.console.get("1.0", "end")

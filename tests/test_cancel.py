@@ -181,7 +181,7 @@ def test_retry_failed_requeues_only_failed_items(app):
     app.set_queue([{"url": "a", "title": "A"}, {"url": "b", "title": "B"}])
     app.start_download_queue()
     assert pump(app, lambda: not app.is_busy())
-    assert app.btn_retry.cget("text") == "RETRY FAILED (1)"
+    assert app.btn_retry.cget("text") == "Retry 1 failed"
 
     manager.started.clear()
     manager.fail.clear()

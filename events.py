@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 
 # Event kinds posted by workers.
 LOG = "log"                      # payload: message
-PROGRESS = "progress"            # payload: fraction (0..1), text
+PROGRESS = "progress"            # payload: fraction (0..1), text, detail (speed/ETA or "")
+STAGE = "stage"                  # payload: text (what the current item is doing)
+ITEM_STARTED = "item_started"    # payload: position, total, title
 ANALYSIS_DONE = "analysis_done"  # payload: analysis (playlist.AnalysisResult), url
 ANALYSIS_FAILED = "analysis_failed"  # payload: message
 ITEM_DONE = "item_done"          # payload: result (results.ItemResult)
@@ -90,6 +92,8 @@ def progress_from_hook(d):
     Prefers the byte counters, falling back to ``_percent_str`` with ANSI
     colour codes removed. Returns ``None`` when no progress can be derived.
     """
+    if d.get("postprocessor"):
+        return None  # a postprocessor hook, not download progress
     if d.get("status") == "finished":
         return 1.0, "100%"
     if d.get("status") != "downloading":
@@ -108,3 +112,53 @@ def progress_from_hook(d):
 
     fraction = min(max(fraction, 0.0), 1.0)
     return fraction, f"{fraction * 100:.1f}%"
+
+
+def _human_bytes(n):
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n:.0f} B"
+        n /= 1024
+    return f"{n:.1f} GB"
+
+
+def detail_from_hook(d):
+    """Speed and time left from a yt-dlp progress dict, e.g. '3.1 MB/s, 0:12 left'."""
+    if d.get("status") != "downloading":
+        return ""
+    parts = []
+    speed = d.get("speed")
+    if isinstance(speed, (int, float)) and speed > 0:
+        parts.append(f"{_human_bytes(speed)}/s")
+    eta = d.get("eta")
+    if isinstance(eta, (int, float)) and eta >= 0:
+        minutes, seconds = divmod(int(eta), 60)
+        hours, minutes = divmod(minutes, 60)
+        parts.append((f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}") + " left")
+    return ", ".join(parts)
+
+
+# yt-dlp postprocessor names -> what the user sees while it runs (ISSUES.md #50).
+_STAGES = {
+    "Merger": "Merging video and audio",
+    "FFmpegMerger": "Merging video and audio",
+    "ExtractAudio": "Converting audio",
+    "FFmpegExtractAudio": "Converting audio",
+    "VideoRemuxer": "Preparing the file",
+    "FFmpegVideoRemuxer": "Preparing the file",
+    "VideoConvertor": "Re-encoding video (this can take a while)",
+    "FFmpegVideoConvertor": "Re-encoding video (this can take a while)",
+    "EmbedThumbnail": "Adding cover image",
+    "Metadata": "Writing metadata",
+    "FFmpegMetadata": "Writing metadata",
+    "StripAudio": "Removing audio",
+    "MoveFiles": "Saving",
+}
+
+
+def stage_from_hook(d):
+    """Stage text for a postprocessor hook dict that just started, else None."""
+    if d.get("status") != "started" or not d.get("postprocessor"):
+        return None
+    name = str(d["postprocessor"])
+    return _STAGES.get(name, _STAGES.get(name.removesuffix("PP"), "Processing"))

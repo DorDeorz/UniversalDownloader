@@ -1,5 +1,6 @@
 """Helpers for tests that drive a real App window (need Tk and a display)."""
 
+import tempfile
 import time
 import tkinter
 
@@ -27,8 +28,14 @@ def pump(app, until=lambda: False, timeout=5):
     return until()
 
 
+def isolate_settings(monkeypatch):
+    """Point the app's settings and logs at a fresh temp folder."""
+    monkeypatch.setenv("LOCALAPPDATA", tempfile.mkdtemp(prefix="uvd-test-"))
+
+
 def make_app(monkeypatch, tools=OK_TOOLS):
     """App with the FFmpeg check stubbed and finished, dialogs silenced."""
+    isolate_settings(monkeypatch)
     monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager(tools))
     for name in ("showinfo", "showwarning", "showerror"):
         monkeypatch.setattr(ui.messagebox, name, lambda *a, **k: None)

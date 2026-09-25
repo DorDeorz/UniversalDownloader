@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import yt_dlp
+from results import ItemResult, ItemStatus, verify_output
 from utils import get_ffmpeg_path, get_ffprobe_path
 
 _log = logging.getLogger(__name__)
@@ -168,19 +169,26 @@ class DownloadManager:
         except Exception as e:
             return {'error': describe_error(e), 'error_type': type(e).__name__}
 
-    def download_video(self, url, options, progress_hook, complete_callback, error_callback, log_callback=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None):
+        """Download one item and return its :class:`results.ItemResult`.
+
+        Never raises for download problems: yt-dlp, trim and postprocessor
+        errors all become a ``failed`` result with a readable message, and a
+        result is only ``completed`` when the output file exists and is not
+        empty.
+        """
+        title = title or url
         platform = self.get_platform_name(url)
         base_folder = options.get('save_path', os.getcwd())
         output_template = os.path.join(base_folder, platform, '%(title)s.%(ext)s')
 
-        # Temel Ayarlar
-        # A failed single download must raise, so it reaches error_callback
+        # A failed download must raise, so it becomes a failed result
         # instead of being reported as finished (no 'ignoreerrors').
         ydl_opts = base_ydl_options(log_callback)
         ydl_opts.update({
             'outtmpl': output_template,
             'ffmpeg_location': self.ffmpeg_path,
-            'progress_hooks': [progress_hook],
+            'progress_hooks': [progress_hook] if progress_hook else [],
             # --- KAPAK FOTOĞRAFI AYARI ---
             'writethumbnail': True,  # Önce resmi diske indirir
         })
@@ -217,55 +225,63 @@ class DownloadManager:
                 ydl_opts['format'] = "bestvideo[height<=720]+bestaudio/best"
             else:
                 ydl_opts['format'] = "best"
-            
+
             ydl_opts['merge_output_format'] = fmt
-            
+
             # Video modunda da metadata ve thumbnail gömmek istersen:
             ydl_opts['postprocessors'] = [
                 {'key': 'EmbedThumbnail'},
                 {'key': 'FFmpegMetadata'}
             ]
 
+        def failed(error):
+            return ItemResult(url, title, ItemStatus.FAILED, error=error)
+
         # Trim (Kırpma): metni önceden doğrula, kötü değerle indirmeye başlama
         try:
             trim_requested = parse_trim_range(options.get('trim_start'), options.get('trim_end')) is not None
         except TrimError as e:
-            error_callback(str(e))
-            return
+            return failed(str(e))
         if trim_requested:
             ydl_opts['force_keyframes_at_cuts'] = True
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Read the metadata first: it gives the real title and the
+                # duration the trim range is validated against.
+                info = ydl.extract_info(url, download=False)
+                if info is None:
+                    return failed('No media information returned')
+                title = info.get('title') or title
                 if trim_requested:
-                    # Süreyi öğrenmek için önce bilgiyi çek, aralığı videonun süresine göre doğrula
-                    info = ydl.extract_info(url, download=False)
-                    if info is None:
-                        error_callback("Content is private or unavailable")
-                        return
                     try:
                         trim_range = parse_trim_range(
                             options.get('trim_start'), options.get('trim_end'), info.get('duration'))
                     except TrimError as e:
-                        error_callback(str(e))
-                        return
+                        return failed(str(e))
                     # yt-dlp (start, end) çiftleri bekler
                     ydl.params['download_ranges'] = yt_dlp.utils.download_range_func(None, [trim_range])
-                    info = ydl.process_ie_result(info, download=True)
-                else:
-                    info = ydl.extract_info(url, download=True)
+                info = ydl.process_ie_result(info, download=True)
                 if info is None:
-                    raise yt_dlp.utils.DownloadError('No media information returned')
-                filename = ydl.prepare_filename(info)
-                
-                # Format dönüşümü sonrası dosya uzantısı değişebilir, doğrusunu bulmaya çalışalım
-                if mode == 'Audio Only':
-                    base, _ = os.path.splitext(filename)
-                    final_filename = f"{base}.{fmt}"
-                else:
-                    final_filename = filename
-
+                    return failed('No media information returned')
+                path = final_output_path(ydl, info)
         except Exception as e:
-            error_callback(describe_error(e))
-            return
-        complete_callback(final_filename)
+            return failed(describe_error(e))
+
+        problem = verify_output(path)
+        if problem:
+            return failed(problem)
+        return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
+
+
+def final_output_path(ydl, info):
+    """Path of the finished file after merging and postprocessing.
+
+    yt-dlp records it in ``requested_downloads[-1]['filepath']``; the
+    prepared filename is only a fallback because conversions change it.
+    """
+    downloads = info.get('requested_downloads') or []
+    for entry in reversed(downloads):
+        if entry.get('filepath'):
+            return entry['filepath']
+    return info.get('filepath') or ydl.prepare_filename(info)

@@ -18,12 +18,23 @@ call widget methods directly.
 | `progress` | `progress_hook` | Set progress bar and percentage label |
 | `analysis_done` | `run_analysis` | Re-enable Analyze; open playlist selector or queue the video |
 | `analysis_failed` | `run_analysis` | Re-enable Analyze; log the error |
-| `job_done` | `run_queue` (always, via `finally`) | Mark finished, show the "Done" dialog |
+| `item_done` | `run_queue`, once per item | Log the item's result (saved path, or failed/skipped/cancelled with the reason) |
+| `job_done` | `run_queue` (always, via `finally`) | End the job, show a summary dialog (info when every item completed, warning otherwise) |
 
 A handler that raises is reported in the console and does not stop later
 events. `events.progress_from_hook` derives the progress fraction from
 yt-dlp's byte counters and falls back to `_percent_str` with ANSI colour codes
 stripped.
+
+## Download results
+
+`DownloadManager.download_video()` returns a `results.ItemResult` instead of
+calling success/error callbacks. Its status is `completed`, `failed`,
+`skipped` or `cancelled`; a result is only `completed` when the final file
+(from yt-dlp's `requested_downloads[-1]['filepath']`, i.e. after merging and
+conversion) exists and is not empty. `run_queue` collects the results in a
+`results.JobSummary`, which gives the headline ("2 completed, 1 failed") and
+the list of items that did not complete for the final dialog.
 
 ## One job at a time
 

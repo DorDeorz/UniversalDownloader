@@ -18,6 +18,7 @@ messagebox = pytest.importorskip("tkinter.messagebox")
 
 import events  # noqa: E402
 import ui  # noqa: E402
+from results import ItemResult, ItemStatus  # noqa: E402
 
 
 class FakeManager:
@@ -34,14 +35,14 @@ class FakeManager:
             raise self.raise_on_fetch
         return self.info
 
-    def download_video(self, url, options, progress_hook, complete_callback, error_callback):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None):
         self.threads.add(threading.get_ident())
         progress_hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 2})
         if url in self.fail_urls:
             raise RuntimeError(f"cannot download {url}")
         self.downloaded.append(url)
         progress_hook({"status": "finished"})
-        complete_callback(url)
+        return ItemResult(url, title, ItemStatus.COMPLETED, path=f"/out/{url}.mp4")
 
 
 class WorkerSide:
@@ -51,7 +52,6 @@ class WorkerSide:
     run_analysis = ui.App.run_analysis
     run_queue = ui.App.run_queue
     progress_hook = ui.App.progress_hook
-    on_error = ui.App.on_error
 
     def __init__(self, manager):
         self.events = events.EventQueue()
@@ -109,11 +109,15 @@ def test_run_queue_posts_logs_progress_and_job_done_without_widgets():
     assert manager.downloaded == ["a"]
     assert threading.get_ident() not in manager.threads
     logs = [e.payload["message"] for e in evs if e.kind == events.LOG]
-    assert logs == ["[1/2] A", "[2/2] B", "Failed: cannot download b"]
+    assert logs == ["[1/2] A", "[2/2] B"]
     progress = [e.payload for e in evs if e.kind == events.PROGRESS]
     assert progress[0] == {"fraction": 0.5, "text": "50.0%"}
+    items = [e.payload["result"] for e in evs if e.kind == events.ITEM_DONE]
+    assert [(r.url, r.status) for r in items] == [("a", ItemStatus.COMPLETED), ("b", ItemStatus.FAILED)]
+    assert items[1].error == "cannot download b"
     assert evs[-1].kind == events.JOB_DONE
-    assert evs[-1].payload == {"total": 2}
+    summary = evs[-1].payload["summary"]
+    assert summary.headline() == "1 completed, 1 failed"
 
 
 def test_run_queue_posts_job_done_even_if_worker_crashes():
@@ -121,12 +125,6 @@ def test_run_queue_posts_job_done_even_if_worker_crashes():
     with pytest.raises(KeyError):
         w.run_queue([{"no_url": 1}], {})
     assert w.drain()[-1].kind == events.JOB_DONE
-
-
-def test_on_error_posts_log():
-    w = WorkerSide(FakeManager())
-    w.on_error("oops")
-    assert [(e.kind, e.payload) for e in w.drain()] == [(events.LOG, {"message": "Error: oops"})]
 
 
 def _has_display():
@@ -139,6 +137,7 @@ def _has_display():
 def test_real_window_applies_worker_events_on_main_thread(monkeypatch):
     shown = []
     monkeypatch.setattr(ui.messagebox, "showinfo", lambda *a, **k: shown.append(threading.get_ident()))
+    monkeypatch.setattr(ui.messagebox, "showwarning", lambda *a, **k: shown.append("warning"))
     app = ui.App()
     try:
         app.manager = FakeManager()
@@ -157,6 +156,7 @@ def test_real_window_applies_worker_events_on_main_thread(monkeypatch):
         console = app.console.get("1.0", "end")
         assert "> Welcome!" in console
         assert "> [1/1] A" in console
-        assert "> FINISHED." in console
+        assert "> Saved: /out/a.mp4" in console
+        assert "> Result: 1 completed" in console
     finally:
         app.destroy()

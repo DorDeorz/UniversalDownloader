@@ -4,6 +4,7 @@ import os
 from tkinter import filedialog, messagebox
 import events
 from logic import DownloadManager, TrimError, parse_trim_range
+from results import ItemResult, ItemStatus, JobSummary
 from utils import resource_path
 
 ctk.set_appearance_mode("Dark")
@@ -103,7 +104,9 @@ class App(ctk.CTk):
         self.events.register(events.PROGRESS, self._show_progress)
         self.events.register(events.ANALYSIS_DONE, self._on_analysis_done)
         self.events.register(events.ANALYSIS_FAILED, self._on_analysis_failed)
+        self.events.register(events.ITEM_DONE, self._on_item_done)
         self.events.register(events.JOB_DONE, self._on_job_done)
+        self.last_summary = None
         self._poll_id = None
 
         self.create_sidebar()
@@ -322,19 +325,32 @@ class App(ctk.CTk):
             self.btn_download.configure(text="DOWNLOADING...")
     def run_queue(self, items, opts):
         """Worker thread: download each item and post events; no widget access."""
+        summary = JobSummary()
         total = len(items)
         try:
             for i, item in enumerate(items):
                 self.log(f"[{i+1}/{total}] {item['title']}")
-                try: self.manager.download_video(item['url'], opts, self.progress_hook, lambda f: None, self.on_error)
-                except Exception as e: self.log(f"Failed: {e}")
+                try:
+                    result = self.manager.download_video(
+                        item['url'], opts, self.progress_hook, log_callback=self.log, title=item['title'])
+                except Exception as e:
+                    result = ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
+                summary.add(result)
+                self.events.post(events.ITEM_DONE, result=result)
         finally:
-            self.events.post(events.JOB_DONE, total=total)
-    def _on_job_done(self, total):
-        self._append_log("FINISHED.")
+            self.events.post(events.JOB_DONE, summary=summary)
+    def _on_item_done(self, result):
+        self._append_log(result.describe())
+    def _on_job_done(self, summary):
+        self._append_log(f"Result: {summary.headline()}")
         self._end_job()
-        self._show_progress(1, "Complete")
-        messagebox.showinfo("Done", "Finished!")
+        self.last_summary = summary
+        if summary.all_ok:
+            self._show_progress(1, "Complete")
+            messagebox.showinfo(summary.title(), summary.report())
+        else:
+            self._show_progress(self.progress_bar.get(), summary.headline())
+            messagebox.showwarning(summary.title(), summary.report())
     def progress_hook(self, d):
         """yt-dlp progress hook; runs on the worker thread."""
         progress = events.progress_from_hook(d)

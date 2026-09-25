@@ -6,6 +6,7 @@ import yt_dlp
 
 import logic
 from logic import DownloadManager, TrimError, parse_timestamp, parse_trim_range
+from results import ItemStatus
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -72,26 +73,25 @@ def test_range_works_with_yt_dlp_download_range_func():
 
 
 def _run_download(options, info):
-    """download_video'yu sahte YoutubeDL ile çalıştırır; (ydl, complete, error) döner."""
+    """download_video'yu sahte YoutubeDL ile çalıştırır; (ydl_cls, ydl, result) döner."""
     ydl = mock.MagicMock()
     ydl.params = {}
     ydl.extract_info.return_value = info
-    ydl.process_ie_result.return_value = info
-    ydl.prepare_filename.return_value = "out.mp4"
+    ydl.process_ie_result.return_value = dict(info, requested_downloads=[{"filepath": "out.mp4"}])
     ydl_cls = mock.MagicMock()
     ydl_cls.return_value.__enter__.return_value = ydl
-    complete, error = mock.Mock(), mock.Mock()
-    with mock.patch.object(logic.yt_dlp, "YoutubeDL", ydl_cls):
-        DownloadManager().download_video("https://youtu.be/x", options, lambda d: None, complete, error)
-    return ydl_cls, ydl, complete, error
+    with mock.patch.object(logic.yt_dlp, "YoutubeDL", ydl_cls), \
+            mock.patch.object(logic, "verify_output", return_value=None):
+        result = DownloadManager().download_video("https://youtu.be/x", options, lambda d: None)
+    return ydl_cls, ydl, result
 
 
 def test_download_with_trim_passes_start_end_pair():
     info = {"id": "x", "title": "t", "duration": 60}
-    ydl_cls, ydl, complete, error = _run_download({"trim_start": "0:10", "trim_end": "20"}, info)
+    ydl_cls, ydl, result = _run_download({"trim_start": "0:10", "trim_end": "20"}, info)
 
-    error.assert_not_called()
-    complete.assert_called_once_with("out.mp4")
+    assert result.status is ItemStatus.COMPLETED
+    assert result.path == "out.mp4"
     ydl.extract_info.assert_called_once_with("https://youtu.be/x", download=False)
     ydl.process_ie_result.assert_called_once_with(info, download=True)
     assert ydl_cls.call_args.args[0]["force_keyframes_at_cuts"] is True
@@ -100,37 +100,35 @@ def test_download_with_trim_passes_start_end_pair():
 
 
 def test_download_with_invalid_trim_text_never_starts():
-    ydl_cls, ydl, complete, error = _run_download({"trim_start": "20", "trim_end": "10"}, {})
+    ydl_cls, ydl, result = _run_download({"trim_start": "20", "trim_end": "10"}, {})
 
     ydl_cls.assert_not_called()
-    complete.assert_not_called()
-    error.assert_called_once()
-    assert "before end" in error.call_args.args[0]
+    assert result.status is ItemStatus.FAILED
+    assert "before end" in result.error
 
 
 def test_download_with_trim_past_duration_reports_error():
     info = {"id": "x", "title": "t", "duration": 15}
-    _, ydl, complete, error = _run_download({"trim_start": "10", "trim_end": "20"}, info)
+    _, ydl, result = _run_download({"trim_start": "10", "trim_end": "20"}, info)
 
     ydl.process_ie_result.assert_not_called()
-    complete.assert_not_called()
-    assert "beyond the video length" in error.call_args.args[0]
+    assert result.status is ItemStatus.FAILED
+    assert "beyond the video length" in result.error
 
 
 def test_download_without_trim_is_unchanged():
     info = {"id": "x", "title": "t", "duration": 60}
-    ydl_cls, ydl, complete, error = _run_download({"trim_start": None, "trim_end": None}, info)
+    ydl_cls, ydl, result = _run_download({"trim_start": None, "trim_end": None}, info)
 
-    ydl.extract_info.assert_called_once_with("https://youtu.be/x", download=True)
     assert "download_ranges" not in ydl_cls.call_args.args[0]
     assert "download_ranges" not in ydl.params
-    complete.assert_called_once_with("out.mp4")
+    assert "force_keyframes_at_cuts" not in ydl_cls.call_args.args[0]
+    assert result.status is ItemStatus.COMPLETED
 
 
 def test_download_with_blank_trim_fields_does_not_trim():
     info = {"id": "x", "title": "t", "duration": 60}
-    ydl_cls, ydl, complete, error = _run_download({"trim_start": "  ", "trim_end": ""}, info)
+    ydl_cls, ydl, result = _run_download({"trim_start": "  ", "trim_end": ""}, info)
 
-    error.assert_not_called()
-    ydl.extract_info.assert_called_once_with("https://youtu.be/x", download=True)
+    assert result.status is ItemStatus.COMPLETED
     assert "download_ranges" not in ydl.params

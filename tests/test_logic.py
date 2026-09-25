@@ -3,6 +3,7 @@ import os
 import pytest
 
 from logic import DownloadManager
+from results import ItemStatus
 
 
 # --- platform detection -------------------------------------------------
@@ -49,15 +50,7 @@ def test_fetch_info_turns_exceptions_into_error_dict(manager, fake_ydl):
 # --- download_video -----------------------------------------------------
 
 def _download(manager, options, url="https://youtu.be/abc"):
-    results = {"done": [], "errors": []}
-    manager.download_video(
-        url,
-        options,
-        progress_hook=lambda d: None,
-        complete_callback=results["done"].append,
-        error_callback=results["errors"].append,
-    )
-    return results
+    return manager.download_video(url, options, progress_hook=lambda d: None)
 
 
 def test_download_writes_into_platform_subfolder(manager, fake_ydl, tmp_path):
@@ -68,55 +61,75 @@ def test_download_writes_into_platform_subfolder(manager, fake_ydl, tmp_path):
     assert opts["ffmpeg_location"] == manager.ffmpeg_path
 
 
-@pytest.mark.parametrize(
-    "quality, expected_format",
-    [
-        ("Best", "bestvideo+bestaudio/best"),
-        ("4K", "bestvideo[height<=2160]+bestaudio/best"),
-        ("1080p", "bestvideo[height<=1080]+bestaudio/best"),
-        ("720p", "bestvideo[height<=720]+bestaudio/best"),
-    ],
-)
-def test_video_quality_maps_to_format_selector(manager, fake_ydl, tmp_path, quality, expected_format):
-    _download(manager, {"save_path": str(tmp_path), "mode": "Video + Audio", "format": "mkv", "quality": quality})
+def test_successful_download_is_completed_with_real_path(manager, fake_ydl, tmp_path):
+    result = _download(manager, {"save_path": str(tmp_path)})
 
-    opts = fake_ydl.instances[0].opts
-    assert opts["format"] == expected_format
-    assert opts["merge_output_format"] == "mkv"
+    ydl = fake_ydl.instances[0]
+    assert ydl.extract_calls == [("https://youtu.be/abc", False)]
+    assert len(ydl.process_calls) == 1
+    assert result.status is ItemStatus.COMPLETED
+    assert result.path == os.path.join(str(tmp_path), "YouTube", "clip.mp4")
+    assert result.title == "clip"
+    assert result.error is None
 
 
-def test_audio_only_extracts_audio_with_requested_codec(manager, fake_ydl, tmp_path):
-    fake_ydl.info = {"title": "song", "ext": "webm"}
+def test_failed_download_is_failed_not_completed(manager, fake_ydl, tmp_path):
+    fake_ydl.download_error = RuntimeError("network down")
 
-    results = _download(manager, {"save_path": str(tmp_path), "mode": "Audio Only", "format": "mp3"})
+    result = _download(manager, {"save_path": str(tmp_path)})
 
-    opts = fake_ydl.instances[0].opts
-    assert opts["format"] == "bestaudio/best"
-    extract = opts["postprocessors"][0]
-    assert extract["key"] == "FFmpegExtractAudio"
-    assert extract["preferredcodec"] == "mp3"
-    assert results["done"] == [os.path.join(str(tmp_path), "YouTube", "song.mp3")]
+    assert result.status is ItemStatus.FAILED
+    assert result.error == "network down"
+    assert result.path is None
 
 
-def test_successful_download_calls_complete_callback(manager, fake_ydl, tmp_path):
-    results = _download(manager, {"save_path": str(tmp_path)})
+def test_metadata_error_is_failed(manager, fake_ydl, tmp_path):
+    fake_ydl.error = RuntimeError("private video")
 
-    assert fake_ydl.instances[0].extract_calls == [("https://youtu.be/abc", True)]
-    assert results == {"done": [os.path.join(str(tmp_path), "YouTube", "clip.mp4")], "errors": []}
+    result = _download(manager, {"save_path": str(tmp_path)})
+
+    assert result.status is ItemStatus.FAILED
+    assert result.error == "private video"
+    assert fake_ydl.instances[0].process_calls == []
 
 
-def test_failed_download_calls_error_callback(manager, fake_ydl, tmp_path):
-    fake_ydl.error = RuntimeError("network down")
+def test_missing_output_file_is_failed(manager, fake_ydl, tmp_path):
+    fake_ydl.write_file = False
 
-    results = _download(manager, {"save_path": str(tmp_path)})
+    result = _download(manager, {"save_path": str(tmp_path)})
 
-    assert results == {"done": [], "errors": ["network down"]}
+    assert result.status is ItemStatus.FAILED
+    assert "was not created" in result.error
+
+
+def test_empty_output_file_is_failed(manager, fake_ydl, tmp_path, monkeypatch):
+    real_process = fake_ydl.process_ie_result
+
+    def process_empty(self, info, download=True):
+        out = real_process(self, info, download)
+        open(out["requested_downloads"][0]["filepath"], "wb").close()
+        return out
+
+    monkeypatch.setattr(fake_ydl, "process_ie_result", process_empty)
+
+    result = _download(manager, {"save_path": str(tmp_path)})
+
+    assert result.status is ItemStatus.FAILED
+    assert "empty" in result.error
+
+
+def test_title_falls_back_to_given_title(manager, fake_ydl, tmp_path):
+    fake_ydl.error = RuntimeError("boom")
+
+    result = manager.download_video("https://youtu.be/abc", {"save_path": str(tmp_path)}, title="Queued title")
+
+    assert result.title == "Queued title"
 
 
 def test_no_trim_means_no_download_ranges(manager, fake_ydl, tmp_path):
     _download(manager, {"save_path": str(tmp_path)})
 
-    assert "download_ranges" not in fake_ydl.instances[0].opts
+    assert "download_ranges" not in fake_ydl.instances[0].params
 
 
 def test_manager_uses_bundled_ffmpeg_paths():

@@ -25,14 +25,15 @@ _log = logging.getLogger(__name__)
 
 ctk.set_default_color_theme("blue")
 
-# Design tokens: (light, dark) pairs, the CustomTkinter convention.
-ACCENT = ("#5b5bd6", "#6e6af0")
-ACCENT_HOVER = ("#4848c2", "#5a55e0")
+# Design tokens: (light, dark) pairs, the CustomTkinter convention. Text
+# colours keep at least 4.5:1 contrast on the backgrounds they are used on.
+ACCENT = ("#5b5bd6", "#5f5ae6")
+ACCENT_HOVER = ("#4848c2", "#4d48d4")
 ACCENT_DISABLED = ("#b4b4ea", "#3a3970")
 ON_ACCENT = "#ffffff"
 ON_ACCENT_DISABLED = ("#f1f1fc", "#8e8cc0")
 BG = ("#f3f4f8", "#12131c")
-SIDEBAR = ("#e8e9f2", "#191a26")
+TOPBAR = ("#ffffff", "#181926")
 CARD = ("#ffffff", "#1e2030")
 CARD_BORDER = ("#e1e3ec", "#2a2d42")
 FIELD = ("#f5f6fa", "#262939")
@@ -40,9 +41,9 @@ MUTED = ("#6b6f80", "#9aa0b4")
 TEXT = ("#1b1d29", "#eceef6")
 SECONDARY = ("#e4e5ef", "#2c2f44")
 SECONDARY_HOVER = ("#d6d8e6", "#363a52")
-DANGER = ("#d64545", "#ef5b5b")
-SUCCESS = ("#23875a", "#3dd68c")
-WARNING = ("#b7791f", "#f0b429")
+DANGER = ("#c53b3b", "#ef5b5b")
+SUCCESS = ("#1d7a50", "#3dd68c")
+WARNING = ("#946214", "#f0b429")
 
 
 def font(size=13, weight="normal"):
@@ -51,6 +52,40 @@ def font(size=13, weight="normal"):
 
 def card(parent, **kw):
     return ctk.CTkFrame(parent, fg_color=CARD, corner_radius=12, border_width=1, border_color=CARD_BORDER, **kw)
+
+
+def shorten_path(path, limit=64):
+    """``path`` cut in the middle to at most ``limit`` characters."""
+    if len(path) <= limit:
+        return path
+    keep = limit - 3
+    head = keep // 3
+    return path[:head] + "..." + path[-(keep - head):]
+
+
+def section_label(parent, text):
+    return ctk.CTkLabel(parent, text=text, font=font(12, "bold"), text_color=MUTED, anchor="w")
+
+
+MEDIA_HINT = "Works with YouTube, TikTok, Instagram, X and hundreds of other sites. Press Enter to analyze."
+# Selected segment: a white chip in light mode (dark text stays readable),
+# the accent in dark mode (light text on it).
+SEGMENT_SELECTED = ("#ffffff", ACCENT[1])
+SEGMENT_SELECTED_HOVER = ("#f4f4fb", ACCENT_HOVER[1])
+
+
+def segmented(parent, values, command, **kw):
+    kw.setdefault("height", 34)
+    return ctk.CTkSegmentedButton(parent, values=values, command=command, font=font(13), fg_color=SECONDARY,
+                                  unselected_color=SECONDARY, unselected_hover_color=SECONDARY_HOVER,
+                                  selected_color=SEGMENT_SELECTED, selected_hover_color=SEGMENT_SELECTED_HOVER,
+                                  text_color=TEXT, **kw)
+
+
+def switch(parent, text, command, **kw):
+    return ctk.CTkSwitch(parent, text=text, command=command, font=font(13), text_color=TEXT, progress_color=ACCENT,
+                         fg_color=("#c3c6d4", "#3a3e55"), button_color=("#5b5f73", "#e8e9f2"),
+                         button_hover_color=("#44475a", "#ffffff"), **kw)
 
 
 def primary_button(parent, text, command, **kw):
@@ -188,13 +223,136 @@ class PlaylistSelector(ctk.CTkToplevel):
         self.destroy()
         self.callback(result)
 
+class SettingsDialog(ctk.CTkToplevel):
+    """Modal settings: appearance, what happens after a download, about.
+
+    Every change applies at once and is saved; ``on_change(name, value)``
+    tells the app which setting changed.
+    """
+
+    SHORTCUTS = (
+        ("Enter", "Analyze the link"),
+        ("Ctrl+Enter", "Start the download"),
+        ("Esc", "Cancel the download"),
+        ("Ctrl+O", "Choose the download folder"),
+        ("Ctrl+,", "Open settings"),
+    )
+
+    def __init__(self, parent, settings, tools, on_change):
+        super().__init__(parent, fg_color=BG)
+        self.title("Settings")
+        self.geometry("560x640")
+        self.minsize(480, 520)
+        self.transient(parent)
+        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.bind("<Escape>", lambda _e: self.close())
+        self.on_change = on_change
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        ctk.CTkLabel(self, text="Settings", font=font(22, "bold"), text_color=TEXT, anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=24, pady=(20, 8))
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew", padx=12)
+        body.grid_columnconfigure(0, weight=1)
+
+        # Appearance
+        look = self._section(body, 0, "Appearance")
+        self._row_label(look, 1, "Theme", "Follow Windows, or always dark or light.")
+        self.seg_theme = segmented(look, list(settings_store.THEMES), lambda v: self.on_change("theme", v))
+        self.seg_theme.set(settings.theme)
+        self.seg_theme.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 14))
+        self._row_label(look, 3, "Text size", "Makes all text and controls bigger.")
+        self.seg_text = segmented(look, list(settings_store.TEXT_SIZES), lambda v: self.on_change("text_size", v))
+        self.seg_text.set(settings.text_size)
+        self.seg_text.grid(row=4, column=0, sticky="w", padx=16, pady=(0, 16))
+
+        # After downloading
+        after = self._section(body, 1, "When downloads finish")
+        self.sw_summary = self._switch(after, 1, "Show a summary window", settings.show_summary, "show_summary")
+        self.sw_open = self._switch(after, 2, "Open the download folder", settings.open_folder_when_done,
+                                    "open_folder_when_done")
+
+        # Keyboard
+        keys = self._section(body, 2, "Keyboard shortcuts")
+        for i, (key, action) in enumerate(self.SHORTCUTS, start=1):
+            row = ctk.CTkFrame(keys, fg_color="transparent")
+            row.grid(row=i, column=0, sticky="ew", padx=16, pady=(0, 8 if i < len(self.SHORTCUTS) else 16))
+            ctk.CTkLabel(row, text=key, font=font(12, "bold"), text_color=TEXT, fg_color=FIELD, corner_radius=6,
+                         width=96, height=26).pack(side="left")
+            ctk.CTkLabel(row, text=action, font=font(13), text_color=TEXT, anchor="w").pack(side="left", padx=12)
+
+        # About
+        about = self._section(body, 3, "About")
+        ctk.CTkLabel(about, text=f"{DISPLAY_NAME} {__version__}", font=font(13, "bold"), text_color=TEXT,
+                     anchor="w").grid(row=1, column=0, sticky="ew", padx=16)
+        tools_text = tools.summary() if tools is not None else "Checking FFmpeg..."
+        ctk.CTkLabel(about, text=tools_text, font=font(12), text_color=MUTED, anchor="w", justify="left",
+                     wraplength=440).grid(row=2, column=0, sticky="ew", padx=16, pady=(4, 10))
+        self.btn_logs = secondary_button(about, "Open log folder", self.open_logs, width=150, height=34)
+        self.btn_logs.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 16))
+
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.grid(row=2, column=0, sticky="ew", padx=24, pady=16)
+        self.btn_done = primary_button(footer, "Done", self.close, width=120, height=40)
+        self.btn_done.pack(side="right")
+        self.after(100, self._grab)
+
+    def _section(self, parent, row, title):
+        frame = card(parent)
+        frame.grid(row=row, column=0, sticky="ew", padx=12, pady=(0, 12))
+        frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(frame, text=title, font=font(15, "bold"), text_color=TEXT, anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=16, pady=(14, 10))
+        return frame
+
+    def _row_label(self, parent, row, title, hint):
+        box = ctk.CTkFrame(parent, fg_color="transparent")
+        box.grid(row=row, column=0, sticky="ew", padx=16, pady=(0, 6))
+        ctk.CTkLabel(box, text=title, font=font(13, "bold"), text_color=TEXT, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(box, text=hint, font=font(12), text_color=MUTED, anchor="w").pack(anchor="w")
+
+    def _switch(self, parent, row, text, value, name):
+        widget = switch(parent, text, lambda: self.on_change(name, bool(widget.get())))
+        if value:
+            widget.select()
+        widget.grid(row=row, column=0, sticky="w", padx=16, pady=(0, 14))
+        return widget
+
+    def open_logs(self):
+        open_path(app_setup.data_dir())
+
+    def _grab(self):
+        try:
+            self.grab_set()
+            self.focus_force()
+        except Exception:
+            pass
+
+    def close(self):
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        self.destroy()
+
+
+def open_path(folder):
+    """Show ``folder`` in Explorer (or the platform's file manager)."""
+    os.makedirs(folder, exist_ok=True)
+    if sys.platform == "win32":
+        os.startfile(folder)
+    else:
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", folder])
+
+
 class App(ctk.CTk):
-    MIN_SIZE = (900, 680)
+    MIN_SIZE = (900, 700)
 
     def __init__(self):
         super().__init__()
         self.title(f"{DISPLAY_NAME} {__version__}")
-        self.geometry("1040x760")
+        self.geometry("1040x800")
         # Resizable with a sensible minimum (ISSUES.md #44).
         self.minsize(*self.MIN_SIZE)
         self.configure(fg_color=BG)
@@ -207,6 +365,7 @@ class App(ctk.CTk):
         self.settings_path = os.path.join(app_setup.data_dir(), "settings.json")
         self.settings = settings_store.load(self.settings_path, default_download_dir())
         ctk.set_appearance_mode(self.settings.theme)
+        ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
 
         self.manager = DownloadManager()
         self.download_folder = self.settings.download_folder
@@ -238,10 +397,13 @@ class App(ctk.CTk):
         self._poll_id = None
         self.tools = None
 
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-        self.create_sidebar()
+        self.settings_dialog = None
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        self.create_top_bar()
         self.create_main_view()
+        self._bind_shortcuts()
+        self.after(50, self._fit_to_content)
         self._apply_mode(self.settings.mode, self.settings.format, self.settings.quality)
         self._poll_events()
         # Check FFmpeg off the main thread; downloads stay disabled until then.
@@ -278,71 +440,48 @@ class App(ctk.CTk):
 
     # --- layout -----------------------------------------------------------
 
-    def create_sidebar(self):
-        self.sidebar = ctk.CTkFrame(self, width=240, corner_radius=0, fg_color=SIDEBAR)
-        self.sidebar.grid(row=0, column=0, sticky="nsw")
-        self.sidebar.grid_propagate(False)
-        self.sidebar.grid_columnconfigure(0, weight=1)
+    def create_top_bar(self):
+        bar = ctk.CTkFrame(self, corner_radius=0, fg_color=TOPBAR, height=64, border_width=0)
+        bar.grid(row=0, column=0, sticky="new")
+        bar.grid_columnconfigure(1, weight=1)
+        ctk.CTkFrame(bar, height=1, corner_radius=0, fg_color=CARD_BORDER).grid(row=1, column=0, columnspan=3,
+                                                                              sticky="ew")
+        self.top_bar = bar
 
-        brand = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        brand.grid(row=0, column=0, sticky="ew", padx=20, pady=(24, 28))
+        brand = ctk.CTkFrame(bar, fg_color="transparent")
+        brand.grid(row=0, column=0, sticky="w", padx=(24, 0), pady=12)
         self._logo_image = None
         try:
-            self._logo_image = tkinter.PhotoImage(file=resource_path("app.png")).subsample(5)
+            self._logo_image = tkinter.PhotoImage(file=resource_path("app.png")).subsample(6)
             self.logo = tkinter.Label(brand, image=self._logo_image, borderwidth=0, highlightthickness=0)
-            self.logo.grid(row=0, column=0, rowspan=2, padx=(0, 12))
+            self.logo.pack(side="left", padx=(0, 12))
         except tkinter.TclError:
             self.logo = None
-        ctk.CTkLabel(brand, text="Universal\nDownloader", font=font(16, "bold"), text_color=TEXT, anchor="w",
-                     justify="left").grid(row=0, column=1, sticky="w")
-        ctk.CTkLabel(brand, text=f"Version {__version__}", font=font(11), text_color=MUTED, anchor="w").grid(
-            row=1, column=1, sticky="w")
+        ctk.CTkLabel(brand, text="Universal Downloader", font=font(17, "bold"), text_color=TEXT).pack(side="left")
+        ctk.CTkLabel(brand, text=f"v{__version__}", font=font(12), text_color=MUTED).pack(side="left", padx=(8, 0))
 
-        self._section_label(self.sidebar, "SAVE TO").grid(row=1, column=0, sticky="w", padx=20)
-        self.lbl_folder = ctk.CTkLabel(self.sidebar, text="", font=font(12), text_color=TEXT, anchor="w",
-                                       justify="left", wraplength=200)
-        self.lbl_folder.grid(row=2, column=0, sticky="ew", padx=20, pady=(4, 8))
-        folder_buttons = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        folder_buttons.grid(row=3, column=0, sticky="ew", padx=20)
-        folder_buttons.grid_columnconfigure((0, 1), weight=1)
-        self.btn_dest = secondary_button(folder_buttons, "Change...", self.select_folder, height=32)
-        self.btn_dest.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.btn_open = secondary_button(folder_buttons, "Open", self.open_folder, height=32)
-        self.btn_open.grid(row=0, column=1, sticky="ew", padx=(4, 0))
-        self._show_folder()
-
-        self._section_label(self.sidebar, "APPEARANCE").grid(row=4, column=0, sticky="w", padx=20, pady=(28, 6))
-        self.seg_theme = ctk.CTkSegmentedButton(self.sidebar, values=list(settings_store.THEMES),
-                                                command=self._on_theme_changed, font=font(12),
-                                                selected_color=ACCENT, selected_hover_color=ACCENT_HOVER)
-        self.seg_theme.set(self.settings.theme)
-        self.seg_theme.grid(row=5, column=0, sticky="ew", padx=20)
-
-        self.sidebar.grid_rowconfigure(6, weight=1)
-        status = ctk.CTkFrame(self.sidebar, fg_color=CARD, corner_radius=10)
-        status.grid(row=7, column=0, sticky="ew", padx=16, pady=16)
-        self.lbl_status_dot = ctk.CTkLabel(status, text="\u25cf", font=font(14), text_color=MUTED, width=16)
-        self.lbl_status_dot.grid(row=0, column=0, padx=(12, 6), pady=10)
-        self.lbl_status = ctk.CTkLabel(status, text="Checking FFmpeg...", font=font(12), text_color=MUTED,
-                                       anchor="w")
-        self.lbl_status.grid(row=0, column=1, sticky="w", pady=10, padx=(0, 12))
+        right = ctk.CTkFrame(bar, fg_color="transparent")
+        right.grid(row=0, column=2, sticky="e", padx=(0, 24), pady=12)
+        status = ctk.CTkFrame(right, fg_color=FIELD, corner_radius=16)
+        status.pack(side="left", padx=(0, 12))
+        self.lbl_status_dot = ctk.CTkLabel(status, text="\u25cf", font=font(13), text_color=MUTED, width=14)
+        self.lbl_status_dot.pack(side="left", padx=(12, 4), pady=4)
+        self.lbl_status = ctk.CTkLabel(status, text="Checking FFmpeg...", font=font(12), text_color=MUTED)
+        self.lbl_status.pack(side="left", padx=(0, 14), pady=4)
+        self.btn_settings = secondary_button(right, "\u2699  Settings", self.open_settings, width=120, height=36)
+        self.btn_settings.pack(side="left")
         self._refresh_logo_bg()
 
     def _section_label(self, parent, text):
-        return ctk.CTkLabel(parent, text=text, font=font(11, "bold"), text_color=MUTED, anchor="w")
+        return section_label(parent, text)
 
     def create_main_view(self):
         self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.main_frame.grid(row=0, column=1, sticky="nsew", padx=28, pady=24)
+        self.main_frame.grid(row=1, column=0, sticky="nsew", padx=32, pady=(20, 24))
         self.main_frame.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_rowconfigure(5, weight=1)
 
-        header = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 16))
-        ctk.CTkLabel(header, text="Download videos and music", font=font(24, "bold"), text_color=TEXT,
-                     anchor="w").pack(anchor="w")
-        ctk.CTkLabel(header, text="Paste a link from YouTube, TikTok, Instagram, X or hundreds of other sites.",
-                     font=font(13), text_color=MUTED, anchor="w").pack(anchor="w", pady=(2, 0))
+        # The top bar names the app, so the link card comes first.
 
         # Link
         url_card = card(self.main_frame)
@@ -358,7 +497,7 @@ class App(ctk.CTk):
         self.btn_analyze = primary_button(url_card, "Analyze", self.start_analysis_thread, width=120, height=44,
                                           font=font(14, "bold"))
         self.btn_analyze.grid(row=0, column=2, padx=(0, 16), pady=16)
-        self.lbl_media = ctk.CTkLabel(url_card, text="Nothing analysed yet.", font=font(13), text_color=MUTED,
+        self.lbl_media = ctk.CTkLabel(url_card, text=MEDIA_HINT, font=font(13), text_color=MUTED,
                                       anchor="w", justify="left")
         self.lbl_media.grid(row=1, column=0, columnspan=3, sticky="ew", padx=18, pady=(0, 14))
 
@@ -367,9 +506,7 @@ class App(ctk.CTk):
         opt_card.grid(row=2, column=0, sticky="ew", pady=(0, 12))
         opt_card.grid_columnconfigure((1, 3), weight=1)
         self._section_label(opt_card, "MODE").grid(row=0, column=0, sticky="w", padx=(16, 12), pady=(16, 8))
-        self.cmb_mode = ctk.CTkSegmentedButton(opt_card, values=list(formats.MODES), command=self._on_mode_changed,
-                                               font=font(13), height=34, selected_color=ACCENT,
-                                               selected_hover_color=ACCENT_HOVER)
+        self.cmb_mode = segmented(opt_card, list(formats.MODES), self._on_mode_changed)
         self.cmb_mode.grid(row=0, column=1, columnspan=3, sticky="w", pady=(16, 8))
         self._section_label(opt_card, "FORMAT").grid(row=1, column=0, sticky="w", padx=(16, 12), pady=8)
         self.cmb_format = ctk.CTkOptionMenu(opt_card, values=["mp4"], command=lambda _v: self._save_settings(),
@@ -384,11 +521,10 @@ class App(ctk.CTk):
                                              text_color=TEXT, dropdown_font=font(13))
         self.cmb_quality.grid(row=1, column=3, sticky="w", pady=8)
 
-        self._section_label(opt_card, "TRIM").grid(row=2, column=0, sticky="w", padx=(16, 12), pady=(8, 16))
+        self._section_label(opt_card, "TRIM").grid(row=2, column=0, sticky="w", padx=(16, 12), pady=(8, 12))
         trim_row = ctk.CTkFrame(opt_card, fg_color="transparent")
-        trim_row.grid(row=2, column=1, columnspan=3, sticky="w", pady=(8, 16))
-        self.chk_trim = ctk.CTkSwitch(trim_row, text="Only part of the video", command=self.toggle_trim,
-                                      font=font(13), progress_color=ACCENT)
+        trim_row.grid(row=2, column=1, columnspan=3, sticky="w", pady=(8, 12))
+        self.chk_trim = switch(trim_row, "Only part of the video", self.toggle_trim)
         self.chk_trim.grid(row=0, column=0, padx=(0, 16))
         self.ent_start = ctk.CTkEntry(trim_row, placeholder_text="Start  0:10", width=110, height=32,
                                       fg_color=FIELD, border_width=0)
@@ -400,6 +536,22 @@ class App(ctk.CTk):
         self.lbl_trim_hint = ctk.CTkLabel(trim_row, text="SS, MM:SS or HH:MM:SS", text_color=MUTED, font=font(12))
         self.lbl_trim_hint.grid(row=0, column=4)
         self.toggle_trim()
+
+        ctk.CTkFrame(opt_card, height=1, corner_radius=0, fg_color=CARD_BORDER).grid(row=3, column=0, columnspan=4, sticky="ew",
+                                                                    padx=16)
+        self._section_label(opt_card, "SAVE TO").grid(row=4, column=0, sticky="w", padx=(16, 12), pady=12)
+        folder_row = ctk.CTkFrame(opt_card, fg_color="transparent")
+        folder_row.grid(row=4, column=1, columnspan=3, sticky="ew", padx=(0, 16), pady=12)
+        folder_row.grid_columnconfigure(0, weight=1)
+        self.lbl_folder = ctk.CTkLabel(folder_row, text="", font=font(13), text_color=TEXT, fg_color=FIELD,
+                                       corner_radius=8, height=36, anchor="w")
+        self.lbl_folder.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.lbl_folder.bind("<Double-Button-1>", lambda _e: self.open_folder())
+        self.btn_dest = secondary_button(folder_row, "Change...", self.select_folder, width=100)
+        self.btn_dest.grid(row=0, column=1, padx=(0, 8))
+        self.btn_open = secondary_button(folder_row, "Open", self.open_folder, width=80)
+        self.btn_open.grid(row=0, column=2)
+        self._show_folder()
 
         # Actions
         actions = ctk.CTkFrame(self.main_frame, fg_color="transparent")
@@ -422,7 +574,8 @@ class App(ctk.CTk):
         prog_card.grid_columnconfigure(0, weight=1)
         self.lbl_item = ctk.CTkLabel(prog_card, text="Ready", font=font(13, "bold"), text_color=TEXT, anchor="w")
         self.lbl_item.grid(row=0, column=0, columnspan=2, sticky="ew", padx=16, pady=(14, 6))
-        self.progress_bar = ctk.CTkProgressBar(prog_card, height=10, corner_radius=5, progress_color=ACCENT)
+        self.progress_bar = ctk.CTkProgressBar(prog_card, height=10, corner_radius=5, progress_color=ACCENT,
+                                               fg_color=SECONDARY)
         self.progress_bar.set(0)
         self.progress_bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16)
         self.lbl_progress = ctk.CTkLabel(prog_card, text="0%", font=font(12), text_color=MUTED, anchor="w")
@@ -436,7 +589,7 @@ class App(ctk.CTk):
         log_card.grid_columnconfigure(0, weight=1)
         log_card.grid_rowconfigure(1, weight=1)
         self._section_label(log_card, "ACTIVITY").grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
-        self.console = ctk.CTkTextbox(log_card, height=120, font=ctk.CTkFont(family="Consolas", size=12),
+        self.console = ctk.CTkTextbox(log_card, height=100, font=ctk.CTkFont(family="Consolas", size=12),
                                       fg_color="transparent", text_color=TEXT, wrap="word")
         self.console.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
         self.log("Welcome! Paste a link and press Analyze.")
@@ -461,19 +614,68 @@ class App(ctk.CTk):
         self.progress_bar.configure(progress_color=ACCENT)
         self._show_progress(0, "Starting...")
     def _show_folder(self):
-        self.lbl_folder.configure(text=self.download_folder)
+        self.lbl_folder.configure(text="   " + shorten_path(self.download_folder))
     def _refresh_logo_bg(self):
         if self.logo is not None:
             dark = ctk.get_appearance_mode() == "Dark"
-            self.logo.configure(bg=SIDEBAR[1] if dark else SIDEBAR[0])
+            self.logo.configure(bg=TOPBAR[1] if dark else TOPBAR[0])
     def _on_theme_changed(self, theme):
         ctk.set_appearance_mode(theme)
+        self.settings.theme = theme
         self._refresh_logo_bg()
         self._save_settings()
+    def _on_setting_changed(self, name, value):
+        """Called by the settings dialog; applies and saves one setting."""
+        if name == "theme":
+            self._on_theme_changed(value)
+            return
+        setattr(self.settings, name, value)
+        if name == "text_size":
+            ctk.set_widget_scaling(settings_store.TEXT_SIZES[value])
+            self.after(50, self._fit_to_content)
+        self._save_settings()
+    def _fit_to_content(self):
+        """Grow the window (up to the screen size) so bigger text still fits."""
+        try:
+            self.update_idletasks()
+            max_w, max_h = self.winfo_screenwidth() - 40, self.winfo_screenheight() - 80
+            # Tk reports these in pixels; geometry() and minsize() take
+            # CustomTkinter's scaled units.
+            scale = self._get_window_scaling()
+            need_w = min(self.winfo_reqwidth(), max_w) / scale
+            need_h = min(self.winfo_reqheight(), max_h) / scale
+            width = max(self.winfo_width() / scale, need_w)
+            height = max(self.winfo_height() / scale, need_h)
+            self.minsize(int(max(self.MIN_SIZE[0], min(need_w, self.MIN_SIZE[0] * 1.3))),
+                         int(max(self.MIN_SIZE[1], need_h)))
+            if width > self.winfo_width() / scale or height > self.winfo_height() / scale:
+                self.geometry(f"{int(width)}x{int(height)}")
+        except tkinter.TclError:
+            pass  # window already closed
+    def open_settings(self):
+        if self.settings_dialog is not None and self.settings_dialog.winfo_exists():
+            self.settings_dialog.focus_force()
+            return
+        self.settings_dialog = SettingsDialog(self, self.settings, self.tools, self._on_setting_changed)
+    def _bind_shortcuts(self):
+        self.bind("<Control-Return>", lambda _e: self._shortcut(self.start_download_queue, self.btn_download))
+        self.bind("<Escape>", lambda _e: self.cancel_job())
+        self.bind("<Control-o>", lambda _e: self._shortcut(self.select_folder, self.btn_dest))
+        self.bind("<Control-comma>", lambda _e: self.open_settings())
+        # The link field's own Enter binding would otherwise also run.
+        self.url_entry.bind("<Control-Return>",
+                            lambda _e: self._shortcut(self.start_download_queue, self.btn_download))
+        self.after(300, self.url_entry.focus_set)
+    def _shortcut(self, action, button):
+        # A shortcut does what its button does, and only when it is enabled.
+        if button.cget("state") == "normal":
+            action()
+        return "break"
     def _save_settings(self):
-        self.settings = settings_store.Settings(
-            download_folder=self.download_folder, mode=self.cmb_mode.get(), format=self.cmb_format.get(),
-            quality=self.cmb_quality.get(), theme=self.seg_theme.get())
+        self.settings.download_folder = self.download_folder
+        self.settings.mode = self.cmb_mode.get()
+        self.settings.format = self.cmb_format.get()
+        self.settings.quality = self.cmb_quality.get()
         settings_store.save(self.settings_path, self.settings)
     def _apply_mode(self, mode, fmt=None, quality=None):
         self.cmb_mode.set(mode)
@@ -508,11 +710,7 @@ class App(ctk.CTk):
     def open_folder(self):
         folder = self.download_folder
         try:
-            os.makedirs(folder, exist_ok=True)
-            if sys.platform == "win32":
-                os.startfile(folder)
-            else:
-                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", folder])
+            open_path(folder)
         except OSError as e:
             self._append_log(f"Could not open {folder}: {e}")
     def paste_url(self):
@@ -828,10 +1026,13 @@ class App(ctk.CTk):
         self.progress_bar.configure(progress_color=SUCCESS if summary.all_ok else WARNING if done else DANGER)
         if summary.all_ok:
             self._show_progress(1, "Complete")
-            messagebox.showinfo(summary.title(), summary.report(), parent=self)
         else:
             self._show_progress(done / len(summary.results) if summary.results else 0, summary.headline())
-            messagebox.showwarning(summary.title(), summary.report(), parent=self)
+        if done and self.settings.open_folder_when_done:
+            self.open_folder()
+        if self.settings.show_summary:
+            show = messagebox.showinfo if summary.all_ok else messagebox.showwarning
+            show(summary.title(), summary.report(), parent=self)
     def progress_hook(self, d):
         """yt-dlp progress and postprocessor hook; runs on the worker thread."""
         stage = events.stage_from_hook(d)

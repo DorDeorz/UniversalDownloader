@@ -64,8 +64,8 @@ def test_choices_are_remembered_between_runs(monkeypatch, tmp_path):
         first.cmb_format.set("flac")
         first.cmb_quality.set("192 kbps")
         first._save_settings()
-        first.seg_theme.set("Light")
-        first._on_theme_changed("Light")
+        first._on_setting_changed("theme", "Light")
+        first._on_setting_changed("show_summary", False)
     finally:
         first.destroy()
     second = new_app()
@@ -73,7 +73,8 @@ def test_choices_are_remembered_between_runs(monkeypatch, tmp_path):
         assert second.cmb_mode.get() == "Audio Only"
         assert second.cmb_format.get() == "flac"
         assert second.cmb_quality.get() == "192 kbps"
-        assert second.seg_theme.get() == "Light"
+        assert second.settings.theme == "Light"
+        assert second.settings.show_summary is False
     finally:
         second.destroy()
         ctk.set_appearance_mode("System")
@@ -138,3 +139,104 @@ def test_playlist_dialog_names_how_many_will_be_queued(app):
     finally:
         if dialog.winfo_exists():
             dialog.destroy()
+
+
+@pytest.mark.parametrize("path, limit, expected", [
+    ("C:\\short", 64, "C:\\short"),
+    ("C:\\Users\\someone\\Downloads\\UniversalVideos", 20, "C:\\Us...versalVideos"),
+])
+def test_shorten_path(path, limit, expected):
+    assert ui.shorten_path(path, limit) == expected
+    assert len(ui.shorten_path(path, limit)) <= limit
+
+
+@needs_display
+def test_settings_dialog_applies_and_saves_changes(app, monkeypatch):
+    scales = []
+    monkeypatch.setattr(ui.ctk, "set_widget_scaling", scales.append)
+    app.open_settings()
+    dialog = app.settings_dialog
+    assert dialog.seg_theme.get() == app.settings.theme
+    app.open_settings()
+    assert app.settings_dialog is dialog  # one dialog at a time
+
+    dialog.seg_text.set("Larger")
+    dialog.on_change("text_size", "Larger")
+    dialog.sw_open.toggle()
+    assert scales == [1.3]
+    assert app.settings.text_size == "Larger"
+    assert app.settings.open_folder_when_done is True
+    saved = ui.settings_store.load(app.settings_path, "unused")
+    assert (saved.text_size, saved.open_folder_when_done) == ("Larger", True)
+    dialog.close()
+    assert not dialog.winfo_exists()
+
+
+@needs_display
+@pytest.mark.parametrize("show_summary, open_folder", [(True, False), (False, True)])
+def test_finish_actions_follow_settings(app, monkeypatch, show_summary, open_folder):
+    shown, opened = [], []
+    monkeypatch.setattr(ui.messagebox, "showinfo", lambda *a, **k: shown.append(a))
+    monkeypatch.setattr(app, "open_folder", lambda: opened.append(True))
+    app.settings.show_summary, app.settings.open_folder_when_done = show_summary, open_folder
+    app._job_kind = "download"
+    app._on_job_done(JobSummary([ItemResult("a", "A", ItemStatus.COMPLETED, path="x")]))
+    assert bool(shown) is show_summary
+    assert bool(opened) is open_folder
+
+
+@needs_display
+def test_folder_is_not_opened_when_nothing_completed(app, monkeypatch):
+    opened = []
+    monkeypatch.setattr(app, "open_folder", lambda: opened.append(True))
+    app.settings.open_folder_when_done = True
+    app._job_kind = "download"
+    app._on_job_done(JobSummary([ItemResult("a", "A", ItemStatus.FAILED, error="x")]))
+    assert opened == []
+
+
+@needs_display
+def test_keyboard_shortcuts(app, monkeypatch):
+    calls = []
+    monkeypatch.setattr(app, "start_download_queue", lambda: calls.append("download"))
+    monkeypatch.setattr(app, "start_analysis_thread", lambda: calls.append("analyze"))
+    monkeypatch.setattr(app, "cancel_job", lambda: calls.append("cancel"))
+    monkeypatch.setattr(app, "open_settings", lambda: calls.append("settings"))
+    app._bind_shortcuts()
+    app.set_queue([{"url": "https://example.com/v", "title": "v"}])
+    entry = app.url_entry._entry
+    entry.focus_force()
+    pump(app, lambda: app.focus_get() is entry, timeout=2)
+    for sequence in ("<Control-Return>", "<Escape>", "<Control-comma>"):
+        entry.event_generate(sequence)
+    pump(app, timeout=0.3)
+    assert calls == ["download", "cancel", "settings"]
+
+    calls.clear()
+    app.set_queue([])  # Download disabled: the shortcut does nothing
+    entry.event_generate("<Control-Return>")
+    pump(app, timeout=0.3)
+    assert calls == []
+
+
+def _contrast(fg, bg):
+    def luminance(colour):
+        channels = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        r, g, b = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    high, low = sorted((luminance(fg), luminance(bg)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+@pytest.mark.parametrize("fg, bgs", [
+    (ui.TEXT, (ui.BG, ui.CARD, ui.FIELD, ui.SECONDARY)),
+    (ui.MUTED, (ui.BG, ui.CARD, ui.FIELD)),
+    (ui.SUCCESS, (ui.CARD, ui.FIELD)),
+    (ui.DANGER, (ui.CARD,)),
+    (ui.WARNING, (ui.CARD,)),
+    ((ui.ON_ACCENT, ui.ON_ACCENT), (ui.ACCENT,)),
+])
+def test_text_colours_meet_wcag_aa(fg, bgs):
+    for bg in bgs:
+        for mode in (0, 1):  # light, dark
+            assert _contrast(fg[mode], bg[mode]) >= 4.5, (fg[mode], bg[mode])

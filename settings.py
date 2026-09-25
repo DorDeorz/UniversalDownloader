@@ -7,13 +7,15 @@ back to defaults, and a damaged file never stops the app from starting.
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import MISSING, asdict, dataclass, fields, replace
 
 import formats
 
 _log = logging.getLogger(__name__)
 
 THEMES = ("System", "Dark", "Light")
+# Text size choice -> CustomTkinter widget scaling.
+TEXT_SIZES = {"Normal": 1.0, "Large": 1.15, "Larger": 1.3}
 
 
 @dataclass
@@ -23,6 +25,9 @@ class Settings:
     format: str = "mp4"
     quality: str = "Best"
     theme: str = "System"
+    text_size: str = "Normal"
+    open_folder_when_done: bool = False
+    show_summary: bool = True
 
     def normalized(self, default_folder):
         """A copy with every value valid for the current version."""
@@ -32,7 +37,9 @@ class Settings:
         theme = self.theme if self.theme in THEMES else "System"
         folder = self.download_folder if isinstance(self.download_folder, str) and self.download_folder else \
             default_folder
-        return Settings(folder, mode, fmt, quality, theme)
+        text_size = self.text_size if self.text_size in TEXT_SIZES else "Normal"
+        return replace(self, download_folder=folder, mode=mode, format=fmt, quality=quality, theme=theme,
+                       text_size=text_size)
 
 
 def load(path, default_folder):
@@ -46,8 +53,9 @@ def load(path, default_folder):
     except (OSError, ValueError) as e:
         _log.warning("Ignoring unreadable settings %s: %s", path, e)
         raw = {}
-    known = {f.name for f in fields(Settings)}
-    values = {k: v for k, v in raw.items() if k in known and isinstance(v, str)}
+    # Keep only known keys whose value has the default's type.
+    types = {f.name: type(f.default) for f in fields(Settings) if f.default is not MISSING}
+    values = {k: v for k, v in raw.items() if k in types and type(v) is types[k]}
     return Settings(**values).normalized(default_folder)
 
 

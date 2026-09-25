@@ -51,3 +51,16 @@ def test_valid_urls(text, expected):
 def test_invalid_urls(text, reason):
     with pytest.raises(ValueError, match=reason):
         urls.normalize_url(text)
+
+
+def test_app_settings_round_trip_and_bad_types_are_ignored(tmp_path):
+    path = str(tmp_path / "settings.json")
+    settings.save(path, settings.Settings(download_folder="D:\\Videos", text_size="Large",
+                                          open_folder_when_done=True, show_summary=False))
+    loaded = settings.load(path, "C:\\default")
+    assert (loaded.text_size, loaded.open_folder_when_done, loaded.show_summary) == ("Large", True, False)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"text_size": "Huge", "open_folder_when_done": "yes", "show_summary": 0}, f)
+    loaded = settings.load(path, "C:\\default")
+    assert (loaded.text_size, loaded.open_folder_when_done, loaded.show_summary) == ("Normal", False, True)

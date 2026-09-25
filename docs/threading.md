@@ -48,6 +48,25 @@ Starting a new analysis clears the previous queue and progress, and editing the
 URL after an analysis drops the analysed queue, so a download can never use the
 results of a different URL.
 
+## Cancel, retry and closing the window
+
+- **Cancel** sets a `threading.Event` that is bound to the running job. The
+  progress hook and the postprocessor hook raise `DownloadCancelled` when it
+  is set, so a download stops at its next progress update and conversions
+  stop before the next step. The item is reported as `cancelled`, the files
+  it was writing (`.part`, `.ytdl`, `.part-FragN` and finished intermediate
+  streams) are removed, and the remaining queue items are reported as
+  `cancelled` without starting.
+- **Network limits**: every yt-dlp instance uses a 30 s socket timeout and
+  bounded retries (`retries`, `fragment_retries`, `extractor_retries`), so a
+  dead connection fails the item instead of hanging the job.
+- **Retry failed** re-queues only the items the last job reported as
+  `failed`.
+- **Closing the window** during a download asks for confirmation, cancels
+  the job and waits (up to 15 s) for the worker to clean up before the window
+  is destroyed. During an analysis the window closes at once; the analysis
+  thread is a daemon and touches no widgets.
+
 ## Running the tests
 
 ```

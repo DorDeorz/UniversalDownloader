@@ -1,3 +1,5 @@
+import logging
+
 import customtkinter as ctk
 import threading
 import os
@@ -7,6 +9,8 @@ import formats
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
 from utils import resource_path
+
+_log = logging.getLogger(__name__)
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -97,6 +101,9 @@ class App(ctk.CTk):
         # Only one job (analysis or download) runs at a time; see _start_job.
         self._job_thread = None
         self._job_kind = None
+        self._cancel_event = threading.Event()
+        self._closing = False
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # Worker threads never touch widgets; they post events that are
         # dispatched here on the main thread (see events.py).
@@ -182,7 +189,15 @@ class App(ctk.CTk):
         self.ent_end.grid(row=1, column=2, padx=10, pady=10)
 
         self.btn_download = ctk.CTkButton(self.main_frame, text="START DOWNLOAD", height=50, fg_color="#e63946", hover_color="#d62828", font=("Arial", 16, "bold"), command=self.start_download_queue, state="disabled")
-        self.btn_download.pack(fill="x", pady=20)
+        self.btn_download.pack(fill="x", pady=(20, 5))
+        self.action_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.action_frame.pack(fill="x")
+        self.btn_cancel = ctk.CTkButton(self.action_frame, text="CANCEL", command=self.cancel_job, state="disabled",
+                                        fg_color="gray30", hover_color="gray25")
+        self.btn_cancel.pack(side="left", expand=True, fill="x", padx=(0, 5))
+        self.btn_retry = ctk.CTkButton(self.action_frame, text="RETRY FAILED", command=self.retry_failed,
+                                       state="disabled", fg_color="gray30", hover_color="gray25")
+        self.btn_retry.pack(side="left", expand=True, fill="x", padx=(5, 0))
         self.progress_bar = ctk.CTkProgressBar(self.main_frame)
         self.progress_bar.set(0)
         self.progress_bar.pack(fill="x", pady=10)
@@ -233,6 +248,7 @@ class App(ctk.CTk):
             self._append_log(f"Busy: wait for the current {self._job_kind} to finish.")
             return False
         self._job_kind = kind
+        self._cancel_event = threading.Event()
         self._set_controls_busy(True)
         self._job_thread = threading.Thread(target=target, args=args, name=f"uvd-{kind}", daemon=True)
         self._job_thread.start()
@@ -252,10 +268,16 @@ class App(ctk.CTk):
         trim_state = "normal" if (not busy and self.chk_trim.get()) else "disabled"
         self.ent_start.configure(state=trim_state)
         self.ent_end.configure(state=trim_state)
+        # Only downloads can be cancelled; analysis is a single request
+        # bounded by the network timeout.
+        self.btn_cancel.configure(state="normal" if busy and self._job_kind == "download" else "disabled",
+                                  text="CANCEL")
         if busy:
             self.btn_download.configure(state="disabled")
+            self.btn_retry.configure(state="disabled")
         else:
             self._refresh_download_button()
+            self._refresh_retry_button()
 
     def _refresh_download_button(self):
         count = len(self.download_queue)
@@ -263,6 +285,62 @@ class App(ctk.CTk):
             self.btn_download.configure(state="normal", text=f"DOWNLOAD ({count})")
         else:
             self.btn_download.configure(state="disabled", text="START DOWNLOAD")
+
+    def _failed_items(self):
+        if self.last_summary is None:
+            return []
+        return [{'url': r.url, 'title': r.title} for r in self.last_summary.with_status(ItemStatus.FAILED)]
+
+    def _refresh_retry_button(self):
+        count = len(self._failed_items())
+        if count:
+            self.btn_retry.configure(state="normal", text=f"RETRY FAILED ({count})")
+        else:
+            self.btn_retry.configure(state="disabled", text="RETRY FAILED")
+
+    def cancel_job(self):
+        """Ask the running download to stop; results arrive via job_done."""
+        if self._job_kind != "download" or self._cancel_event.is_set():
+            return
+        self._cancel_event.set()
+        self.btn_cancel.configure(state="disabled", text="CANCELLING...")
+        self._append_log("Cancelling...")
+
+    def retry_failed(self):
+        items = self._failed_items()
+        if not items or self.is_busy():
+            return
+        self._append_log(f"Retrying {len(items)} failed item(s).")
+        self.download_queue = items
+        self.start_download_queue()
+
+    CLOSE_TIMEOUT_MS = 15000
+
+    def on_close(self):
+        """Window close: confirm, cancel a running download, wait, then exit."""
+        if self._closing:
+            return
+        if self._job_kind == "download":
+            if not messagebox.askyesno("Download in progress",
+                                       "A download is still running. Cancel it and quit?", parent=self):
+                return
+            self._closing = True
+            self.cancel_job()
+            self._wait_then_destroy(self.CLOSE_TIMEOUT_MS)
+            return
+        # An analysis is one bounded request on a daemon thread; nothing to
+        # clean up, so the window can close right away.
+        self._closing = True
+        self.destroy()
+
+    def _wait_then_destroy(self, remaining_ms):
+        thread = self._job_thread
+        if thread is None or not thread.is_alive() or remaining_ms <= 0:
+            if thread is not None and thread.is_alive():
+                _log.warning("Worker did not stop within %d ms; closing anyway", self.CLOSE_TIMEOUT_MS)
+            self.destroy()
+            return
+        self.after(100, self._wait_then_destroy, remaining_ms - 100)
 
     def _on_url_changed(self, _event=None):
         """Drop the analysed queue as soon as the URL no longer matches it."""
@@ -334,30 +412,41 @@ class App(ctk.CTk):
             'trim_start': self.ent_start.get() if self.chk_trim.get() else None,
             'trim_end': self.ent_end.get() if self.chk_trim.get() else None
         }
-        if self._start_job("download", self.run_queue, items, opts):
+        if self._start_job("download", self._run_queue_with_cancel, items, opts):
             self.btn_download.configure(text="DOWNLOADING...")
-    def run_queue(self, items, opts):
+    def run_queue(self, items, opts, cancel_event=None):
         """Worker thread: download each item and post events; no widget access."""
         summary = JobSummary()
         total = len(items)
         try:
             for i, item in enumerate(items):
+                if cancel_event is not None and cancel_event.is_set():
+                    result = ItemResult(item['url'], item['title'], ItemStatus.CANCELLED, error='Cancelled by user')
+                    summary.add(result)
+                    self.events.post(events.ITEM_DONE, result=result)
+                    continue
                 self.log(f"[{i+1}/{total}] {item['title']}")
                 try:
                     result = self.manager.download_video(
-                        item['url'], opts, self.progress_hook, log_callback=self.log, title=item['title'])
+                        item['url'], opts, self.progress_hook, log_callback=self.log, title=item['title'],
+                        cancel_event=cancel_event)
                 except Exception as e:
                     result = ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
                 summary.add(result)
                 self.events.post(events.ITEM_DONE, result=result)
         finally:
             self.events.post(events.JOB_DONE, summary=summary)
+    def _run_queue_with_cancel(self, items, opts):
+        # Bound at start so a later job's event cannot leak into this one.
+        self.run_queue(items, opts, self._cancel_event)
     def _on_item_done(self, result):
         self._append_log(result.describe())
     def _on_job_done(self, summary):
         self._append_log(f"Result: {summary.headline()}")
-        self._end_job()
         self.last_summary = summary
+        self._end_job()
+        if self._closing:
+            return
         if summary.all_ok:
             self._show_progress(1, "Complete")
             messagebox.showinfo(summary.title(), summary.report())

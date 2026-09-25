@@ -54,7 +54,54 @@ def base_ydl_options(log_callback=None):
     return {
         'logger': YtDlpLogger(log_callback),
         'noprogress': True,
+        # Give up on a stalled connection instead of hanging forever, and
+        # retry transient network errors a bounded number of times.
+        'socket_timeout': SOCKET_TIMEOUT,
+        'retries': RETRIES,
+        'fragment_retries': RETRIES,
+        'extractor_retries': 3,
+        'file_access_retries': 3,
     }
+
+
+SOCKET_TIMEOUT = 30
+RETRIES = 5
+
+
+class PartialFiles:
+    """Remembers the files a download touched so a cancel can remove them.
+
+    yt-dlp reports its working names through progress hooks; it also leaves
+    ``.part``, ``.ytdl`` and ``.part-FragN`` files next to them.
+    """
+
+    def __init__(self):
+        self.paths = set()
+
+    def track(self, d):
+        for key in ('tmpfilename', 'filename'):
+            if d.get(key):
+                self.paths.add(d[key])
+
+    def cleanup(self):
+        removed = []
+        for path in self.paths:
+            folder = os.path.dirname(path) or '.'
+            name = os.path.basename(path)
+            candidates = {path, path + '.part', path + '.ytdl'}
+            if os.path.isdir(folder):
+                candidates.update(
+                    os.path.join(folder, f) for f in os.listdir(folder)
+                    if f.startswith(name + '.part-Frag') or f.startswith(name + '-Frag'))
+            for candidate in candidates:
+                try:
+                    os.remove(candidate)
+                    removed.append(candidate)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    _log.warning("Could not remove partial file %s: %s", candidate, e)
+        return removed
 
 
 def describe_error(exc):
@@ -172,7 +219,7 @@ class DownloadManager:
         except Exception as e:
             return {'error': describe_error(e), 'error_type': type(e).__name__}
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None):
         """Download one item and return its :class:`results.ItemResult`.
 
         Never raises for download problems: yt-dlp, trim and postprocessor
@@ -184,11 +231,38 @@ class DownloadManager:
         the title and duration); the download pass then runs with options
         that depend on that selection: the trim range, and whether the
         container can be reached by remuxing or needs re-encoding.
+
+        Setting ``cancel_event`` stops the download at the next progress
+        update; the item is then ``cancelled`` and its partial files removed.
         """
         title = title or url
+        partial = PartialFiles()
 
         def failed(error):
             return ItemResult(url, title, ItemStatus.FAILED, error=error)
+
+        def cancelled():
+            removed = partial.cleanup()
+            if removed and log_callback:
+                log_callback(f"Removed {len(removed)} partial file(s)")
+            return ItemResult(url, title, ItemStatus.CANCELLED, error='Cancelled by user')
+
+        def is_cancelled():
+            return cancel_event is not None and cancel_event.is_set()
+
+        def check_cancel(d=None):
+            if d is not None:
+                partial.track(d)
+            if is_cancelled():
+                raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
+
+        def on_progress(d):
+            check_cancel(d)
+            if progress_hook:
+                progress_hook(d)
+
+        if is_cancelled():
+            return ItemResult(url, title, ItemStatus.CANCELLED, error='Cancelled by user')
 
         mode = options.get('mode', formats.VIDEO_AUDIO)
         quality = options.get('quality', 'Best')
@@ -209,7 +283,9 @@ class DownloadManager:
         ydl_opts.update({
             'outtmpl': output_template,
             'ffmpeg_location': self.ffmpeg_path,
-            'progress_hooks': [progress_hook] if progress_hook else [],
+            'progress_hooks': [on_progress],
+            # Postprocessing (merge, conversion) can take a while too.
+            'postprocessor_hooks': [check_cancel],
         })
         ydl_opts.update(plan.options)
 
@@ -228,6 +304,7 @@ class DownloadManager:
                     log_callback(f"Warning: this source does not report its resolution; "
                                  f"the {quality} limit may not apply")
 
+            check_cancel()
             # Phase 2: download with options that depend on the selection.
             ydl_opts['postprocessors'] = formats.postprocessors_for(plan, info)
             if trim_requested:
@@ -246,6 +323,8 @@ class DownloadManager:
         except TrimError as e:
             return failed(str(e))
         except Exception as e:
+            if is_cancelled():
+                return cancelled()
             return failed(explain_format_error(describe_error(e), mode, quality))
 
         problem = verify_output(path)

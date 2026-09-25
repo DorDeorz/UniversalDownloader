@@ -35,7 +35,7 @@ class FakeManager:
             raise self.raise_on_fetch
         return self.info
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None):
         self.threads.add(threading.get_ident())
         progress_hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 2})
         if url in self.fail_urls:

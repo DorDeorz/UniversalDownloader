@@ -8,6 +8,7 @@ linked projects.
 |---|---|---|
 | [FFmpeg](https://ffmpeg.org/) (`bin/ffmpeg.exe`, `bin/ffprobe.exe`) | Merging, conversion, trimming | GPL v3 or LGPL v2.1, depending on the build ([legal](https://ffmpeg.org/legal.html)) |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Media extraction and download | Unlicense |
+| [Deno](https://deno.com/) (`bin/deno.exe`, installer only) | Runs YouTube's JavaScript challenges for yt-dlp | MIT |
 | [yt-dlp-ejs](https://github.com/yt-dlp/ejs) | YouTube JavaScript challenge solver scripts | Unlicense / MIT (see project) |
 | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) | User interface | MIT |
 | [darkdetect](https://github.com/albertosottile/darkdetect) | Dark mode detection | BSD-3-Clause |

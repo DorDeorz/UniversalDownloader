@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import shutil
 import yt_dlp
 from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 
@@ -230,6 +231,11 @@ class DownloadManager:
         if self.tools is None:
             self.tools = media_tools.find_tools()
             media_tools.activate(self.tools)
+            deno = shutil.which("deno")
+            if deno:
+                _log.info("JavaScript runtime for YouTube: %s", deno)
+            else:
+                _log.warning("No Deno found; yt-dlp may offer fewer YouTube formats")
         return self.tools
 
     def fetch_info(self, url, log_callback=None):

@@ -27,18 +27,63 @@ Output in `dist\`:
 - `app.ico` is not a real `.ico` file, or `app.png` /
   `THIRD_PARTY_NOTICES.md` is missing.
 
+## Installer
+
+The installer packs a folder build, which starts fast because nothing is
+unpacked on launch:
+
+```
+python build_app.py --onedir --require-deno   # needs bin\deno.exe
+iscc /DAppVersion=1.0.0 installer\UniversalDownloader.iss
+```
+
+`--onedir` writes `dist\UniversalDownloader\` (the EXE plus `_internal\`).
+With it, `bin\deno.exe` is bundled next to FFmpeg when present;
+`--require-deno` makes it mandatory. The app puts that folder first on
+`PATH`, where yt-dlp looks for Deno, and logs at startup whether it found
+one.
+
+`installer\UniversalDownloader.iss` (Inno Setup 6) makes
+`dist\UniversalDownloader-Setup-<version>.exe`, which:
+
+- installs for the current user without an administrator prompt, into
+  `%LOCALAPPDATA%\Programs\UniversalDownloader` (or for all users, if
+  chosen);
+- adds a Start menu entry, an optional desktop shortcut and an uninstaller;
+- asks the user to close the app first if it is running;
+- replaces the whole program folder on upgrade, and keeps settings, logs
+  and downloads on uninstall.
+
+## Release workflow
+
+`.github/workflows/release.yml` runs on `windows-latest`:
+
+1. Checks out with Git LFS, so the real FFmpeg and ffprobe are used.
+2. Downloads the latest Deno and builds the folder and the installer.
+3. Installs the result silently on the runner, runs FFmpeg, ffprobe and
+   Deno from the installed folder, starts the app and checks it is still
+   running after 20 seconds, then uninstalls it.
+4. Uploads the installer, `SHA256SUMS.txt` and `build-info.json`, and
+   publishes a GitHub Release with them.
+
+Pushing a tag `v<version>` releases (the tag must match `version.py`). A
+manual run from the Actions tab builds and tests only, unless **publish**
+is ticked; then it also creates the tag on the chosen commit. The release
+text is `installer\release-notes.md`.
+
 The version lives only in `version.py`; the window title, the EXE name and
 `build-info.json` all read it. Bump it there for a release.
 
 ## Known limits
 
-- **Onefile start-up**: the single EXE unpacks itself (about 200 MB with
-  FFmpeg) to a temp folder on every start, so the first window takes a few
-  seconds, and unsigned single-file EXEs are more likely to be flagged by
-  SmartScreen or antivirus. Switching the spec to a one-folder build fixes
-  both if that becomes a problem.
-- **Code signing** needs a certificate and is not part of the build.
-- **YouTube JavaScript challenges**: `yt-dlp-ejs` is bundled, but yt-dlp also
-  needs a JavaScript runtime (Deno, Node, Bun or QuickJS) on PATH for some
-  YouTube formats. Without one, yt-dlp logs a warning and may offer fewer
+- **Portable EXE start-up**: the single EXE unpacks itself (about 200 MB
+  with FFmpeg) to a temp folder on every start, so the first window takes a
+  few seconds, and unsigned single-file EXEs are more likely to be flagged
+  by SmartScreen or antivirus. The installer's folder build has neither
+  problem.
+- **YouTube JavaScript challenges**: `yt-dlp-ejs` is bundled, and yt-dlp
+  also needs a JavaScript runtime for some YouTube formats. The installer
+  ships Deno; the portable EXE and a source checkout use Deno from `PATH`
+  if there is one, and otherwise yt-dlp logs a warning and may offer fewer
   formats.
+- **Code signing** is not done, so SmartScreen warns on the installer too.

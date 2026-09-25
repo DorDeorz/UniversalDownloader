@@ -112,3 +112,40 @@ def test_second_instance_is_detected_on_windows():
     finally:
         second.release()
         first.release()
+
+
+def deno_run(cmd, **kwargs):
+    if os.path.basename(cmd[0]) == "deno.exe":
+        return subprocess.CompletedProcess(cmd, 0, stdout="deno 2.5.0 (stable)\nv8 x\n", stderr="")
+    return ok_run(cmd, **kwargs)
+
+
+def test_preflight_can_require_deno(tmp_path, monkeypatch):
+    monkeypatch.setattr(build_app, "check_virtualenv", lambda: None)
+    root = make_root(tmp_path)
+    problems = build_app.preflight(str(root), run=deno_run, require_windows=False, require_deno=True)
+    assert any("deno.exe not found" in p for p in problems)
+    (root / "bin" / "deno.exe").write_bytes(b"MZ")
+    assert build_app.preflight(str(root), run=deno_run, require_windows=False, require_deno=True) == []
+    problems = build_app.preflight(str(root), run=ok_run, require_windows=False, require_deno=True)
+    assert any("like Deno" in p for p in problems)
+
+
+def test_folder_build_is_what_the_installer_packs():
+    exe = build_app.output_exe(onedir=True, dist="dist")
+    assert exe == os.path.join("dist", "UniversalDownloader", "UniversalDownloader.exe")
+    with open(os.path.join(ROOT, "installer", "UniversalDownloader.iss"), encoding="utf-8") as f:
+        script = f.read()
+    assert '#define SourceDir "..\\dist\\UniversalDownloader"' in script
+    assert '#define AppExe "UniversalDownloader.exe"' in script
+    # Setup asks to close the running app by the mutex it holds.
+    assert f"AppMutex=Local\\{version.APP_USER_MODEL_ID}" in script
+    assert "PrivilegesRequired=lowest" in script
+
+
+def test_release_workflow_builds_with_real_tools():
+    with open(os.path.join(ROOT, ".github", "workflows", "release.yml"), encoding="utf-8") as f:
+        workflow = f.read()
+    assert "lfs: true" in workflow
+    assert "build_app.py --onedir --require-deno" in workflow
+    assert "installer\\UniversalDownloader.iss" in workflow

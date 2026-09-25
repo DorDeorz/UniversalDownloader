@@ -18,7 +18,7 @@ messagebox = pytest.importorskip("tkinter.messagebox")
 
 import events  # noqa: E402
 import ui  # noqa: E402
-from ui_helpers import ToolsOnlyManager, pump  # noqa: E402
+from ui_helpers import ToolsOnlyManager, new_app, pump  # noqa: E402
 from results import ItemResult, ItemStatus  # noqa: E402
 
 
@@ -141,7 +141,7 @@ def test_real_window_applies_worker_events_on_main_thread(monkeypatch):
     monkeypatch.setattr(ui.messagebox, "showinfo", lambda *a, **k: shown.append(threading.get_ident()))
     monkeypatch.setattr(ui.messagebox, "showwarning", lambda *a, **k: shown.append("warning"))
     monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
-    app = ui.App()
+    app = new_app()
     pump(app, lambda: app.tools is not None)
     try:
         app.manager = FakeManager()

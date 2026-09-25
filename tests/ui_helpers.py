@@ -1,6 +1,7 @@
 """Helpers for tests that drive a real App window (need Tk and a display)."""
 
 import time
+import tkinter
 
 import media_tools
 import ui
@@ -31,6 +32,22 @@ def make_app(monkeypatch, tools=OK_TOOLS):
     monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager(tools))
     for name in ("showinfo", "showwarning", "showerror"):
         monkeypatch.setattr(ui.messagebox, name, lambda *a, **k: None)
-    app = ui.App()
+    app = new_app()
     pump(app, lambda: app.tools is not None)
     return app
+
+
+def new_app():
+    """ui.App(), retried once if Tk fails to initialise.
+
+    Windows CI runners intermittently fail to read Tk's own library files
+    ("Can't find a usable tk.tcl") when a process creates many Tk roots; a
+    second attempt succeeds. Any other error is raised unchanged.
+    """
+    try:
+        return ui.App()
+    except tkinter.TclError as e:
+        if "usable tk.tcl" not in str(e) and "usable init.tcl" not in str(e):
+            raise
+        time.sleep(0.5)
+        return ui.App()

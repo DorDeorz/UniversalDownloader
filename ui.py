@@ -1,8 +1,9 @@
 import logging
+import sys
+import tkinter
 
 import customtkinter as ctk
 import threading
-import os
 from tkinter import filedialog, messagebox
 import events
 import filenames
@@ -11,6 +12,7 @@ import media_tools
 import playlist
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
+from version import DISPLAY_NAME, __version__
 from utils import default_download_dir, resource_path
 
 _log = logging.getLogger(__name__)
@@ -135,7 +137,7 @@ class PlaylistSelector(ctk.CTkToplevel):
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Universal Video Downloader Pro")
+        self.title(f"{DISPLAY_NAME} {__version__}")
         self.geometry("900x700")
         self.resizable(False, False)
 
@@ -203,12 +205,15 @@ class App(ctk.CTk):
         super().destroy()
 
     def set_icon(self):
-        """İkonu güvenli bir şekilde ayarlar"""
-        if os.path.exists(self.icon_path):
-            try:
+        """Window icon: the .ico on Windows, the PNG elsewhere (Tk reads PNG natively)."""
+        try:
+            if sys.platform == "win32":
                 self.iconbitmap(self.icon_path)
-            except Exception as e:
-                print(f"Icon error: {e}")
+            else:
+                self._icon_image = tkinter.PhotoImage(file=resource_path("app.png"))
+                self.iconphoto(True, self._icon_image)
+        except Exception as e:
+            _log.warning("Could not set window icon: %s", e)
 
     def create_sidebar(self):
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)

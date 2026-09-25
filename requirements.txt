@@ -4,5 +4,17 @@ customtkinter==6.0.0
 darkdetect==0.8.0
 packaging==26.3
 yt-dlp==2026.8.19
-# Needed by yt-dlp to embed cover art into opus and flac files.
+# yt-dlp's recommended extras ("yt-dlp[default]"), at the versions yt-dlp
+# itself pins for this release (its "pin" extra). They add brotli/HTTP
+# features, certifi's CA bundle, websockets, cover-art support (mutagen)
+# and yt-dlp-ejs for YouTube's JavaScript challenges.
+brotli==1.2.0
+certifi==2026.7.22
+charset-normalizer==3.5.0
+idna==3.18
 mutagen==1.48.1
+pycryptodomex==3.23.0
+requests==2.34.2
+urllib3==2.7.0
+websockets==17.0.1
+yt-dlp-ejs==0.8.0

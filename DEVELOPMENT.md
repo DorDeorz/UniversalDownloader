@@ -35,3 +35,10 @@ no display and no FFmpeg. Two groups need more and skip themselves otherwise:
   `PATH`. CI installs FFmpeg on Linux so these always run there. Known bugs that are
 not fixed yet are recorded as `xfail` tests; they are strict, so the fix must
 remove the marker.
+
+## Building
+
+See [docs/building.md](docs/building.md). `python build_app.py` checks the
+inputs (real FFmpeg, real `.ico`, virtual environment) before building from
+the single `UniversalDownloader.spec`, and writes checksums and
+`build-info.json` next to the EXE.

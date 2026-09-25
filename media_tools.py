@@ -102,7 +102,7 @@ def find_tools(run=subprocess.run, which=shutil.which, bundled=None):
         if path_status.ok:
             return path_status
     return ToolStatus(False, error=(
-        f"{bundled_status.error} No working ffmpeg and ffprobe were found on PATH either. "
+        f"{bundled_status.error.rstrip('.')}. No working ffmpeg and ffprobe were found on PATH either. "
         "Downloads need FFmpeg."))
 
 

@@ -44,17 +44,22 @@ def make_app(monkeypatch, tools=OK_TOOLS):
     return app
 
 
-def new_app():
-    """ui.App(), retried once if Tk fails to initialise.
+# Messages Tk gives when it fails to load its own library files.
+_TK_INIT_ERRORS = ("usable tk.tcl", "usable init.tcl", "tcl_findLibrary")
+
+
+def new_app(attempts=3):
+    """ui.App(), retried if Tk fails to initialise.
 
     Windows CI runners intermittently fail to read Tk's own library files
-    ("Can't find a usable tk.tcl") when a process creates many Tk roots; a
-    second attempt succeeds. Any other error is raised unchanged.
+    ("Can't find a usable tk.tcl", 'invalid command name "tcl_findLibrary"')
+    when a process creates many Tk roots; a later attempt succeeds. Any
+    other error is raised unchanged.
     """
-    try:
-        return ui.App()
-    except tkinter.TclError as e:
-        if "usable tk.tcl" not in str(e) and "usable init.tcl" not in str(e):
-            raise
-        time.sleep(0.5)
-        return ui.App()
+    for attempt in range(attempts):
+        try:
+            return ui.App()
+        except tkinter.TclError as e:
+            if attempt == attempts - 1 or not any(m in str(e) for m in _TK_INIT_ERRORS):
+                raise
+            time.sleep(0.5)

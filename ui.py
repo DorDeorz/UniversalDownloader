@@ -3,6 +3,7 @@ import threading
 import os
 import sys
 from tkinter import filedialog, messagebox
+import events
 from logic import DownloadManager
 from utils import resource_path
 
@@ -92,8 +93,37 @@ class App(ctk.CTk):
         self.download_folder = os.path.join(os.path.expanduser("~"), "Downloads", "UniversalVideos")
         self.download_queue = [] 
 
+        # Worker threads never touch widgets; they post events that are
+        # dispatched here on the main thread (see events.py).
+        self.events = events.EventQueue()
+        self.events.register(events.LOG, self._append_log)
+        self.events.register(events.PROGRESS, self._show_progress)
+        self.events.register(events.ANALYSIS_DONE, self._on_analysis_done)
+        self.events.register(events.ANALYSIS_FAILED, self._on_analysis_failed)
+        self.events.register(events.JOB_DONE, self._on_job_done)
+        self._poll_id = None
+
         self.create_sidebar()
         self.create_main_view()
+        self._poll_events()
+
+    POLL_INTERVAL_MS = 50
+
+    def _poll_events(self):
+        """Drain the event queue on the main thread, then reschedule."""
+        try:
+            self.events.dispatch_pending()
+        finally:
+            self._poll_id = self.after(self.POLL_INTERVAL_MS, self._poll_events)
+
+    def destroy(self):
+        if self._poll_id is not None:
+            try:
+                self.after_cancel(self._poll_id)
+            except Exception:
+                pass
+            self._poll_id = None
+        super().destroy()
 
     def set_icon(self):
         """İkonu güvenli bir şekilde ayarlar"""
@@ -154,8 +184,14 @@ class App(ctk.CTk):
         self.log("Welcome!")
 
     def log(self, message):
+        """Queue a console line; safe to call from any thread."""
+        self.events.post(events.LOG, message=message)
+    def _append_log(self, message):
         self.console.insert("end", f"> {message}\n")
         self.console.see("end")
+    def _show_progress(self, fraction, text):
+        self.progress_bar.set(fraction)
+        self.lbl_progress.configure(text=text)
     def toggle_trim(self):
         state = "normal" if self.chk_trim.get() else "disabled"
         self.ent_start.configure(state=state)
@@ -171,26 +207,30 @@ class App(ctk.CTk):
         self.btn_analyze.configure(state="disabled", text="Checking...")
         threading.Thread(target=self.run_analysis, args=(url,)).start()
     def run_analysis(self, url):
+        """Worker thread: fetch info and post the result; no widget access."""
         try:
             self.log("Fetching info...")
             info = self.manager.fetch_info(url)
             if info is None:
-                self.log("ERROR: Info is None.")
-                return
-            if 'error' in info:
-                self.log(f"FAILED: {info['error']}")
-                return
-            if 'entries' in info:
-                self.log(f"Playlist detected.")
-                self.after(0, lambda: PlaylistSelector(self, list(info['entries']), self.set_queue))
+                self.events.post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
+            elif 'error' in info:
+                self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {info['error']}")
             else:
-                title = info.get('title', 'Unknown')
-                self.log(f"Single Video: {title}")
-                self.set_queue([{'url': info.get('original_url', url), 'title': title}])
+                self.events.post(events.ANALYSIS_DONE, info=info, url=url)
         except Exception as e:
-            self.log(f"Error: {e}")
-        finally:
-            self.btn_analyze.configure(state="normal", text="ANALYZE")
+            self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
+    def _on_analysis_failed(self, message):
+        self._append_log(message)
+        self.btn_analyze.configure(state="normal", text="ANALYZE")
+    def _on_analysis_done(self, info, url):
+        self.btn_analyze.configure(state="normal", text="ANALYZE")
+        if 'entries' in info:
+            self._append_log("Playlist detected.")
+            PlaylistSelector(self, list(info['entries']), self.set_queue)
+        else:
+            title = info.get('title', 'Unknown')
+            self._append_log(f"Single Video: {title}")
+            self.set_queue([{'url': info.get('original_url', url), 'title': title}])
     def set_queue(self, items):
         self.download_queue = items
         count = len(items)
@@ -202,29 +242,34 @@ class App(ctk.CTk):
     def start_download_queue(self):
         if not self.download_queue: return
         self.btn_download.configure(state="disabled", text="DOWNLOADING...")
+        self._show_progress(0, "0%")
+        items = list(self.download_queue)
         opts = {
             'save_path': self.download_folder, 'mode': self.cmb_mode.get(),
             'format': self.cmb_format.get(), 'quality': self.cmb_quality.get(),
             'trim_start': self.ent_start.get() if self.chk_trim.get() else None,
             'trim_end': self.ent_end.get() if self.chk_trim.get() else None
         }
-        threading.Thread(target=self.run_queue, args=(opts,)).start()
-    def run_queue(self, opts):
-        total = len(self.download_queue)
-        for i, item in enumerate(self.download_queue):
-            self.log(f"[{i+1}/{total}] {item['title']}")
-            try: self.manager.download_video(item['url'], opts, self.progress_hook, lambda f: None, self.on_error)
-            except Exception as e: self.log(f"Failed: {e}")
-        self.log("FINISHED.")
+        threading.Thread(target=self.run_queue, args=(items, opts)).start()
+    def run_queue(self, items, opts):
+        """Worker thread: download each item and post events; no widget access."""
+        total = len(items)
+        try:
+            for i, item in enumerate(items):
+                self.log(f"[{i+1}/{total}] {item['title']}")
+                try: self.manager.download_video(item['url'], opts, self.progress_hook, lambda f: None, self.on_error)
+                except Exception as e: self.log(f"Failed: {e}")
+        finally:
+            self.events.post(events.JOB_DONE, total=total)
+    def _on_job_done(self, total):
+        self._append_log("FINISHED.")
         self.btn_download.configure(state="disabled", text="FINISHED")
-        self.progress_bar.set(1)
-        self.lbl_progress.configure(text="Complete")
+        self._show_progress(1, "Complete")
         messagebox.showinfo("Done", "Finished!")
     def progress_hook(self, d):
-        if d['status'] == 'downloading':
-            p = d.get('_percent_str', '0%').replace('%','')
-            try:
-                self.progress_bar.set(float(p)/100)
-                self.lbl_progress.configure(text=f"{d.get('_percent_str')}")
-            except: pass
+        """yt-dlp progress hook; runs on the worker thread."""
+        progress = events.progress_from_hook(d)
+        if progress is not None:
+            fraction, text = progress
+            self.events.post(events.PROGRESS, fraction=fraction, text=text)
     def on_error(self, msg): self.log(f"Error: {msg}")

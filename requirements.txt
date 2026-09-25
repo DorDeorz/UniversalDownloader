@@ -18,3 +18,10 @@ requests==2.34.2
 urllib3==2.7.0
 websockets==17.0.1
 yt-dlp-ejs==0.8.0
+# curl_cffi lets yt-dlp send requests that look like a real browser
+# ("impersonation"). TikTok and some other sites refuse or challenge plain
+# Python requests, so without it their downloads fail. Versions from
+# yt-dlp's "pin-curl-cffi" extra.
+curl-cffi==0.16.0
+cffi==2.1.1
+pycparser==3.0

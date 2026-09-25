@@ -17,6 +17,7 @@ linked projects.
 | [certifi](https://github.com/certifi/python-certifi) | CA certificates for HTTPS verification | MPL-2.0 |
 | [brotli](https://github.com/google/brotli) | HTTP compression | MIT |
 | [websockets](https://github.com/python-websockets/websockets) | Live/websocket downloads | BSD-3-Clause |
+| [curl_cffi](https://github.com/lexiforest/curl_cffi) with [curl-impersonate](https://github.com/lexiforest/curl-impersonate), [cffi](https://github.com/python-cffi/cffi), [pycparser](https://github.com/eliben/pycparser) | Browser-like requests (needed for TikTok) | MIT / MIT (bundles curl and BoringSSL under their own licenses) / MIT-0 / BSD-3-Clause |
 | [pycryptodomex](https://github.com/Legrandin/pycryptodome) | Decrypting some streams | BSD-2-Clause / Public Domain |
 | [Python](https://www.python.org/) (embedded by PyInstaller) | Runtime | PSF License |
 

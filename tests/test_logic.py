@@ -1,30 +1,11 @@
 import os
 
-import pytest
 
 import yt_dlp
 
 import logic
 from logic import DownloadManager
 from results import ItemStatus
-
-
-# --- platform detection -------------------------------------------------
-
-@pytest.mark.parametrize(
-    "url, expected",
-    [
-        ("https://www.youtube.com/watch?v=abc", "YouTube"),
-        ("https://youtu.be/abc", "YouTube"),
-        ("https://www.tiktok.com/@u/video/1", "TikTok"),
-        ("https://www.instagram.com/p/abc/", "Instagram"),
-        ("https://twitter.com/u/status/1", "X_Twitter"),
-        ("https://x.com/u/status/1", "X_Twitter"),
-        ("https://vimeo.com/123", "Other"),
-    ],
-)
-def test_get_platform_name(manager, url, expected):
-    assert manager.get_platform_name(url) == expected
 
 
 # --- fetch_info ---------------------------------------------------------
@@ -57,22 +38,25 @@ def _download(manager, options, url="https://youtu.be/abc"):
 
 
 def test_download_writes_into_platform_subfolder(manager, fake_ydl, tmp_path):
+    fake_ydl.info = {"id": "abc", "title": "clip", "ext": "mp4", "extractor_key": "Youtube"}
     _download(manager, {"save_path": str(tmp_path)})
 
     opts = fake_ydl.instances[-1].opts
-    assert opts["outtmpl"] == os.path.join(str(tmp_path), "YouTube", "%(title)s.%(ext)s")
+    assert opts["outtmpl"] == os.path.join(str(tmp_path), "YouTube", "clip") + ".%(ext)s"
     assert opts["ffmpeg_location"] == manager.ffmpeg_path
+    assert opts["windowsfilenames"] is True
+    assert opts["overwrites"] is False
 
 
 def test_successful_download_is_completed_with_real_path(manager, fake_ydl, tmp_path):
     result = _download(manager, {"save_path": str(tmp_path)})
 
-    probe, download = fake_ydl.instances
+    probe, download = fake_ydl.instances[0], fake_ydl.instances[-1]
     assert probe.extract_calls == [("https://youtu.be/abc", False)]
     assert probe.process_calls == []
     assert len(download.process_calls) == 1
     assert result.status is ItemStatus.COMPLETED
-    assert result.path == os.path.join(str(tmp_path), "YouTube", "clip.mp4")
+    assert result.path == os.path.join(str(tmp_path), "Other", "clip.mp4")
     assert result.title == "clip"
     assert result.error is None
 

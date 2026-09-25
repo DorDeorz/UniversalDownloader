@@ -5,11 +5,12 @@ import threading
 import os
 from tkinter import filedialog, messagebox
 import events
+import filenames
 import formats
 import playlist
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
-from utils import resource_path
+from utils import default_download_dir, resource_path
 
 _log = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ class App(ctk.CTk):
         # --------------------------------------
 
         self.manager = DownloadManager()
-        self.download_folder = os.path.join(os.path.expanduser("~"), "Downloads", "UniversalVideos")
+        self.download_folder = default_download_dir()
         self.download_queue = []
         self.analyzed_url = None
         # Only one job (analysis or download) runs at a time; see _start_job.
@@ -485,6 +486,13 @@ class App(ctk.CTk):
                 self.log(f"Trim error: {e}")
                 messagebox.showerror("Invalid trim range", str(e))
                 return
+        error, warning = filenames.check_folder(self.download_folder)
+        if error:
+            self._append_log(error)
+            messagebox.showerror("Download folder", error, parent=self)
+            return
+        if warning:
+            self._append_log(f"Warning: {warning}")
         self._show_progress(0, "0%")
         items = list(self.download_queue) + list(self.skipped_items)
         opts = {
@@ -513,9 +521,10 @@ class App(ctk.CTk):
                     self.events.post(events.ITEM_DONE, result=result)
                     continue
                 self.log(f"[{i+1}/{total}] {item['title']}")
+                item_opts = dict(opts, playlist_index=item.get('index'), playlist_title=item.get('playlist'))
                 try:
                     result = self.manager.download_video(
-                        item['url'], opts, self.progress_hook, log_callback=self.log, title=item['title'],
+                        item['url'], item_opts, self.progress_hook, log_callback=self.log, title=item['title'],
                         cancel_event=cancel_event)
                 except Exception as e:
                     result = ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)

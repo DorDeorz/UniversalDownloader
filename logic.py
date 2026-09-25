@@ -4,6 +4,7 @@ import re
 import yt_dlp
 from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 
+import filenames
 import formats
 from results import ItemResult, ItemStatus, verify_output
 from utils import get_ffmpeg_path, get_ffprobe_path
@@ -181,18 +182,6 @@ class DownloadManager:
         self.ffmpeg_path = get_ffmpeg_path()
         self.ffprobe_path = get_ffprobe_path()
 
-    def get_platform_name(self, url):
-        if "youtube" in url or "youtu.be" in url:
-            return "YouTube"
-        elif "tiktok" in url:
-            return "TikTok"
-        elif "instagram" in url:
-            return "Instagram"
-        elif "twitter" in url or "x.com" in url:
-            return "X_Twitter"
-        else:
-            return "Other"
-
     def fetch_info(self, url, log_callback=None):
         """ 
         Playlist veya video bilgisini çeker.
@@ -273,15 +262,17 @@ class DownloadManager:
         except (formats.FormatError, TrimError) as e:
             return failed(str(e))
 
-        platform = self.get_platform_name(url)
         base_folder = options.get('save_path', os.getcwd())
-        output_template = os.path.join(base_folder, platform, '%(title)s.%(ext)s')
 
         # A failed download must raise, so it becomes a failed result
         # instead of being reported as finished (no 'ignoreerrors').
         ydl_opts = base_ydl_options(log_callback)
         ydl_opts.update({
-            'outtmpl': output_template,
+            # Collision-safe names are only known after the metadata pass;
+            # this placeholder is never written to.
+            'outtmpl': os.path.join(filenames.escape_template(base_folder), '%(title)s.%(ext)s'),
+            'windowsfilenames': True,
+            'overwrites': False,
             'ffmpeg_location': self.ffmpeg_path,
             'progress_hooks': [on_progress],
             # Postprocessing (merge, conversion) can take a while too.
@@ -306,6 +297,15 @@ class DownloadManager:
 
             check_cancel()
             # Phase 2: download with options that depend on the selection.
+            folder = filenames.output_folder(base_folder, info, options.get('playlist_title'))
+            os.makedirs(folder, exist_ok=True)
+            ydl_opts['outtmpl'] = filenames.output_template(folder, options.get('playlist_index'))
+            with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
+                prepared = ydl.prepare_filename(info)
+            base = filenames.unique_base(prepared, plan.ext)
+            if base != os.path.splitext(prepared)[0] and log_callback:
+                log_callback(f"File exists; saving as {os.path.basename(base)}.{plan.ext}")
+            ydl_opts['outtmpl'] = filenames.escape_template(base) + '.%(ext)s'
             ydl_opts['postprocessors'] = formats.postprocessors_for(plan, info)
             if trim_requested:
                 trim_range = parse_trim_range(

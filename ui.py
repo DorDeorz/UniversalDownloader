@@ -54,6 +54,77 @@ def card(parent, **kw):
     return ctk.CTkFrame(parent, fg_color=CARD, corner_radius=12, border_width=1, border_color=CARD_BORDER, **kw)
 
 
+# Room for the title bar and frame, which geometry() sizes do not include.
+WINDOW_FRAME_PX = 48
+
+
+def work_area(window):
+    """(left, top, right, bottom) of the usable screen in pixels.
+
+    On Windows this is the monitor minus the taskbar; elsewhere the screen
+    minus room for a panel.
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            rect = wintypes.RECT()
+            if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):  # SPI_GETWORKAREA
+                return rect.left, rect.top, rect.right, rect.bottom
+        except (AttributeError, OSError):
+            pass
+    return 0, 0, window.winfo_screenwidth(), window.winfo_screenheight() - 48
+
+
+def place_on_screen(window, width_px, height_px, min_px=None):
+    """Size ``window`` to ``width_px`` x ``height_px`` pixels, capped to the work
+    area, and move it so the whole window, title bar included, is visible.
+
+    ``min_px`` (width, height) becomes the window's minimum size, also capped.
+    Returns the size used, in pixels.
+    """
+    left, top, right, bottom = work_area(window)
+    avail_w, avail_h = right - left, bottom - top - WINDOW_FRAME_PX
+    width, height = min(width_px, avail_w), min(height_px, avail_h)
+    scale = window._get_window_scaling()
+    if min_px is not None:
+        window.minsize(int(min(min_px[0], avail_w) / scale), int(min(min_px[1], avail_h) / scale))
+    size = f"{round(width / scale)}x{round(height / scale)}"
+    # winfo_x/y is the window's outer corner, title bar included.
+    x, y = window.winfo_x(), window.winfo_y()
+    new_x = min(max(x, left), max(left, right - width))
+    new_y = min(max(y, top), max(top, bottom - WINDOW_FRAME_PX - height))
+    window.geometry(size if (new_x, new_y) == (x, y) else f"{size}+{new_x}+{new_y}")
+    return width, height
+
+
+def fit_dialog(dialog, size, min_size):
+    """Size a dialog for the current text size (``size`` is at Normal),
+    over its parent and within the screen."""
+    try:
+        ws = ctk.ScalingTracker.get_widget_scaling(dialog)
+        scale = dialog._get_window_scaling()
+        parent = dialog.master
+        dialog.geometry(f"+{parent.winfo_rootx() + 60}+{parent.winfo_rooty() + 40}")
+        dialog.update_idletasks()
+        width, height = (round(v * ws * scale) for v in size)
+        place_on_screen(dialog, width, height, min_px=tuple(round(v * ws * scale) for v in min_size))
+    except tkinter.TclError:
+        pass  # closed already
+
+
+def set_window_icon(window):
+    """The app icon: the .ico on Windows, the PNG elsewhere (Tk reads PNG natively)."""
+    try:
+        if sys.platform == "win32":
+            window.iconbitmap(resource_path("app.ico"))
+        else:
+            window._icon_image = tkinter.PhotoImage(file=resource_path("app.png"))
+            window.iconphoto(False, window._icon_image)
+    except Exception as e:
+        _log.warning("Could not set window icon: %s", e)
+
+
 def shorten_path(path, limit=64):
     """``path`` cut in the middle to at most ``limit`` characters."""
     if len(path) <= limit:
@@ -119,8 +190,10 @@ class PlaylistSelector(ctk.CTkToplevel):
     def __init__(self, parent, analysis, callback):
         super().__init__(parent, fg_color=BG)
         self.title("Select Videos")
-        self.geometry("640x540")
-        self.minsize(420, 360)
+        # CustomTkinter puts its own icon on new windows shortly after
+        # they open, so the app icon is set now and again after that.
+        set_window_icon(self)
+        self.after(250, set_window_icon, self)
         # Modal: stays above the main window and blocks it until closed.
         self.transient(parent)
         self.protocol("WM_DELETE_WINDOW", self.cancel)
@@ -165,6 +238,7 @@ class PlaylistSelector(ctk.CTkToplevel):
         self.btn_confirm.pack(side="right", fill="x", expand=True)
 
         self._add_rows(0)
+        fit_dialog(self, (640, 540), (420, 360))
         self.after(100, self._grab)
 
     def _grab(self):
@@ -241,9 +315,11 @@ class SettingsDialog(ctk.CTkToplevel):
     def __init__(self, parent, settings, tools, on_change):
         super().__init__(parent, fg_color=BG)
         self.title("Settings")
-        self.geometry("560x640")
-        self.minsize(480, 520)
         self.transient(parent)
+        # CustomTkinter puts its own icon on new windows shortly after
+        # they open, so the app icon is set now and again after that.
+        set_window_icon(self)
+        self.after(250, set_window_icon, self)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.bind("<Escape>", lambda _e: self.close())
         self.on_change = on_change
@@ -296,7 +372,11 @@ class SettingsDialog(ctk.CTkToplevel):
         footer.grid(row=2, column=0, sticky="ew", padx=24, pady=16)
         self.btn_done = primary_button(footer, "Done", self.close, width=120, height=40)
         self.btn_done.pack(side="right")
+        self.fit()
         self.after(100, self._grab)
+
+    def fit(self):
+        fit_dialog(self, (560, 660), (480, 420))
 
     def _section(self, parent, row, title):
         frame = card(parent)
@@ -428,15 +508,7 @@ class App(ctk.CTk):
         super().destroy()
 
     def set_icon(self):
-        """Window icon: the .ico on Windows, the PNG elsewhere (Tk reads PNG natively)."""
-        try:
-            if sys.platform == "win32":
-                self.iconbitmap(self.icon_path)
-            else:
-                self._icon_image = tkinter.PhotoImage(file=resource_path("app.png"))
-                self.iconphoto(True, self._icon_image)
-        except Exception as e:
-            _log.warning("Could not set window icon: %s", e)
+        set_window_icon(self)
 
     # --- layout -----------------------------------------------------------
 
@@ -476,10 +548,14 @@ class App(ctk.CTk):
         return section_label(parent, text)
 
     def create_main_view(self):
-        self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.main_frame.grid(row=1, column=0, sticky="nsew", padx=32, pady=(20, 24))
+        # Scrolls only when the window cannot be tall enough for its content
+        # (large text on a small screen); otherwise the activity box takes
+        # the spare height (see _fill_height).
+        self.main_frame = ctk.CTkScrollableFrame(self, corner_radius=0, fg_color="transparent",
+                                                 scrollbar_button_color=BG, scrollbar_button_hover_color=BG)
+        self.main_frame.grid(row=1, column=0, sticky="nsew", padx=(32, 12), pady=(20, 16))
         self.main_frame.grid_columnconfigure(0, weight=1)
-        self.main_frame.grid_rowconfigure(5, weight=1)
+        self._scroll_canvas = self.main_frame._parent_canvas
 
         # The top bar names the app, so the link card comes first.
 
@@ -584,7 +660,7 @@ class App(ctk.CTk):
         self.lbl_detail.grid(row=2, column=1, sticky="e", padx=16, pady=(4, 12))
 
         # Activity log
-        log_card = card(self.main_frame)
+        log_card = self.log_card = card(self.main_frame)
         log_card.grid(row=5, column=0, sticky="nsew")
         log_card.grid_columnconfigure(0, weight=1)
         log_card.grid_rowconfigure(1, weight=1)
@@ -592,6 +668,10 @@ class App(ctk.CTk):
         self.console = ctk.CTkTextbox(log_card, height=100, font=ctk.CTkFont(family="Consolas", size=12),
                                       fg_color="transparent", text_color=TEXT, wrap="word")
         self.console.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        # Keep a gap between the cards and the (usually hidden) scrollbar.
+        for card_widget in self.main_frame.grid_slaves():
+            card_widget.grid_configure(padx=(0, 16))
+        self._scroll_canvas.bind("<Configure>", lambda _e: self.after_idle(self._fill_height), add="+")
         self.log("Welcome! Paste a link and press Analyze.")
 
     # --- small UI helpers ---------------------------------------------------
@@ -633,25 +713,52 @@ class App(ctk.CTk):
         if name == "text_size":
             ctk.set_widget_scaling(settings_store.TEXT_SIZES[value])
             self.after(50, self._fit_to_content)
+            if self.settings_dialog is not None and self.settings_dialog.winfo_exists():
+                self.settings_dialog.after(60, self.settings_dialog.fit)
         self._save_settings()
+    LOG_HEIGHT = 100  # activity box height the window is sized for
+    LOG_MIN_HEIGHT = 60
+
     def _fit_to_content(self):
-        """Grow the window (up to the screen size) so bigger text still fits."""
+        """Fit the window to its content within the screen's work area.
+
+        Larger text sizes need more room: the window grows up to the work
+        area, so the taskbar stays visible. If that is still not enough the
+        content scrolls instead of being cut off.
+        """
         try:
+            self.console.configure(height=self.LOG_HEIGHT)
             self.update_idletasks()
-            max_w, max_h = self.winfo_screenwidth() - 40, self.winfo_screenheight() - 80
-            # Tk reports these in pixels; geometry() and minsize() take
-            # CustomTkinter's scaled units.
+            content = self.main_frame.winfo_reqheight()
+            chrome = self.winfo_reqheight() - self._scroll_canvas.winfo_reqheight()
+            need = (self.winfo_reqwidth(), chrome + content)
             scale = self._get_window_scaling()
-            need_w = min(self.winfo_reqwidth(), max_w) / scale
-            need_h = min(self.winfo_reqheight(), max_h) / scale
-            width = max(self.winfo_width() / scale, need_w)
-            height = max(self.winfo_height() / scale, need_h)
-            self.minsize(int(max(self.MIN_SIZE[0], min(need_w, self.MIN_SIZE[0] * 1.3))),
-                         int(max(self.MIN_SIZE[1], need_h)))
-            if width > self.winfo_width() / scale or height > self.winfo_height() / scale:
-                self.geometry(f"{int(width)}x{int(height)}")
+            base_min = (self.MIN_SIZE[0] * scale, self.MIN_SIZE[1] * scale)
+            width = max(self.winfo_width(), need[0])
+            height = max(self.winfo_height(), need[1])
+            # The content scrolls when the window is made smaller than it.
+            place_on_screen(self, width, height, min_px=base_min)
+            self.after_idle(self._fill_height)
         except tkinter.TclError:
             pass  # window already closed
+
+    def _fill_height(self):
+        """Give the activity box the spare height, or show the scrollbar."""
+        try:
+            ws = ctk.ScalingTracker.get_widget_scaling(self)
+            available = self._scroll_canvas.winfo_height()
+            others = self.main_frame.winfo_reqheight() - self.console.winfo_reqheight()
+            log_px = max(self.LOG_MIN_HEIGHT * ws, available - others)
+            height = round(log_px / ws)
+            if abs(height - self.console.cget("height")) > 1:
+                self.console.configure(height=height)
+            scrolls = others + log_px > available + 1
+            colour, hover = (SECONDARY, SECONDARY_HOVER) if scrolls else (BG, BG)
+            self.main_frame.configure(scrollbar_button_color=colour, scrollbar_button_hover_color=hover)
+            self.content_scrolls = scrolls
+        except tkinter.TclError:
+            pass
+
     def open_settings(self):
         if self.settings_dialog is not None and self.settings_dialog.winfo_exists():
             self.settings_dialog.focus_force()

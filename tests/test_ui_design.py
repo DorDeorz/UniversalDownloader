@@ -240,3 +240,103 @@ def test_text_colours_meet_wcag_aa(fg, bgs):
     for bg in bgs:
         for mode in (0, 1):  # light, dark
             assert _contrast(fg[mode], bg[mode]) >= 4.5, (fg[mode], bg[mode])
+
+
+@pytest.fixture
+def larger_text():
+    ctk.set_widget_scaling(1.3)
+    yield
+    ctk.set_widget_scaling(1.0)
+
+
+def _outer_bottom(window):
+    return window.winfo_y() + ui.WINDOW_FRAME_PX + window.winfo_height()
+
+
+@needs_display
+@pytest.mark.parametrize("area_height", [1040, 728])  # 1080p and 768p screens minus a taskbar
+def test_larger_text_stays_above_the_taskbar(monkeypatch, larger_text, area_height):
+    monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, 1920, area_height))
+    window = make_app(monkeypatch)
+    try:
+        window.geometry("+0+300")  # start low, as a restored window might
+        window._fit_to_content()
+        pump(window, timeout=0.5)
+        assert _outer_bottom(window) <= area_height
+        # Everything is reachable: it fits, or the content scrolls.
+        content = window.main_frame.winfo_reqheight()
+        fits = content <= window._scroll_canvas.winfo_height() + 1
+        assert fits != window.content_scrolls
+        assert window.content_scrolls is (area_height < 1000)
+    finally:
+        window.destroy()
+
+
+@needs_display
+def test_activity_box_takes_spare_height(app):
+    app.geometry("1040x1000")
+    pump(app, timeout=0.5)
+    tall = app.console.cget("height")
+    assert tall > app.LOG_HEIGHT
+    assert not app.content_scrolls
+    app.geometry("1040x640")
+    pump(app, timeout=0.5)
+    assert app.console.cget("height") == app.LOG_MIN_HEIGHT
+
+
+@needs_display
+def test_settings_dialog_grows_with_text_size_and_fits_the_screen(app, monkeypatch, larger_text):
+    monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, 1920, 1040))
+    app.open_settings()
+    dialog = app.settings_dialog
+    pump(app, timeout=0.3)
+    scale = dialog._get_window_scaling()
+    assert dialog.winfo_width() >= round(560 * 1.3 * scale) - 2
+    assert _outer_bottom(dialog) <= 1040
+
+
+@needs_display
+def test_dialogs_get_the_app_icon(app, monkeypatch):
+    windows = []
+    monkeypatch.setattr(ui, "set_window_icon", windows.append)
+    app.open_settings()
+    info = {"title": "Mix", "entries": [{"id": "a", "title": "A", "ie_key": "Youtube"}]}
+    selector = ui.PlaylistSelector(app, playlist.analyze(info, "https://youtube.com/playlist?list=x"),
+                                   lambda items: None)
+    pump(app, timeout=0.5)  # also after CustomTkinter sets its own icon
+    assert windows.count(app.settings_dialog) == 2
+    assert windows.count(selector) == 2
+    selector.cancel()
+
+
+def test_place_on_screen_caps_size_and_keeps_window_visible():
+    class Window:
+        def __init__(self):
+            self.calls = {}
+
+        def _get_window_scaling(self):
+            return 1.25
+
+        def winfo_x(self):
+            return 100
+
+        def winfo_y(self):
+            return 500
+
+        def minsize(self, w, h):
+            self.calls["minsize"] = (w, h)
+
+        def geometry(self, spec):
+            self.calls["geometry"] = spec
+
+    window = Window()
+    original = ui.work_area
+    ui.work_area = lambda w: (0, 0, 1920, 1040)
+    try:
+        used = ui.place_on_screen(window, 1300, 1300, min_px=(1125, 1200))
+    finally:
+        ui.work_area = original
+    assert used == (1300, 1040 - ui.WINDOW_FRAME_PX)
+    # Sizes are in CustomTkinter units (pixels / 1.25); the position moves up.
+    assert window.calls["geometry"] == f"1040x{round(992 / 1.25)}+100+0"
+    assert window.calls["minsize"] == (900, int(992 / 1.25))

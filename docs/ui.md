@@ -21,8 +21,13 @@ Dark and System themes need no extra code.
   (all done), amber (some failed) or red (none done).
 - **Activity**: the log of what happened.
 
-The window can be resized. It grows to fit its content (up to the screen
-size), so larger text sizes never cut off the bottom.
+The window can be resized. It grows to fit its content, but never past the
+screen's work area (on Windows, the screen minus the taskbar), and moves up
+if its bottom edge would go under the taskbar. Spare height goes to the
+activity box; when the window cannot be tall enough (large text on a small
+screen, or the user made it smaller) the content scrolls instead of being
+cut off. The Settings and playlist dialogs also grow with the text size,
+stay within the work area and use the app icon.
 
 ## Settings
 

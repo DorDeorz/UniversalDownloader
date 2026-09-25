@@ -86,6 +86,11 @@ TEXTS = {
         "common.close": "Close",
         "common.remove": "Remove",
         "common.reset": "Reset",
+        "crash.title": "Something went wrong last time",
+        "crash.body": "The app closed unexpectedly. Copying this report and sending it to the developer helps fix it.",
+        "crash.copy": "Copy report",
+        "crash.copied": "Report copied",
+        "crash.error": "Something went wrong: {error}",
     },
     "tr": {
         "nav.home": "İndir",
@@ -165,6 +170,11 @@ TEXTS = {
         "common.close": "Kapat",
         "common.remove": "Kaldır",
         "common.reset": "Sıfırla",
+        "crash.title": "Geçen sefer bir sorun oldu",
+        "crash.body": "Uygulama beklenmedik şekilde kapandı. Bu raporu kopyalayıp geliştiriciye göndermeniz düzeltmeye yardımcı olur.",
+        "crash.copy": "Raporu kopyala",
+        "crash.copied": "Rapor kopyalandı",
+        "crash.error": "Bir sorun oldu: {error}",
     },
 }
 

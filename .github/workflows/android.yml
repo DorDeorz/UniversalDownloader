@@ -163,7 +163,9 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash android/emulator_test.sh apk/*.apk http://10.0.2.2:8000/sample.mp4
+          script: |
+            bash android/emulator_ui_test.sh apk/*.apk
+            bash android/emulator_test.sh apk/*.apk http://10.0.2.2:8000/sample.mp4
 
   publish:
     name: Publish pre-release

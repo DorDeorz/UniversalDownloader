@@ -483,3 +483,44 @@ def test_forward_native_stderr_catches_child_programs(tmp_path):
         "print(seen)\n")
     out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30)
     assert out.stdout.strip() == "['boom']"
+
+
+# --- crash_report -----------------------------------------------------------------
+
+def test_crash_report_is_empty_after_a_clean_run(tmp_path):
+    import crash_report
+    assert crash_report.CrashReport(str(tmp_path)).take_previous() == ""
+
+
+def test_crash_report_keeps_python_errors_until_the_next_start(tmp_path):
+    import crash_report
+    report = crash_report.CrashReport(str(tmp_path / "data"))
+    try:
+        {}["missing"]
+    except KeyError as e:
+        text = report.record(e, where="main loop")
+    assert "KeyError: 'missing'" in text and "main loop" in text
+    again = crash_report.CrashReport(str(tmp_path / "data"))
+    previous = again.take_previous()
+    assert "KeyError: 'missing'" in previous
+    assert again.take_previous() == ""  # shown once
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Android is POSIX")
+def test_crash_report_catches_a_native_crash(tmp_path):
+    # In a separate process, because the process has to die.
+    import subprocess
+    script = tmp_path / "probe.py"
+    script.write_text(
+        "import ctypes, sys\n"
+        f"sys.path.insert(0, {os.path.join(ROOT, 'android', 'app')!r})\n"
+        "import crash_report\n"
+        f"crash_report.CrashReport({str(tmp_path)!r}).watch_native()\n"
+        "def deep_in_a_library():\n"
+        "    ctypes.string_at(0)\n"
+        "deep_in_a_library()\n")
+    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30)
+    assert out.returncode != 0
+    import crash_report
+    previous = crash_report.CrashReport(str(tmp_path)).take_previous()
+    assert "Segmentation fault" in previous and "deep_in_a_library" in previous

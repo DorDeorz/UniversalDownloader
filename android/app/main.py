@@ -16,6 +16,7 @@ import threading
 import time
 from collections import deque
 
+from kivy.base import ExceptionHandler, ExceptionManager
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.lang import Builder
@@ -38,6 +39,7 @@ from kivymd.uix.snackbar import MDSnackbar, MDSnackbarText
 
 import android_env
 import app_settings
+import crash_report
 import events
 import filenames
 import history
@@ -64,6 +66,21 @@ MIME = {"mp4": "video/mp4", "mkv": "video/x-matroska", "webm": "video/webm", "mp
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 _log = logging.getLogger("universaldownloader")
+
+
+class _KeepRunning(ExceptionHandler):
+    """Hands main-loop errors to the app, which records them and carries on."""
+
+    def __init__(self, app):
+        super().__init__()
+        self.app = app
+
+    def handle_exception(self, inst):
+        try:
+            keep = self.app.on_error(inst)
+        except Exception:
+            keep = False
+        return ExceptionManager.PASS if keep else ExceptionManager.RAISE
 
 
 def selftest(message):
@@ -193,6 +210,16 @@ class UniversalDownloaderApp(MDApp):
     # --- Build --------------------------------------------------------------------
 
     def build(self):
+        self.crash = crash_report.CrashReport(self.user_data_dir)
+        self._previous_crash = self.crash.take_previous()
+        if self._previous_crash:
+            print(f"UDCRASH previous run:\n{self._previous_crash}", flush=True)
+        try:
+            self.crash.watch_native()
+        except OSError as e:
+            _log.warning("Cannot watch for crashes: %s", e)
+        ExceptionManager.add_handler(_KeepRunning(self))
+        self._errors = deque(maxlen=20)
         Window.softinput_mode = "below_target"
         self.settings_path = os.path.join(self.user_data_dir, "settings.json")
         self.settings = app_settings.load(self.settings_path)
@@ -271,6 +298,38 @@ class UniversalDownloaderApp(MDApp):
         if not self.pending_link and not self._selftest and self.settings.auto_paste:
             Clock.schedule_once(lambda *_: self.paste(quiet=True), 0.5)
         threading.Thread(target=self._check_tools, daemon=True).start()
+        if self._previous_crash:
+            Clock.schedule_once(lambda *_: self.show_crash(self._previous_crash), 1)
+
+    def on_error(self, error):
+        """A Python error reached Kivy's main loop: record it and keep the app open.
+
+        Returns False when errors come so fast that carrying on is pointless.
+        """
+        now = time.monotonic()
+        self._errors.append(now)
+        text = self.crash.record(error, where="main loop")
+        print(f"UDCRASH {text}", flush=True)
+        if len(self._errors) == self._errors.maxlen and now - self._errors[0] < 2:
+            return False
+        try:
+            self.snack(self.t("crash.error", error=f"{type(error).__name__}: {error}"[:160]))
+        except Exception:
+            pass
+        return True
+
+    def show_crash(self, text):
+        from kivy.core.clipboard import Clipboard
+
+        def copy():
+            Clipboard.copy(text)
+            self.snack(self.t("crash.copied"))
+
+        label = MDLabel(text=text, adaptive_height=True, font_style="Body", role="small")
+        scroll = MDScrollView(label, size_hint_y=None, height=min(dp(360), Window.height * 0.5),
+                              do_scroll_x=False)
+        self._dialog(self.t("crash.title"), self.t("crash.body"), content=scroll,
+                     buttons=[(self.t("common.close"), None), (self.t("crash.copy"), copy)])
 
     def _fit_system_bars(self, *_):
         try:

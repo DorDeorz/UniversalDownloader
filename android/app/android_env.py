@@ -64,8 +64,9 @@ def library_path_env(native_dir, environ):
     native library folder; programs started from the app only search
     there when ``LD_LIBRARY_PATH`` says so.
     """
-    paths = [p for p in environ.get("LD_LIBRARY_PATH", "").split(os.pathsep) if p and p != native_dir]
-    environ["LD_LIBRARY_PATH"] = os.pathsep.join([native_dir, *paths])
+    # Android's separator, also when the tests run on Windows.
+    paths = [p for p in environ.get("LD_LIBRARY_PATH", "").split(":") if p and p != native_dir]
+    environ["LD_LIBRARY_PATH"] = ":".join([native_dir, *paths])
 
 
 def certificate_env(ca_file, environ):

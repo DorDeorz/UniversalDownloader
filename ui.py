@@ -3,6 +3,7 @@ import threading
 import os
 from tkinter import filedialog, messagebox
 import events
+import formats
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
 from utils import resource_path
@@ -162,15 +163,16 @@ class App(ctk.CTk):
 
         self.opt_frame = ctk.CTkFrame(self.main_frame)
         self.opt_frame.pack(fill="x", pady=10)
-        self.cmb_mode = ctk.CTkComboBox(self.opt_frame, values=["Video + Audio", "Audio Only", "Video Only"])
-        self.cmb_mode.set("Video + Audio")
+        # Read-only boxes: only the choices each mode supports can be picked.
+        self.cmb_mode = ctk.CTkComboBox(self.opt_frame, values=list(formats.MODES), state="readonly",
+                                        command=self._on_mode_changed)
         self.cmb_mode.grid(row=0, column=0, padx=10, pady=10)
-        self.cmb_format = ctk.CTkComboBox(self.opt_frame, values=["mp4", "mkv", "avi", "mp3", "wav", "aac"])
-        self.cmb_format.set("mp4")
+        self.cmb_format = ctk.CTkComboBox(self.opt_frame, values=[], state="readonly")
         self.cmb_format.grid(row=0, column=1, padx=10, pady=10)
-        self.cmb_quality = ctk.CTkComboBox(self.opt_frame, values=["Best", "4K", "1080p", "720p"])
-        self.cmb_quality.set("Best")
+        self.cmb_quality = ctk.CTkComboBox(self.opt_frame, values=[], state="readonly")
         self.cmb_quality.grid(row=0, column=2, padx=10, pady=10)
+        self.cmb_mode.set(formats.VIDEO_AUDIO)
+        self._on_mode_changed(formats.VIDEO_AUDIO)
         
         self.chk_trim = ctk.CTkCheckBox(self.opt_frame, text="Trim", command=self.toggle_trim)
         self.chk_trim.grid(row=1, column=0, padx=10, pady=10)
@@ -199,6 +201,16 @@ class App(ctk.CTk):
     def _show_progress(self, fraction, text):
         self.progress_bar.set(fraction)
         self.lbl_progress.configure(text=text)
+    def _on_mode_changed(self, mode):
+        """Offer only the formats and qualities that are valid for ``mode``."""
+        choices = formats.formats_for_mode(mode)
+        self.cmb_format.configure(values=choices)
+        if self.cmb_format.get() not in choices:
+            self.cmb_format.set(choices[0])
+        qualities = formats.qualities_for_mode(mode)
+        self.cmb_quality.configure(values=qualities)
+        if self.cmb_quality.get() not in qualities:
+            self.cmb_quality.set(qualities[0])
     def toggle_trim(self):
         state = "normal" if self.chk_trim.get() else "disabled"
         self.ent_start.configure(state=state)
@@ -233,9 +245,10 @@ class App(ctk.CTk):
 
     def _set_controls_busy(self, busy):
         state = "disabled" if busy else "normal"
-        for widget in (self.url_entry, self.btn_analyze, self.btn_dest, self.cmb_mode,
-                       self.cmb_format, self.cmb_quality, self.chk_trim):
+        for widget in (self.url_entry, self.btn_analyze, self.btn_dest, self.chk_trim):
             widget.configure(state=state)
+        for combo in (self.cmb_mode, self.cmb_format, self.cmb_quality):
+            combo.configure(state="disabled" if busy else "readonly")
         trim_state = "normal" if (not busy and self.chk_trim.get()) else "disabled"
         self.ent_start.configure(state=trim_state)
         self.ent_end.configure(state=trim_state)

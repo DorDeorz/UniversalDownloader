@@ -7,6 +7,7 @@ yt_dlp.YoutubeDL is replaced with a fake, so no network is used.
 import pytest
 import yt_dlp
 
+import formats
 import logic
 from results import ItemStatus
 
@@ -32,9 +33,12 @@ def test_download_keeps_certificate_verification_and_does_not_silence(fake_ydl, 
 
 
 @pytest.mark.parametrize("mode", ["Video + Audio", "Audio Only", "Video Only"])
-def test_every_mode_keeps_verification(fake_ydl, manager, mode):
-    run_download(manager, {"save_path": "/out", "mode": mode, "format": "mp3"})
-    assert "nocheckcertificate" not in fake_ydl.instances[-1].opts
+def test_every_mode_keeps_verification(fake_ydl, manager, mode, tmp_path):
+    fmt = formats.formats_for_mode(mode)[0]
+    run_download(manager, {"save_path": str(tmp_path), "mode": mode, "format": fmt})
+    assert fake_ydl.instances
+    for ydl in fake_ydl.instances:
+        assert "nocheckcertificate" not in ydl.opts
 
 
 def test_fetch_info_keeps_certificate_verification(fake_ydl, manager):
@@ -78,7 +82,7 @@ def test_warnings_reach_log_callback(fake_ydl, manager):
     fake_ydl.warning = "Requested format is not available"
     lines = []
     run_download(manager, log=lines.append)
-    assert lines == ["Warning: Requested format is not available"]
+    assert lines[0] == "Warning: Requested format is not available"
 
 
 def test_fetch_info_error_keeps_type(fake_ydl, manager):

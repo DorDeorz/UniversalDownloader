@@ -2,6 +2,9 @@ import logging
 import os
 import re
 import yt_dlp
+from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
+
+import formats
 from results import ItemResult, ItemStatus, verify_output
 from utils import get_ffmpeg_path, get_ffprobe_path
 
@@ -176,8 +179,26 @@ class DownloadManager:
         errors all become a ``failed`` result with a readable message, and a
         result is only ``completed`` when the output file exists and is not
         empty.
+
+        Works in two phases. A metadata pass selects the formats (and gives
+        the title and duration); the download pass then runs with options
+        that depend on that selection: the trim range, and whether the
+        container can be reached by remuxing or needs re-encoding.
         """
         title = title or url
+
+        def failed(error):
+            return ItemResult(url, title, ItemStatus.FAILED, error=error)
+
+        mode = options.get('mode', formats.VIDEO_AUDIO)
+        quality = options.get('quality', 'Best')
+        try:
+            plan = formats.build_format_plan(mode, options.get('format', 'mp4'), quality)
+            # Validate the trim text before any network access.
+            trim_requested = parse_trim_range(options.get('trim_start'), options.get('trim_end')) is not None
+        except (formats.FormatError, TrimError) as e:
+            return failed(str(e))
+
         platform = self.get_platform_name(url)
         base_folder = options.get('save_path', os.getcwd())
         output_template = os.path.join(base_folder, platform, '%(title)s.%(ext)s')
@@ -189,89 +210,78 @@ class DownloadManager:
             'outtmpl': output_template,
             'ffmpeg_location': self.ffmpeg_path,
             'progress_hooks': [progress_hook] if progress_hook else [],
-            # --- KAPAK FOTOĞRAFI AYARI ---
-            'writethumbnail': True,  # Önce resmi diske indirir
         })
-
-        mode = options.get('mode', 'Video + Audio')
-        fmt = options.get('format', 'mp4')
-        quality = options.get('quality', 'Best')
-
-        if mode == 'Audio Only':
-            ydl_opts['format'] = 'bestaudio/best'
-            # Ses İşleme Zinciri
-            ydl_opts['postprocessors'] = [
-                {
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': fmt,
-                    'preferredquality': '192',
-                },
-                {
-                    'key': 'EmbedThumbnail',  # Resmi ses dosyasına gömer
-                },
-                {
-                    'key': 'FFmpegMetadata',  # Şarkı bilgilerini (Artist, Title) gömer
-                }
-            ]
-        else:
-            # Video Modları
-            if quality == 'Best':
-                ydl_opts['format'] = "bestvideo+bestaudio/best"
-            elif quality == '4K':
-                ydl_opts['format'] = "bestvideo[height<=2160]+bestaudio/best"
-            elif quality == '1080p':
-                ydl_opts['format'] = "bestvideo[height<=1080]+bestaudio/best"
-            elif quality == '720p':
-                ydl_opts['format'] = "bestvideo[height<=720]+bestaudio/best"
-            else:
-                ydl_opts['format'] = "best"
-
-            ydl_opts['merge_output_format'] = fmt
-
-            # Video modunda da metadata ve thumbnail gömmek istersen:
-            ydl_opts['postprocessors'] = [
-                {'key': 'EmbedThumbnail'},
-                {'key': 'FFmpegMetadata'}
-            ]
-
-        def failed(error):
-            return ItemResult(url, title, ItemStatus.FAILED, error=error)
-
-        # Trim (Kırpma): metni önceden doğrula, kötü değerle indirmeye başlama
-        try:
-            trim_requested = parse_trim_range(options.get('trim_start'), options.get('trim_end')) is not None
-        except TrimError as e:
-            return failed(str(e))
-        if trim_requested:
-            ydl_opts['force_keyframes_at_cuts'] = True
+        ydl_opts.update(plan.options)
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Read the metadata first: it gives the real title and the
-                # duration the trim range is validated against.
+            # Phase 1: metadata and format selection, no download.
+            with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
                 info = ydl.extract_info(url, download=False)
-                if info is None:
-                    return failed('No media information returned')
-                title = info.get('title') or title
-                if trim_requested:
-                    try:
-                        trim_range = parse_trim_range(
-                            options.get('trim_start'), options.get('trim_end'), info.get('duration'))
-                    except TrimError as e:
-                        return failed(str(e))
-                    # yt-dlp (start, end) çiftleri bekler
-                    ydl.params['download_ranges'] = yt_dlp.utils.download_range_func(None, [trim_range])
+            if info is None:
+                return failed('No media information returned')
+            title = info.get('title') or title
+            if plan.needs_audio and not formats.has_audio(info):
+                return failed('This media has no audio track')
+            if log_callback:
+                log_callback(f"Format: {formats.describe_selection(info)} -> {plan.ext}")
+                if formats.height_unknown(info) and formats.VIDEO_QUALITIES.get(quality):
+                    log_callback(f"Warning: this source does not report its resolution; "
+                                 f"the {quality} limit may not apply")
+
+            # Phase 2: download with options that depend on the selection.
+            ydl_opts['postprocessors'] = formats.postprocessors_for(plan, info)
+            if trim_requested:
+                trim_range = parse_trim_range(
+                    options.get('trim_start'), options.get('trim_end'), info.get('duration'))
+                # yt-dlp (start, end) çiftleri bekler
+                ydl_opts['download_ranges'] = yt_dlp.utils.download_range_func(None, [trim_range])
+                ydl_opts['force_keyframes_at_cuts'] = True
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                if plan.strip_audio:
+                    ydl.add_post_processor(StripAudioPP(ydl), when='post_process')
                 info = ydl.process_ie_result(info, download=True)
                 if info is None:
                     return failed('No media information returned')
                 path = final_output_path(ydl, info)
+        except TrimError as e:
+            return failed(str(e))
         except Exception as e:
-            return failed(describe_error(e))
+            return failed(explain_format_error(describe_error(e), mode, quality))
 
         problem = verify_output(path)
         if problem:
             return failed(problem)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
+
+
+def explain_format_error(message, mode, quality):
+    """Turn yt-dlp's generic 'format is not available' into what it means here."""
+    if 'Requested format is not available' not in message:
+        return message
+    if mode == formats.AUDIO_ONLY:
+        return 'This media has no audio track to extract'
+    if quality and quality != 'Best':
+        return f'No {quality} or lower version of this video is available; try a higher quality'
+    return 'No downloadable video format is available for this media'
+
+
+class StripAudioPP(FFmpegPostProcessor):
+    """Removes audio tracks from the final file (Video Only mode).
+
+    Needed when a site only offers files with audio muxed in; for pure video
+    streams it does nothing.
+    """
+
+    def run(self, info):
+        path = info['filepath']
+        if info.get('acodec') == 'none':
+            return [], info
+        temp = yt_dlp.utils.prepend_extension(path, 'temp')
+        self.to_screen(f'Removing audio from "{path}"')
+        self.run_ffmpeg(path, temp, ['-map', '0', '-map', '-0:a', '-c', 'copy'])
+        os.replace(temp, path)
+        info['acodec'] = 'none'
+        return [], info
 
 
 def final_output_path(ydl, info):

@@ -94,8 +94,10 @@ def test_download_with_trim_passes_start_end_pair():
     assert result.path == "out.mp4"
     ydl.extract_info.assert_called_once_with("https://youtu.be/x", download=False)
     ydl.process_ie_result.assert_called_once_with(info, download=True)
-    assert ydl_cls.call_args.args[0]["force_keyframes_at_cuts"] is True
-    ranges = ydl.params["download_ranges"]
+    probe_opts, download_opts = (c.args[0] for c in ydl_cls.call_args_list)
+    assert "download_ranges" not in probe_opts
+    assert download_opts["force_keyframes_at_cuts"] is True
+    ranges = download_opts["download_ranges"]
     assert list(ranges(info, ydl)) == [{"start_time": 10.0, "end_time": 20.0}]
 
 

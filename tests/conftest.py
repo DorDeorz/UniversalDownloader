@@ -43,6 +43,7 @@ class FakeYoutubeDL:
         self.params = dict(opts)
         self.extract_calls = []
         self.process_calls = []
+        self.added_pps = []
         FakeYoutubeDL.instances.append(self)
 
     def __enter__(self):
@@ -50,6 +51,9 @@ class FakeYoutubeDL:
 
     def __exit__(self, *exc):
         return False
+
+    def add_post_processor(self, pp, when="post_process"):
+        self.added_pps.append((pp, when))
 
     def extract_info(self, url, download=False):
         self.extract_calls.append((url, download))

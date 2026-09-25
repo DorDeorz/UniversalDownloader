@@ -255,6 +255,41 @@ def test_mode_buttons_keep_their_size_when_the_language_changes(monkeypatch, dpi
 
 
 @needs_display
+@pytest.mark.parametrize("saved", [
+    {},
+    {"language": "tr", "text_size": "Larger", "mode": "Audio Only", "theme": "Light"},
+    {"language": "de", "text_size": "Normal", "mode": "Video Only", "theme": "Dark"},
+    {"language": "ja", "text_size": "Large", "mode": "Video + Audio", "theme": "System"},
+])
+def test_mode_buttons_have_their_full_size_when_the_app_is_reopened(monkeypatch, saved):
+    # Regression: after a restart the mode buttons came up smaller than they
+    # are once rebuilt by a language change. Rebuilding must change nothing.
+    ui_helpers.isolate_settings(monkeypatch)
+    folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
+    os.makedirs(folder)
+    with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump(saved, f)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    window = new_app()
+    try:
+        pump(window, timeout=1.5)
+
+        def sizes():
+            buttons = window.cmb_mode._buttons_dict.values()
+            return ((window.cmb_mode.winfo_width(), window.cmb_mode.winfo_height()),
+                    [(b.winfo_width(), b.winfo_height(), b._text_label.winfo_reqwidth()) for b in buttons])
+
+        at_start = sizes()
+        window.cmb_mode.relabel()
+        pump(window, timeout=0.5)
+        assert at_start == sizes()
+        assert at_start[0][1] == window.cmb_format.winfo_height()
+    finally:
+        window.destroy()
+        ctk.set_widget_scaling(1.0)
+
+
+@needs_display
 def test_choice_widgets_show_labels_but_return_values(app):
     labels = {"a": "Alpha", "b": "Beta"}
     picked = []

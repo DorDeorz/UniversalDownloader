@@ -39,7 +39,7 @@ import worker
 from i18n import tr
 from results import ItemStatus
 
-APP_VERSION = "android-preview"
+APP_VERSION = "0.1.0"  # keep in step with android/buildozer.spec
 # Kivy's bundled Roboto font covers Latin, Greek and Cyrillic; languages in
 # other scripts fall back to English.
 FONT_LANGUAGES = {code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}}
@@ -124,6 +124,7 @@ class DownloaderScreen(BoxLayout):
 
         choice = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(10))
         self.lbl_choice = _label(tr("options.quality"), size=13, color=MUTED, size_hint_x=0.4)
+        self.lbl_choice.size_hint_y = 1
         self.spn_choice = Spinner(font_size=sp(15))
         choice.add_widget(self.lbl_choice)
         choice.add_widget(self.spn_choice)
@@ -272,7 +273,7 @@ class UniversalDownloaderApp(App):
         except Exception as e:
             status = media_tools.ToolStatus(False, error=logic.describe_error(e))
         import yt_dlp.version
-        messages.insert(0, f"yt-dlp {yt_dlp.version.__version__}, app {version.__version__} ({APP_VERSION})")
+        messages.insert(0, f"Android preview {APP_VERSION} (shared code {version.__version__}), yt-dlp {yt_dlp.version.__version__}")
         messages.append(status.summary())
         for message in messages:
             _log.info(message)

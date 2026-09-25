@@ -16,9 +16,13 @@ OUT=$(mkdir -p "${1:?usage: build_tools.sh <out-dir> [abi ...]}" && cd "$1" && p
 shift
 ABIS=("${@:-arm64-v8a}")
 
-FFMPEG_VERSION=${FFMPEG_VERSION:-7.1.1}
-LAME_VERSION=${LAME_VERSION:-3.100}
-QJS_VERSION=${QJS_VERSION:-latest}
+# Pinned sources and their SHA-256. Change a version and its hash together.
+FFMPEG_VERSION=7.1.1
+FFMPEG_SHA256=733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
+LAME_VERSION=3.100
+LAME_SHA256=ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+QJS_VERSION=v0.17.0
+QJS_SHA256=559bc4c420475e55c7ab4510adbc562f55d7524d75e8e89d79ce4bb02f5687d9
 API=${ANDROID_API:-24}
 
 NDK=${ANDROID_NDK_ROOT:-${ANDROID_NDK_LATEST_HOME:-}}
@@ -28,10 +32,6 @@ JOBS=$(nproc)
 WORK=${WORK_DIR:-$(mktemp -d)}
 mkdir -p "$WORK/src"
 
-if [ "$QJS_VERSION" = latest ]; then
-  QJS_VERSION=$(curl -fsSL https://api.github.com/repos/quickjs-ng/quickjs/releases/latest |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"])')
-fi
 echo "FFmpeg $FFMPEG_VERSION, LAME $LAME_VERSION, QuickJS-ng $QJS_VERSION, API $API"
 
 quiet() {  # run a noisy command; show the end of its output only if it fails
@@ -39,14 +39,14 @@ quiet() {  # run a noisy command; show the end of its output only if it fails
   "$@" >"$log" 2>&1 || { tail -n 80 "$log"; echo "Failed: $*" >&2; exit 1; }
 }
 
-fetch() {  # fetch <url> <file>
+fetch() {  # fetch <url> <file> <sha256>
   [ -f "$WORK/src/$2" ] || curl -fsSL --retry 4 -o "$WORK/src/$2" "$1"
-  sha256sum "$WORK/src/$2"
+  echo "$3  $WORK/src/$2" | sha256sum -c -
 }
 
-fetch "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" "ffmpeg-$FFMPEG_VERSION.tar.xz"
-fetch "https://deb.debian.org/debian/pool/main/l/lame/lame_$LAME_VERSION.orig.tar.gz" "lame-$LAME_VERSION.tar.gz"
-fetch "https://github.com/quickjs-ng/quickjs/archive/refs/tags/$QJS_VERSION.tar.gz" "quickjs-$QJS_VERSION.tar.gz"
+fetch "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" "ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_SHA256"
+fetch "https://deb.debian.org/debian/pool/main/l/lame/lame_$LAME_VERSION.orig.tar.gz" "lame-$LAME_VERSION.tar.gz" "$LAME_SHA256"
+fetch "https://github.com/quickjs-ng/quickjs/archive/refs/tags/$QJS_VERSION.tar.gz" "quickjs-$QJS_VERSION.tar.gz" "$QJS_SHA256"
 
 for ABI in "${ABIS[@]}"; do
   case "$ABI" in

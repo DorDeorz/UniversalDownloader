@@ -96,6 +96,13 @@ the code and in `settings.json`. Messages that come from websites or
 yt-dlp (such as "HTTP Error 403"), file paths and the FFmpeg line in the
 activity log stay as they are; the log file is always in English.
 
+Two CustomTkinter behaviours are worked around in `ui.py`, with tests in
+`tests/test_ui_design.py`. `ChoiceSegment` rebuilds its buttons at the
+height it was given, because CustomTkinter uses the last measured height,
+which rounds down. On Windows, enabling or disabling a button made it
+forget the width its text needs, which squeezed the mode buttons at every
+start; `_keep_size_on_state_change` lays the button out again.
+
 ## Links
 
 `urls.normalize_url` checks the text before any network request. A missing

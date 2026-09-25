@@ -262,8 +262,9 @@ def test_mode_buttons_keep_their_size_when_the_language_changes(monkeypatch, dpi
     {"language": "ja", "text_size": "Large", "mode": "Video + Audio", "theme": "System"},
 ])
 def test_mode_buttons_have_their_full_size_when_the_app_is_reopened(monkeypatch, saved):
-    # Regression: after a restart the mode buttons came up smaller than they
-    # are once rebuilt by a language change. Rebuilding must change nothing.
+    # Regression: on Windows the mode buttons came up squeezed to a square on
+    # every start (see ui._keep_size_on_state_change); a language change,
+    # which rebuilds them, made them normal again. Rebuilding must change nothing.
     ui_helpers.isolate_settings(monkeypatch)
     folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
     os.makedirs(folder)
@@ -283,28 +284,26 @@ def test_mode_buttons_have_their_full_size_when_the_app_is_reopened(monkeypatch,
                     [(b.winfo_width(), b.winfo_height(), b._text_label.winfo_reqwidth()) for b in buttons])
 
         at_start = sizes()
-        m = window.cmb_mode
-        card = m.master
-        diag = {
-            "screen": (window.winfo_screenwidth(), window.winfo_screenheight()),
-            "window": window.geometry(), "window_req": window.winfo_reqwidth(),
-            "mode_req": m.winfo_reqwidth(), "buttons_req": [b.winfo_reqwidth() for b in m._buttons_dict.values()],
-            "button_propagate": [b.grid_propagate() for b in m._buttons_dict.values()],
-            "mode_propagate": m.grid_propagate(),
-            "card": (card.winfo_width(), card.winfo_reqwidth()),
-            "card_cols": [card.grid_bbox(c, 0) for c in range(4)],
-            "canvas": window._scroll_canvas.winfo_width(),
-            "frame": (window.main_frame.winfo_width(), window.main_frame.winfo_reqwidth()),
-            "mode_grid": m.grid_info(),
-        }
-        print("DIAG", diag)
         window.cmb_mode.relabel()
         pump(window, timeout=0.5)
-        assert at_start == sizes(), diag
+        assert at_start == sizes()
         assert at_start[0][1] == window.cmb_format.winfo_height()
     finally:
         window.destroy()
         ctk.set_widget_scaling(1.0)
+
+
+@needs_display
+def test_buttons_keep_the_width_of_their_text_when_disabled_and_enabled(app):
+    button = ui.secondary_button(app, "A label much wider than the button", lambda: None, width=40)
+    button.grid(row=9, column=0)
+    pump(app, timeout=0.2)
+    width = button.winfo_reqwidth()
+    assert width >= button._text_label.winfo_reqwidth()
+    for state in ("disabled", "normal"):
+        button.configure(state=state)
+        pump(app, timeout=0.2)
+        assert button.winfo_reqwidth() == width
 
 
 @needs_display
@@ -536,54 +535,3 @@ def test_place_on_screen_caps_size_and_keeps_window_visible():
     assert window.calls["geometry"] == f"1040x{round(992 / 1.25)}+100+0"
     assert window.calls["minsize"] == (900, int(992 / 1.25))
 
-
-@needs_display
-def test_zz_trace_mode_button_width(monkeypatch):  # TEMPORARY diagnostic
-    import traceback
-    ui_helpers.isolate_settings(monkeypatch)
-    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
-    log = []
-    watched = set()
-
-    def wrap(cls, name):
-        orig = getattr(cls, name)
-
-        def f(self, *a, **k):
-            before = self.winfo_reqwidth() if self in watched else None
-            out = orig(self, *a, **k)
-            if self in watched:
-                after = self.winfo_reqwidth()
-                stack = " < ".join(f"{fr.name}:{fr.lineno}" for fr in traceback.extract_stack()[-7:-1])
-                log.append(f"{name}{a}{k} req {before}->{after} | {stack}")
-            return out
-        monkeypatch.setattr(cls, name, f)
-
-    for name in ("configure", "_set_scaling", "_set_dimensions", "_draw", "_create_grid", "_update_dimensions_event"):
-        wrap(ctk.CTkButton, name)
-    orig_init = ui.ChoiceSegment.__init__
-
-    def init(self, *a, **k):
-        orig_init(self, *a, **k)
-        watched.update(self._buttons_dict.values())
-        log.append(f"created {[b.winfo_reqwidth() for b in self._buttons_dict.values()]}")
-    monkeypatch.setattr(ui.ChoiceSegment, "__init__", init)
-    window = new_app()
-    try:
-        m = window.cmb_mode
-        b = list(m._buttons_dict.values())[0]
-        log.append(f"after App() {b.winfo_reqwidth()}")
-        seen = []
-
-        def poll():
-            seen.append(b.winfo_reqwidth())
-            window.after(5, poll)
-        poll()
-        window.after(1500, window.quit)
-        window.mainloop()
-        log.append(f"polled {sorted(set(seen), key=seen.index)} final {b.winfo_reqwidth()}")
-        tkinter.Frame.configure(b, width=1)
-        window.update()
-        log.append(f"raw frame width=1 -> {b.winfo_reqwidth()}")
-    finally:
-        window.destroy()
-    assert sys.platform != "win32", "\n".join(log[:200])

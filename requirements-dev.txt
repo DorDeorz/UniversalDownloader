@@ -1,0 +1,5 @@
+# Test, lint and build tooling. Installs the runtime pins too.
+-r requirements.txt
+pytest==9.1.1
+ruff==0.16.9
+pyinstaller==6.22.3

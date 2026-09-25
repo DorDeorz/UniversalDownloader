@@ -15,3 +15,5 @@ htmlcov/
 *.log
 .DS_Store
 Thumbs.db
+# Downloaded by the release workflow; not kept in the repository.
+bin/deno.exe

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      # bin/ffmpeg.exe and bin/ffprobe.exe are Git LFS objects; tests don't
+      # need the real binaries, so LFS is left off to keep checkout fast.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        run: python -m pytest
+
+      # The UI tests drive a real Tk window, so give Linux a virtual display.
+      # FFmpeg enables the end-to-end download tests (served locally, no internet).
+      - name: Test (Linux, virtual display, real FFmpeg)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb ffmpeg
+          xvfb-run -a python -m pytest

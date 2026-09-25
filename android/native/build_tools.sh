@@ -63,10 +63,7 @@ fetch "https://github.com/quickjs-ng/quickjs/archive/refs/tags/$QJS_VERSION.tar.
 for ABI in "${ABIS[@]}"; do
   case "$ABI" in
     arm64-v8a) TRIPLE=aarch64-linux-android; FF_ARCH=aarch64; FF_EXTRA=() ;;
-    # x86_64 only runs on the CI emulator. Without NASM, and with clang's
-    # inline assembly, FFmpeg's x86 decoders fail on Android, so it gets no
-    # assembly at all there.
-    x86_64)    TRIPLE=x86_64-linux-android;  FF_ARCH=x86_64;  FF_EXTRA=(--disable-asm) ;;
+    x86_64)    TRIPLE=x86_64-linux-android;  FF_ARCH=x86_64;  FF_EXTRA=(--disable-x86asm) ;;
     *) echo "Unsupported ABI $ABI" >&2; exit 1 ;;
   esac
   CC="$TC/bin/$TRIPLE$API-clang"

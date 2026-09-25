@@ -719,7 +719,7 @@ class UniversalDownloaderApp(MDApp):
     def _on_native_stderr(self, line):
         """Worker thread: a line a program (usually FFmpeg) wrote to stderr."""
         self._stderr.append(line)
-        _log.info("stderr: %s", line)
+        print(f"UDSTDERR {line}", flush=True)  # Kivy's logger would mangle FFmpeg's text
 
     def _on_job_done(self, summary):
         self.job = None

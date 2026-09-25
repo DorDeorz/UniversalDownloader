@@ -16,7 +16,7 @@ adb install -r -g "$APK" || exit 1
 adb logcat -c
 adb shell am start -n "$PKG/org.kivy.android.PythonActivity" --es selftest_url "$URL"
 
-log() { adb logcat -d 2>/dev/null | grep -a -E "UDSELFTEST|QuickJS|FFmpeg|yt-dlp|Traceback|Error" ; }
+log() { adb logcat -d 2>/dev/null | grep -a -E "UDSELFTEST|UDSTDERR|QuickJS|FFmpeg|yt-dlp|Traceback|Error" ; }
 
 start=$(date +%s)
 while true; do

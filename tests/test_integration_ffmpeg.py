@@ -25,13 +25,51 @@ pytestmark = pytest.mark.skipif(not TOOLS.ok, reason=f"needs FFmpeg: {TOOLS.erro
 
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
+    """Static files with byte-range support, like a real media server.
+
+    FFmpeg seeks with Range requests when it reads a URL directly (trimmed
+    downloads); without them some FFmpeg versions stop after the headers.
+    """
+
     throttle = 0.0
 
     def log_message(self, *args):
         pass
 
+    def send_head(self):
+        self._range = None
+        header = self.headers.get("Range", "")
+        path = self.translate_path(self.path)
+        if not header.startswith("bytes=") or not os.path.isfile(path):
+            return super().send_head()
+        size = os.path.getsize(path)
+        first, _, last = header[len("bytes="):].split(",")[0].partition("-")
+        if first:
+            start, end = int(first), int(last) if last else size - 1
+        else:
+            start, end = max(size - int(last), 0), size - 1
+        end = min(end, size - 1)
+        if start >= size or start > end:
+            self.send_response(416)
+            self.send_header("Content-Range", f"bytes */{size}")
+            self.end_headers()
+            return None
+        f = open(path, "rb")
+        f.seek(start)
+        self._range = end - start + 1
+        self.send_response(206)
+        self.send_header("Content-Type", self.guess_type(path))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(self._range))
+        self.end_headers()
+        return f
+
     def copyfile(self, source, outputfile):
-        while chunk := source.read(64 * 1024):
+        remaining = self._range
+        while chunk := source.read(64 * 1024 if remaining is None else min(64 * 1024, remaining)):
+            if remaining is not None:
+                remaining -= len(chunk)
             try:
                 outputfile.write(chunk)
             except OSError:

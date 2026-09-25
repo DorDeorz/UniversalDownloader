@@ -10,6 +10,7 @@ import os
 from dataclasses import MISSING, asdict, dataclass, fields, replace
 
 import formats
+import i18n
 
 _log = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class Settings:
     text_size: str = "Normal"
     open_folder_when_done: bool = False
     show_summary: bool = True
+    language: str = i18n.AUTO  # a code from i18n.LANGUAGES, or follow the system
 
     def normalized(self, default_folder):
         """A copy with every value valid for the current version."""
@@ -38,8 +40,9 @@ class Settings:
         folder = self.download_folder if isinstance(self.download_folder, str) and self.download_folder else \
             default_folder
         text_size = self.text_size if self.text_size in TEXT_SIZES else "Normal"
+        language = self.language if self.language in i18n.LANGUAGES else i18n.AUTO
         return replace(self, download_folder=folder, mode=mode, format=fmt, quality=quality, theme=theme,
-                       text_size=text_size)
+                       text_size=text_size, language=language)
 
 
 def load(path, default_folder):

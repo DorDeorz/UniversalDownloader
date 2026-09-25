@@ -26,14 +26,18 @@ screen's work area (on Windows, the screen minus the taskbar), and moves up
 if its bottom edge would go under the taskbar. Spare height goes to the
 activity box; when the window cannot be tall enough (large text on a small
 screen, or the user made it smaller) the content scrolls instead of being
-cut off. The Settings and playlist dialogs also grow with the text size,
-stay within the work area and use the app icon.
+cut off. The playlist dialog also grows with the text size, stays within
+the work area and uses the app icon.
 
 ## Settings
 
-The Settings button (or Ctrl+,) opens a dialog. Changes apply at once and
-are saved:
+The Settings button (or Ctrl+,) opens the settings page inside the main
+window, in place of the download page; Back, Esc or the Settings button
+again return to it. The page scrolls when it does not fit. Changes apply at
+once and are saved:
 
+- **Language**: one of 25 languages, or the system language (the
+  default). The whole window switches at once, without a restart.
 - **Theme**: System, Dark or Light.
 - **Text size**: Normal, Large (115%) or Larger (130%); scales all text and
   controls.
@@ -48,7 +52,7 @@ are saved:
 |---|---|
 | Enter (in the link field) | Analyze the link |
 | Ctrl+Enter | Start the download |
-| Esc | Cancel the download |
+| Esc | Cancel the download, or leave the settings page |
 | Ctrl+O | Choose the download folder |
 | Ctrl+, | Open settings |
 
@@ -62,6 +66,29 @@ keep body text above a 4.5:1 contrast ratio on its background in both
 themes. Selected segments are a white chip in the light theme so their
 dark text stays readable.
 
+## Languages
+
+`i18n.py` holds the list of languages and `tr(key, **values)`, which
+returns a message in the current language. The messages are JSON files in
+`locales/`, one per language code, mapping a key such as
+`"action.download_n"` to text with `{count}`-style placeholders.
+`en.json` is complete and is the fallback for any missing key or broken
+placeholder. `tests/test_i18n.py` checks that every language has every key
+with the same placeholders.
+
+To change a text, edit `en.json` and the same key in the other files. To
+add a language, copy `en.json` to `locales/<code>.json`, translate the
+values, and add the code with the language's own name to
+`i18n.LANGUAGES`. Right-to-left and Indic scripts are not offered because
+Tk does not lay them out correctly.
+
+Widgets that show translated text are registered with `App._live`, and
+choices (mode, quality, theme, text size) use `ChoiceSegment` and
+`ChoiceMenu`, which show translated labels but keep the English values in
+the code and in `settings.json`. Messages that come from websites or
+yt-dlp (such as "HTTP Error 403"), file paths and the FFmpeg line in the
+activity log stay as they are; the log file is always in English.
+
 ## Links
 
 `urls.normalize_url` checks the text before any network request. A missing
@@ -71,8 +98,8 @@ under the field.
 
 ## Saved settings
 
-`settings.py` stores the folder, mode, format, quality, theme, text size
-and the two "when downloads finish" choices in
+`settings.py` stores the folder, mode, format, quality, theme, text size,
+language and the two "when downloads finish" choices in
 `%LOCALAPPDATA%\UniversalDownloader\settings.json`, written atomically
 each time one of them changes. Unknown or invalid values in the file fall
 back to the defaults, so a damaged file never stops the app from starting.

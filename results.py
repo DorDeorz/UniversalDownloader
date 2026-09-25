@@ -57,30 +57,46 @@ class JobSummary:
     def all_ok(self):
         return bool(self.results) and all(r.ok for r in self.results)
 
-    def headline(self):
-        """Short text such as '2 completed, 1 failed'."""
-        parts = [f"{n} {status.value}" for status, n in self.counts().items() if n]
-        return ", ".join(parts) if parts else "Nothing to download"
+    def headline(self, label=None, nothing="Nothing to download"):
+        """Short text such as '2 completed, 1 failed'.
 
-    def title(self):
-        """Dialog title matching the outcome."""
+        ``label`` turns a status into its (translated) word; English by default.
+        """
+        label = label or (lambda status: status.value)
+        parts = [f"{n} {label(status)}" for status, n in self.counts().items() if n]
+        return ", ".join(parts) if parts else nothing
+
+    _TITLES = {
+        "summary.complete": "Download complete",
+        "summary.cancelled": "Download cancelled",
+        "summary.partial": "Download partly failed",
+        "summary.failed": "Download failed",
+    }
+
+    def title_key(self):
+        """Message key of the dialog title matching the outcome."""
         counts = self.counts()
         if self.all_ok:
-            return "Download complete"
+            return "summary.complete"
         if counts[ItemStatus.CANCELLED]:
-            return "Download cancelled"
+            return "summary.cancelled"
         if counts[ItemStatus.COMPLETED]:
-            return "Download partly failed"
-        return "Download failed"
+            return "summary.partial"
+        return "summary.failed"
 
-    def report(self, limit=10):
+    def title(self):
+        """Dialog title matching the outcome (English)."""
+        return self._TITLES[self.title_key()]
+
+    def report(self, limit=10, label=None, nothing="Nothing to download", more="... and {count} more"):
         """Headline plus the items that did not complete (for the final dialog)."""
-        lines = [self.headline()]
+        label = label or (lambda status: status.value)
+        lines = [self.headline(label, nothing)]
         problems = [r for r in self.results if not r.ok]
         for r in problems[:limit]:
-            lines.append(f"- {r.status.value}: {r.title}" + (f": {r.error}" if r.error else ""))
+            lines.append(f"- {label(r.status)}: {r.title}" + (f": {r.error}" if r.error else ""))
         if len(problems) > limit:
-            lines.append(f"... and {len(problems) - limit} more")
+            lines.append(more.format(count=len(problems) - limit))
         return "\n".join(lines)
 
 

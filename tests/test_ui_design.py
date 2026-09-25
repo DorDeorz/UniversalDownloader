@@ -8,7 +8,10 @@ import pytest
 
 ctk = pytest.importorskip("customtkinter")
 
+import tkinter  # noqa: E402
+
 import events  # noqa: E402
+import i18n  # noqa: E402
 import playlist  # noqa: E402
 import ui  # noqa: E402
 from results import ItemResult, ItemStatus, JobSummary  # noqa: E402
@@ -151,25 +154,89 @@ def test_shorten_path(path, limit, expected):
 
 
 @needs_display
-def test_settings_dialog_applies_and_saves_changes(app, monkeypatch):
+def test_settings_page_applies_and_saves_changes(app, monkeypatch):
     scales = []
     monkeypatch.setattr(ui.ctk, "set_widget_scaling", scales.append)
     app.open_settings()
-    dialog = app.settings_dialog
-    assert dialog.seg_theme.get() == app.settings.theme
+    view = app.settings_view
+    assert view.seg_theme.get() == app.settings.theme
     app.open_settings()
-    assert app.settings_dialog is dialog  # one dialog at a time
+    assert app.settings_view is view  # one page at a time
 
-    dialog.seg_text.set("Larger")
-    dialog.on_change("text_size", "Larger")
-    dialog.sw_open.toggle()
+    view.seg_text.set("Larger")
+    view.on_change("text_size", "Larger")
+    view.sw_open.toggle()
     assert scales == [1.3]
     assert app.settings.text_size == "Larger"
     assert app.settings.open_folder_when_done is True
     saved = ui.settings_store.load(app.settings_path, "unused")
     assert (saved.text_size, saved.open_folder_when_done) == ("Larger", True)
-    dialog.close()
-    assert not dialog.winfo_exists()
+
+
+@needs_display
+def test_settings_open_inside_the_main_window(app):
+    toplevels = [w for w in app.winfo_children() if isinstance(w, tkinter.Toplevel)]
+    app.open_settings()
+    pump(app, timeout=0.2)
+    view = app.settings_view
+    assert view.winfo_toplevel() is app
+    assert [w for w in app.winfo_children() if isinstance(w, tkinter.Toplevel)] == toplevels
+    assert view.winfo_ismapped() and not app.main_frame.winfo_ismapped()
+
+    app.event_generate("<Escape>")  # Esc leaves the page instead of cancelling
+    pump(app, timeout=0.2)
+    assert app.settings_view is None and not view.winfo_exists()
+    assert app.main_frame.winfo_ismapped()
+
+    app.toggle_settings()
+    assert app.settings_view is not None
+    app.settings_view.btn_back.invoke()
+    assert app.settings_view is None
+
+
+@needs_display
+def test_language_changes_without_restart(app):
+    app.open_settings()
+    app.settings_view.cmb_language.set("de")
+    app._on_setting_changed("language", "de")
+    pump(app, timeout=0.2)
+    de = i18n.load_catalog("de")
+    assert app.btn_analyze.cget("text") == de["link.analyze"]
+    assert app.cmb_mode.cget("values")[0] == de["mode.video_audio"]
+    assert app.cmb_mode.get() == app.settings.mode  # values stay internal
+    assert app.settings_view.cmb_language.get() == "de"  # page rebuilt in German
+    assert ui.settings_store.load(app.settings_path, "unused").language == "de"
+
+    app._on_setting_changed("language", i18n.AUTO)  # back to the system language (English in tests)
+    pump(app, timeout=0.2)
+    assert app.btn_analyze.cget("text") == "Analyze"
+
+
+def test_activity_lines_are_translated(monkeypatch):
+    monkeypatch.setitem(i18n._catalogs, "tr", {"log.failed": "Başarısız: {title}",
+                                               "msg.Cancelled by user": "Kullanıcı iptal etti"})
+    i18n.set_language("tr")
+    assert ui.describe_result(ItemResult("u", "A", ItemStatus.FAILED, error="HTTP Error 403")) == \
+        "Başarısız: A (HTTP Error 403)"
+    assert ui.describe_result(ItemResult("u", "B", ItemStatus.CANCELLED, error="Cancelled by user")) == \
+        "Cancelled: B (Kullanıcı iptal etti)"  # English for a key the language lacks
+
+
+@needs_display
+def test_choice_widgets_show_labels_but_return_values(app):
+    labels = {"a": "Alpha", "b": "Beta"}
+    picked = []
+    seg = ui.segmented(app, ["a", "b"], picked.append, label=labels.get)
+    menu = ui.option_menu(app, ["a", "b"], picked.append, label=labels.get)
+    for widget in (seg, menu):
+        assert widget.cget("values") == ["Alpha", "Beta"]
+        widget.set("b")
+        assert widget.get() == "b"
+    menu.set_choices(["a"])
+    assert menu.cget("values") == ["Alpha"]
+    seg._command("Alpha")
+    menu._dropdown_callback("Alpha")
+    assert picked == ["a", "a"]
 
 
 @needs_display
@@ -285,26 +352,23 @@ def test_activity_box_takes_spare_height(app):
 
 
 @needs_display
-def test_settings_dialog_grows_with_text_size_and_fits_the_screen(app, monkeypatch, larger_text):
-    monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, 1920, 1040))
+def test_settings_page_fits_larger_text(app, larger_text):
     app.open_settings()
-    dialog = app.settings_dialog
     pump(app, timeout=0.3)
-    scale = dialog._get_window_scaling()
-    assert dialog.winfo_width() >= round(560 * 1.3 * scale) - 2
-    assert _outer_bottom(dialog) <= 1040
+    view = app.settings_view
+    # The page scrolls inside the window instead of growing past it.
+    assert view.winfo_height() <= app.winfo_height()
+    assert view.btn_back.winfo_ismapped()
 
 
 @needs_display
 def test_dialogs_get_the_app_icon(app, monkeypatch):
     windows = []
     monkeypatch.setattr(ui, "set_window_icon", windows.append)
-    app.open_settings()
     info = {"title": "Mix", "entries": [{"id": "a", "title": "A", "ie_key": "Youtube"}]}
     selector = ui.PlaylistSelector(app, playlist.analyze(info, "https://youtube.com/playlist?list=x"),
                                    lambda items: None)
     pump(app, timeout=0.5)  # also after CustomTkinter sets its own icon
-    assert windows.count(app.settings_dialog) == 2
     assert windows.count(selector) == 2
     selector.cancel()
 

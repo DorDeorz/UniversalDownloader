@@ -121,3 +121,13 @@ FAKE_TOOLS = media_tools.ToolStatus(True, directory="/fake/ffmpeg/bin", version=
 @pytest.fixture
 def manager():
     return logic.DownloadManager(tools=FAKE_TOOLS)
+
+
+@pytest.fixture(autouse=True)
+def english_ui(monkeypatch):
+    """Tests check English texts, so 'System language' means English here."""
+    import i18n
+    monkeypatch.setattr(i18n, "system_language", lambda: "en")
+    i18n.set_language("en")
+    yield
+    i18n.set_language("en")

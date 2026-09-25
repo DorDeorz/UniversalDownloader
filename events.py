@@ -122,8 +122,12 @@ def _human_bytes(n):
     return f"{n:.1f} GB"
 
 
-def detail_from_hook(d):
-    """Speed and time left from a yt-dlp progress dict, e.g. '3.1 MB/s, 0:12 left'."""
+def detail_from_hook(d, left="{time} left"):
+    """Speed and time left from a yt-dlp progress dict, e.g. '3.1 MB/s, 0:12 left'.
+
+    ``left`` is the text for the time left, with a ``{time}`` placeholder
+    (the UI passes a translation).
+    """
     if d.get("status") != "downloading":
         return ""
     parts = []
@@ -134,7 +138,7 @@ def detail_from_hook(d):
     if isinstance(eta, (int, float)) and eta >= 0:
         minutes, seconds = divmod(int(eta), 60)
         hours, minutes = divmod(minutes, 60)
-        parts.append((f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}") + " left")
+        parts.append(left.format(time=f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"))
     return ", ".join(parts)
 
 

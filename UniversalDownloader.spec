@@ -9,7 +9,7 @@ from PyInstaller.utils.hooks import collect_all
 sys.path.insert(0, SPECPATH)
 from version import APP_NAME, __version__  # noqa: E402
 
-datas = [('app.ico', '.'), ('app.png', '.'), ('THIRD_PARTY_NOTICES.md', '.')]
+datas = [('app.ico', '.'), ('app.png', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('locales', 'locales')]
 binaries = [(os.path.join('bin', 'ffmpeg.exe'), 'bin'), (os.path.join('bin', 'ffprobe.exe'), 'bin')]
 hiddenimports = []
 for package in ('customtkinter', 'yt_dlp_ejs'):

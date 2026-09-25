@@ -12,6 +12,7 @@ import app_setup
 import events
 import filenames
 import formats
+import i18n
 import media_tools
 import playlist
 import settings as settings_store
@@ -19,6 +20,7 @@ import urls
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
 from utils import default_download_dir, resource_path
+from i18n import tr
 from version import DISPLAY_NAME, __version__
 
 _log = logging.getLogger(__name__)
@@ -125,6 +127,10 @@ def set_window_icon(window):
         _log.warning("Could not set window icon: %s", e)
 
 
+MODE_KEYS = {formats.VIDEO_AUDIO: "mode.video_audio", formats.VIDEO_ONLY: "mode.video_only",
+             formats.AUDIO_ONLY: "mode.audio_only"}
+
+
 def shorten_path(path, limit=64):
     """``path`` cut in the middle to at most ``limit`` characters."""
     if len(path) <= limit:
@@ -138,19 +144,95 @@ def section_label(parent, text):
     return ctk.CTkLabel(parent, text=text, font=font(12, "bold"), text_color=MUTED, anchor="w")
 
 
-MEDIA_HINT = "Works with YouTube, TikTok, Instagram, X and hundreds of other sites. Press Enter to analyze."
 # Selected segment: a white chip in light mode (dark text stays readable),
 # the accent in dark mode (light text on it).
 SEGMENT_SELECTED = ("#ffffff", ACCENT[1])
 SEGMENT_SELECTED_HOVER = ("#f4f4fb", ACCENT_HOVER[1])
 
 
-def segmented(parent, values, command, **kw):
-    kw.setdefault("height", 34)
-    return ctk.CTkSegmentedButton(parent, values=values, command=command, font=font(13), fg_color=SECONDARY,
-                                  unselected_color=SECONDARY, unselected_hover_color=SECONDARY_HOVER,
-                                  selected_color=SEGMENT_SELECTED, selected_hover_color=SEGMENT_SELECTED_HOVER,
-                                  text_color=TEXT, **kw)
+class ChoiceSegment(ctk.CTkSegmentedButton):
+    """A segmented button that shows translated labels for fixed values.
+
+    ``get``, ``set`` and ``command`` use the values (e.g. "Audio Only"), so
+    the rest of the app and the saved settings never see a translation.
+    ``relabel`` redraws the labels after a language change.
+    """
+
+    def __init__(self, parent, choices, label=str, command=None, **kw):
+        self._choices, self._label, self._on_pick = list(choices), label, command
+        kw.setdefault("height", 34)
+        super().__init__(parent, values=self._labels(), command=self._picked, font=font(13), fg_color=SECONDARY,
+                         unselected_color=SECONDARY, unselected_hover_color=SECONDARY_HOVER,
+                         selected_color=SEGMENT_SELECTED, selected_hover_color=SEGMENT_SELECTED_HOVER,
+                         text_color=TEXT, **kw)
+
+    def _labels(self):
+        return [self._label(c) for c in self._choices]
+
+    def _value_of(self, text):
+        labels = self._labels()
+        return self._choices[labels.index(text)] if text in labels else text
+
+    def _picked(self, text):
+        if self._on_pick:
+            self._on_pick(self._value_of(text))
+
+    def get(self):
+        return self._value_of(super().get())
+
+    def set(self, value, *args, **kwargs):
+        super().set(self._label(value) if value in self._choices else value, *args, **kwargs)
+
+    def relabel(self):
+        value = self.get()
+        self.configure(values=self._labels())
+        if value in self._choices:
+            self.set(value)
+
+
+class ChoiceMenu(ctk.CTkOptionMenu):
+    """An option menu with translated labels for its values (see ChoiceSegment)."""
+
+    def __init__(self, parent, choices, label=str, command=None, **kw):
+        self._choices, self._label, self._on_pick = list(choices), label, command
+        super().__init__(parent, values=self._labels(), command=self._picked, **kw)
+
+    def _labels(self):
+        return [self._label(c) for c in self._choices]
+
+    def _value_of(self, text):
+        labels = self._labels()
+        return self._choices[labels.index(text)] if text in labels else text
+
+    def _picked(self, text):
+        if self._on_pick:
+            self._on_pick(self._value_of(text))
+
+    def get(self):
+        return self._value_of(super().get())
+
+    def set(self, value):
+        super().set(self._label(value) if value in self._choices else value)
+
+    def set_choices(self, choices):
+        value = self.get()
+        self._choices = list(choices)
+        self.configure(values=self._labels())
+        if value in self._choices:
+            self.set(value)
+
+    def relabel(self):
+        self.set_choices(self._choices)
+
+
+def segmented(parent, values, command, label=str, **kw):
+    return ChoiceSegment(parent, values, label, command, **kw)
+
+
+def option_menu(parent, choices, command, label=str, **kw):
+    return ChoiceMenu(parent, choices, label, command, height=34, font=font(13), fg_color=SECONDARY,
+                      button_color=SECONDARY, button_hover_color=SECONDARY_HOVER, text_color=TEXT,
+                      dropdown_font=font(13), **kw)
 
 
 def switch(parent, text, command, **kw):
@@ -189,7 +271,7 @@ class PlaylistSelector(ctk.CTkToplevel):
 
     def __init__(self, parent, analysis, callback):
         super().__init__(parent, fg_color=BG)
-        self.title("Select Videos")
+        self.title(tr("playlist.title"))
         # CustomTkinter puts its own icon on new windows shortly after
         # they open, so the app icon is set now and again after that.
         set_window_icon(self)
@@ -203,9 +285,11 @@ class PlaylistSelector(ctk.CTkToplevel):
         self.vars = []
         self._done = False
 
-        heading = f"{analysis.title}: {len(self.items)} downloadable"
         if analysis.skipped:
-            heading += f", {len(analysis.skipped)} skipped"
+            heading = tr("playlist.heading_skipped", title=analysis.title, count=len(self.items),
+                         skipped=len(analysis.skipped))
+        else:
+            heading = tr("playlist.heading", title=analysis.title, count=len(self.items))
         self.lbl_title = ctk.CTkLabel(self, text=heading, font=font(16, "bold"), text_color=TEXT,
                                       wraplength=600, anchor="w", justify="left")
         self.lbl_title.pack(fill="x", pady=(18, 2), padx=20)
@@ -213,15 +297,18 @@ class PlaylistSelector(ctk.CTkToplevel):
             reasons = {}
             for item in analysis.skipped:
                 reasons[item.skip_reason] = reasons.get(item.skip_reason, 0) + 1
-            detail = "Skipped: " + ", ".join(f"{n} {reason}" for reason, n in reasons.items())
+            detail = tr("playlist.skipped", reasons=", ".join(
+                f"{n} {i18n.tr_message(reason)}" for reason, n in reasons.items()))
             ctk.CTkLabel(self, text=detail, font=font(12), text_color=MUTED, wraplength=600, anchor="w",
                          justify="left").pack(fill="x", padx=20)
 
         self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.btn_frame.pack(fill="x", padx=20, pady=(12, 0))
-        self.btn_all = secondary_button(self.btn_frame, "Select all", self.select_all, width=100, height=32)
+        self.btn_all = secondary_button(self.btn_frame, tr("playlist.select_all"), self.select_all, width=100,
+                                        height=32)
         self.btn_all.pack(side="left")
-        self.btn_none = secondary_button(self.btn_frame, "Select none", self.select_none, width=100, height=32)
+        self.btn_none = secondary_button(self.btn_frame, tr("playlist.select_none"), self.select_none, width=100,
+                                         height=32)
         self.btn_none.pack(side="left", padx=(8, 0))
         self.lbl_count = ctk.CTkLabel(self.btn_frame, text="", font=font(12, "bold"), text_color=MUTED)
         self.lbl_count.pack(side="right")
@@ -232,9 +319,9 @@ class PlaylistSelector(ctk.CTkToplevel):
 
         self.bottom = ctk.CTkFrame(self, fg_color="transparent")
         self.bottom.pack(fill="x", padx=20, pady=(0, 18))
-        self.btn_cancel = secondary_button(self.bottom, "Cancel", self.cancel, width=110, height=40)
+        self.btn_cancel = secondary_button(self.bottom, tr("action.cancel"), self.cancel, width=110, height=40)
         self.btn_cancel.pack(side="right", padx=(8, 0))
-        self.btn_confirm = primary_button(self.bottom, "Add to queue", self.confirm_selection, height=40)
+        self.btn_confirm = primary_button(self.bottom, tr("playlist.add", count=0), self.confirm_selection, height=40)
         self.btn_confirm.pack(side="right", fill="x", expand=True)
 
         self._add_rows(0)
@@ -265,10 +352,10 @@ class PlaylistSelector(ctk.CTkToplevel):
 
     def _update_count(self):
         count = len(self.selected_items())
-        self.lbl_count.configure(text=f"{count} selected")
+        self.lbl_count.configure(text=tr("playlist.selected", count=count))
         # An empty selection cannot be confirmed (ISSUES.md #24).
         set_primary_state(self.btn_confirm, "normal" if count else "disabled",
-                          text=f"Add {count} to queue" if count else "Nothing selected")
+                          text=tr("playlist.add", count=count) if count else tr("playlist.none"))
 
     def select_all(self):
         for var in self.vars: var.set(1)
@@ -297,90 +384,91 @@ class PlaylistSelector(ctk.CTkToplevel):
         self.destroy()
         self.callback(result)
 
-class SettingsDialog(ctk.CTkToplevel):
-    """Modal settings: appearance, what happens after a download, about.
+class SettingsView(ctk.CTkFrame):
+    """The settings page, shown inside the main window in place of the
+    download page: appearance, language, what happens after a download,
+    shortcuts and about.
 
     Every change applies at once and is saved; ``on_change(name, value)``
-    tells the app which setting changed.
+    tells the app which setting changed. ``on_back`` returns to the
+    download page (also Esc).
     """
 
     SHORTCUTS = (
-        ("Enter", "Analyze the link"),
-        ("Ctrl+Enter", "Start the download"),
-        ("Esc", "Cancel the download"),
-        ("Ctrl+O", "Choose the download folder"),
-        ("Ctrl+,", "Open settings"),
+        ("Enter", "shortcut.analyze"),
+        ("Ctrl+Enter", "shortcut.download"),
+        ("Esc", "shortcut.cancel"),
+        ("Ctrl+O", "shortcut.folder"),
+        ("Ctrl+,", "shortcut.settings"),
     )
 
-    def __init__(self, parent, settings, tools, on_change):
-        super().__init__(parent, fg_color=BG)
-        self.title("Settings")
-        self.transient(parent)
-        # CustomTkinter puts its own icon on new windows shortly after
-        # they open, so the app icon is set now and again after that.
-        set_window_icon(self)
-        self.after(250, set_window_icon, self)
-        self.protocol("WM_DELETE_WINDOW", self.close)
-        self.bind("<Escape>", lambda _e: self.close())
+    def __init__(self, parent, settings, tools, on_change, on_back):
+        super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.on_change = on_change
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(self, text="Settings", font=font(22, "bold"), text_color=TEXT, anchor="w").grid(
-            row=0, column=0, sticky="ew", padx=24, pady=(20, 8))
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=(32, 28), pady=(18, 10))
+        self.btn_back = secondary_button(header, "\u2190  " + tr("settings.back"), on_back, width=110)
+        self.btn_back.pack(side="left")
+        ctk.CTkLabel(header, text=tr("settings.title"), font=font(22, "bold"), text_color=TEXT).pack(
+            side="left", padx=16)
+
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        body.grid(row=1, column=0, sticky="nsew", padx=12)
+        body.grid(row=1, column=0, sticky="nsew", padx=(20, 12), pady=(0, 16))
         body.grid_columnconfigure(0, weight=1)
+        self.body = body
 
         # Appearance
-        look = self._section(body, 0, "Appearance")
-        self._row_label(look, 1, "Theme", "Follow Windows, or always dark or light.")
-        self.seg_theme = segmented(look, list(settings_store.THEMES), lambda v: self.on_change("theme", v))
+        look = self._section(body, 0, tr("settings.appearance"))
+        self._row_label(look, 1, tr("settings.language"), tr("settings.language_hint"))
+        languages = [i18n.AUTO, *i18n.LANGUAGES]
+        self.cmb_language = option_menu(
+            look, languages, lambda v: self.on_change("language", v), width=240,
+            label=lambda c: tr("settings.language_auto") if c == i18n.AUTO else i18n.LANGUAGES[c])
+        self.cmb_language.set(settings.language)
+        self.cmb_language.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 14))
+        self._row_label(look, 3, tr("settings.theme"), tr("settings.theme_hint"))
+        self.seg_theme = segmented(look, list(settings_store.THEMES), lambda v: self.on_change("theme", v),
+                                   label=lambda v: tr(f"theme.{v}"))
         self.seg_theme.set(settings.theme)
-        self.seg_theme.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 14))
-        self._row_label(look, 3, "Text size", "Makes all text and controls bigger.")
-        self.seg_text = segmented(look, list(settings_store.TEXT_SIZES), lambda v: self.on_change("text_size", v))
+        self.seg_theme.grid(row=4, column=0, sticky="w", padx=16, pady=(0, 14))
+        self._row_label(look, 5, tr("settings.text_size"), tr("settings.text_size_hint"))
+        self.seg_text = segmented(look, list(settings_store.TEXT_SIZES), lambda v: self.on_change("text_size", v),
+                                  label=lambda v: tr(f"size.{v}"))
         self.seg_text.set(settings.text_size)
-        self.seg_text.grid(row=4, column=0, sticky="w", padx=16, pady=(0, 16))
+        self.seg_text.grid(row=6, column=0, sticky="w", padx=16, pady=(0, 16))
 
         # After downloading
-        after = self._section(body, 1, "When downloads finish")
-        self.sw_summary = self._switch(after, 1, "Show a summary window", settings.show_summary, "show_summary")
-        self.sw_open = self._switch(after, 2, "Open the download folder", settings.open_folder_when_done,
+        after = self._section(body, 1, tr("settings.finish"))
+        self.sw_summary = self._switch(after, 1, tr("settings.summary"), settings.show_summary, "show_summary")
+        self.sw_open = self._switch(after, 2, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
 
         # Keyboard
-        keys = self._section(body, 2, "Keyboard shortcuts")
+        keys = self._section(body, 2, tr("settings.shortcuts"))
         for i, (key, action) in enumerate(self.SHORTCUTS, start=1):
             row = ctk.CTkFrame(keys, fg_color="transparent")
             row.grid(row=i, column=0, sticky="ew", padx=16, pady=(0, 8 if i < len(self.SHORTCUTS) else 16))
             ctk.CTkLabel(row, text=key, font=font(12, "bold"), text_color=TEXT, fg_color=FIELD, corner_radius=6,
                          width=96, height=26).pack(side="left")
-            ctk.CTkLabel(row, text=action, font=font(13), text_color=TEXT, anchor="w").pack(side="left", padx=12)
+            ctk.CTkLabel(row, text=tr(action), font=font(13), text_color=TEXT, anchor="w").pack(
+                side="left", padx=12)
 
         # About
-        about = self._section(body, 3, "About")
+        about = self._section(body, 3, tr("settings.about"))
         ctk.CTkLabel(about, text=f"{DISPLAY_NAME} {__version__}", font=font(13, "bold"), text_color=TEXT,
                      anchor="w").grid(row=1, column=0, sticky="ew", padx=16)
-        tools_text = tools.summary() if tools is not None else "Checking FFmpeg..."
+        tools_text = tools.summary() if tools is not None else tr("top.ffmpeg_checking")
         ctk.CTkLabel(about, text=tools_text, font=font(12), text_color=MUTED, anchor="w", justify="left",
-                     wraplength=440).grid(row=2, column=0, sticky="ew", padx=16, pady=(4, 10))
-        self.btn_logs = secondary_button(about, "Open log folder", self.open_logs, width=150, height=34)
+                     wraplength=640).grid(row=2, column=0, sticky="ew", padx=16, pady=(4, 10))
+        self.btn_logs = secondary_button(about, tr("settings.logs"), self.open_logs, width=150, height=34)
         self.btn_logs.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 16))
-
-        footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.grid(row=2, column=0, sticky="ew", padx=24, pady=16)
-        self.btn_done = primary_button(footer, "Done", self.close, width=120, height=40)
-        self.btn_done.pack(side="right")
-        self.fit()
-        self.after(100, self._grab)
-
-    def fit(self):
-        fit_dialog(self, (560, 660), (480, 420))
 
     def _section(self, parent, row, title):
         frame = card(parent)
-        frame.grid(row=row, column=0, sticky="ew", padx=12, pady=(0, 12))
+        frame.grid(row=row, column=0, sticky="ew", padx=(12, 16), pady=(0, 12))
         frame.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(frame, text=title, font=font(15, "bold"), text_color=TEXT, anchor="w").grid(
             row=0, column=0, sticky="ew", padx=16, pady=(14, 10))
@@ -401,20 +489,6 @@ class SettingsDialog(ctk.CTkToplevel):
 
     def open_logs(self):
         open_path(app_setup.data_dir())
-
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except Exception:
-            pass
-
-    def close(self):
-        try:
-            self.grab_release()
-        except Exception:
-            pass
-        self.destroy()
 
 
 def open_path(folder):
@@ -446,6 +520,10 @@ class App(ctk.CTk):
         self.settings = settings_store.load(self.settings_path, default_download_dir())
         ctk.set_appearance_mode(self.settings.theme)
         ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
+        i18n.set_language(self.settings.language)
+        # Widgets whose text is translated: (widget, option) -> function giving
+        # the text, re-run when the language changes (see _live).
+        self._texts = {}
 
         self.manager = DownloadManager()
         self.download_folder = self.settings.download_folder
@@ -477,7 +555,7 @@ class App(ctk.CTk):
         self._poll_id = None
         self.tools = None
 
-        self.settings_dialog = None
+        self.settings_view = None
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self.create_top_bar()
@@ -538,14 +616,18 @@ class App(ctk.CTk):
         status.pack(side="left", padx=(0, 12))
         self.lbl_status_dot = ctk.CTkLabel(status, text="\u25cf", font=font(13), text_color=MUTED, width=14)
         self.lbl_status_dot.pack(side="left", padx=(12, 4), pady=4)
-        self.lbl_status = ctk.CTkLabel(status, text="Checking FFmpeg...", font=font(12), text_color=MUTED)
+        self.lbl_status = ctk.CTkLabel(status, text="", font=font(12), text_color=MUTED)
+        self._live(self.lbl_status, lambda: tr("top.ffmpeg_checking"))
         self.lbl_status.pack(side="left", padx=(0, 14), pady=4)
-        self.btn_settings = secondary_button(right, "\u2699  Settings", self.open_settings, width=120, height=36)
+        self.btn_settings = secondary_button(right, "", self.toggle_settings, width=120, height=36)
+        self._live(self.btn_settings, lambda: "\u2699  " + tr("top.settings"))
         self.btn_settings.pack(side="left")
         self._refresh_logo_bg()
 
-    def _section_label(self, parent, text):
-        return section_label(parent, text)
+    def _section_label(self, parent, key):
+        label = section_label(parent, "")
+        self._live(label, lambda: tr(key))
+        return label
 
     def create_main_view(self):
         # Scrolls only when the window cannot be tall enough for its content
@@ -568,54 +650,57 @@ class App(ctk.CTk):
         self.url_entry.grid(row=0, column=0, sticky="ew", padx=(16, 8), pady=16)
         self.url_entry.bind("<KeyRelease>", self._on_url_changed)
         self.url_entry.bind("<Return>", lambda _e: self.start_analysis_thread())
-        self.btn_paste = secondary_button(url_card, "Paste", self.paste_url, width=80, height=44)
+        self.btn_paste = secondary_button(url_card, "", self.paste_url, width=80, height=44)
+        self._live(self.btn_paste, lambda: tr("link.paste"))
         self.btn_paste.grid(row=0, column=1, padx=(0, 8), pady=16)
-        self.btn_analyze = primary_button(url_card, "Analyze", self.start_analysis_thread, width=120, height=44,
+        self.btn_analyze = primary_button(url_card, "", self.start_analysis_thread, width=120, height=44,
                                           font=font(14, "bold"))
+        self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self.btn_analyze.grid(row=0, column=2, padx=(0, 16), pady=16)
-        self.lbl_media = ctk.CTkLabel(url_card, text=MEDIA_HINT, font=font(13), text_color=MUTED,
+        self.lbl_media = ctk.CTkLabel(url_card, text="", font=font(13), text_color=MUTED,
                                       anchor="w", justify="left")
         self.lbl_media.grid(row=1, column=0, columnspan=3, sticky="ew", padx=18, pady=(0, 14))
+        self._show_media(lambda: tr("link.hint"), MUTED)
 
         # Options
         opt_card = card(self.main_frame)
         opt_card.grid(row=2, column=0, sticky="ew", pady=(0, 12))
         opt_card.grid_columnconfigure((1, 3), weight=1)
-        self._section_label(opt_card, "MODE").grid(row=0, column=0, sticky="w", padx=(16, 12), pady=(16, 8))
-        self.cmb_mode = segmented(opt_card, list(formats.MODES), self._on_mode_changed)
+        self._section_label(opt_card, "options.mode").grid(row=0, column=0, sticky="w", padx=(16, 12), pady=(16, 8))
+        self.cmb_mode = segmented(opt_card, list(formats.MODES), self._on_mode_changed,
+                                  label=lambda m: tr(MODE_KEYS[m]))
         self.cmb_mode.grid(row=0, column=1, columnspan=3, sticky="w", pady=(16, 8))
-        self._section_label(opt_card, "FORMAT").grid(row=1, column=0, sticky="w", padx=(16, 12), pady=8)
-        self.cmb_format = ctk.CTkOptionMenu(opt_card, values=["mp4"], command=lambda _v: self._save_settings(),
-                                            width=150, height=34, font=font(13), fg_color=SECONDARY,
-                                            button_color=SECONDARY, button_hover_color=SECONDARY_HOVER,
-                                            text_color=TEXT, dropdown_font=font(13))
+        self._section_label(opt_card, "options.format").grid(row=1, column=0, sticky="w", padx=(16, 12), pady=8)
+        self.cmb_format = option_menu(opt_card, ["mp4"], lambda _v: self._save_settings(), width=150)
         self.cmb_format.grid(row=1, column=1, sticky="w", pady=8)
-        self._section_label(opt_card, "QUALITY").grid(row=1, column=2, sticky="w", padx=(16, 12), pady=8)
-        self.cmb_quality = ctk.CTkOptionMenu(opt_card, values=["Best"], command=lambda _v: self._save_settings(),
-                                             width=150, height=34, font=font(13), fg_color=SECONDARY,
-                                             button_color=SECONDARY, button_hover_color=SECONDARY_HOVER,
-                                             text_color=TEXT, dropdown_font=font(13))
+        self._section_label(opt_card, "options.quality").grid(row=1, column=2, sticky="w", padx=(16, 12), pady=8)
+        self.cmb_quality = option_menu(opt_card, ["Best"], lambda _v: self._save_settings(), width=170,
+                                       label=lambda q: tr("quality.best") if q == "Best" else q)
         self.cmb_quality.grid(row=1, column=3, sticky="w", pady=8)
 
-        self._section_label(opt_card, "TRIM").grid(row=2, column=0, sticky="w", padx=(16, 12), pady=(8, 12))
+        self._section_label(opt_card, "options.trim").grid(row=2, column=0, sticky="w", padx=(16, 12), pady=(8, 12))
         trim_row = ctk.CTkFrame(opt_card, fg_color="transparent")
         trim_row.grid(row=2, column=1, columnspan=3, sticky="w", pady=(8, 12))
-        self.chk_trim = switch(trim_row, "Only part of the video", self.toggle_trim)
+        self.chk_trim = switch(trim_row, "", self.toggle_trim)
+        self._live(self.chk_trim, lambda: tr("trim.switch"))
         self.chk_trim.grid(row=0, column=0, padx=(0, 16))
-        self.ent_start = ctk.CTkEntry(trim_row, placeholder_text="Start  0:10", width=110, height=32,
-                                      fg_color=FIELD, border_width=0)
+        self.ent_start = ctk.CTkEntry(trim_row, width=110, height=32, fg_color=FIELD, border_width=0)
+        self._live(self.ent_start, lambda: tr("trim.start"), "placeholder_text")
         self.ent_start.grid(row=0, column=1, padx=(0, 6))
-        ctk.CTkLabel(trim_row, text="to", text_color=MUTED, font=font(13)).grid(row=0, column=2, padx=4)
-        self.ent_end = ctk.CTkEntry(trim_row, placeholder_text="End  1:30", width=110, height=32,
-                                    fg_color=FIELD, border_width=0)
+        lbl_to = ctk.CTkLabel(trim_row, text="", text_color=MUTED, font=font(13))
+        lbl_to.grid(row=0, column=2, padx=4)
+        self._live(lbl_to, lambda: tr("trim.to"))
+        self.ent_end = ctk.CTkEntry(trim_row, width=110, height=32, fg_color=FIELD, border_width=0)
+        self._live(self.ent_end, lambda: tr("trim.end"), "placeholder_text")
         self.ent_end.grid(row=0, column=3, padx=(6, 12))
-        self.lbl_trim_hint = ctk.CTkLabel(trim_row, text="SS, MM:SS or HH:MM:SS", text_color=MUTED, font=font(12))
+        self.lbl_trim_hint = ctk.CTkLabel(trim_row, text="", text_color=MUTED, font=font(12))
+        self._live(self.lbl_trim_hint, lambda: tr("trim.hint"))
         self.lbl_trim_hint.grid(row=0, column=4)
         self.toggle_trim()
 
         ctk.CTkFrame(opt_card, height=1, corner_radius=0, fg_color=CARD_BORDER).grid(row=3, column=0, columnspan=4, sticky="ew",
                                                                     padx=16)
-        self._section_label(opt_card, "SAVE TO").grid(row=4, column=0, sticky="w", padx=(16, 12), pady=12)
+        self._section_label(opt_card, "options.save_to").grid(row=4, column=0, sticky="w", padx=(16, 12), pady=12)
         folder_row = ctk.CTkFrame(opt_card, fg_color="transparent")
         folder_row.grid(row=4, column=1, columnspan=3, sticky="ew", padx=(0, 16), pady=12)
         folder_row.grid_columnconfigure(0, weight=1)
@@ -623,9 +708,11 @@ class App(ctk.CTk):
                                        corner_radius=8, height=36, anchor="w")
         self.lbl_folder.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.lbl_folder.bind("<Double-Button-1>", lambda _e: self.open_folder())
-        self.btn_dest = secondary_button(folder_row, "Change...", self.select_folder, width=100)
+        self.btn_dest = secondary_button(folder_row, "", self.select_folder, width=100)
+        self._live(self.btn_dest, lambda: tr("folder.change"))
         self.btn_dest.grid(row=0, column=1, padx=(0, 8))
-        self.btn_open = secondary_button(folder_row, "Open", self.open_folder, width=80)
+        self.btn_open = secondary_button(folder_row, "", self.open_folder, width=80)
+        self._live(self.btn_open, lambda: tr("folder.open"))
         self.btn_open.grid(row=0, column=2)
         self._show_folder()
 
@@ -633,22 +720,24 @@ class App(ctk.CTk):
         actions = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         actions.grid(row=3, column=0, sticky="ew", pady=(0, 12))
         actions.grid_columnconfigure(0, weight=1)
-        self.btn_download = primary_button(actions, "Download", self.start_download_queue, height=48,
+        self.btn_download = primary_button(actions, "", self.start_download_queue, height=48,
                                            corner_radius=10, font=font(16, "bold"))
         set_primary_state(self.btn_download, "disabled")
+        self._live(self.btn_download, lambda: tr("action.download"))
         self.btn_download.grid(row=0, column=0, sticky="ew")
-        self.btn_cancel = secondary_button(actions, "Cancel", self.cancel_job, width=110, height=48,
-                                           state="disabled")
+        self.btn_cancel = secondary_button(actions, "", self.cancel_job, width=110, height=48, state="disabled")
+        self._live(self.btn_cancel, lambda: tr("action.cancel"))
         self.btn_cancel.grid(row=0, column=1, padx=(10, 0))
-        self.btn_retry = secondary_button(actions, "Retry failed", self.retry_failed, width=140, height=48,
-                                          state="disabled")
+        self.btn_retry = secondary_button(actions, "", self.retry_failed, width=140, height=48, state="disabled")
+        self._live(self.btn_retry, lambda: tr("action.retry"))
         self.btn_retry.grid(row=0, column=2, padx=(10, 0))
 
         # Progress
         prog_card = card(self.main_frame)
         prog_card.grid(row=4, column=0, sticky="ew", pady=(0, 12))
         prog_card.grid_columnconfigure(0, weight=1)
-        self.lbl_item = ctk.CTkLabel(prog_card, text="Ready", font=font(13, "bold"), text_color=TEXT, anchor="w")
+        self.lbl_item = ctk.CTkLabel(prog_card, text="", font=font(13, "bold"), text_color=TEXT, anchor="w")
+        self._live(self.lbl_item, lambda: tr("progress.ready"))
         self.lbl_item.grid(row=0, column=0, columnspan=2, sticky="ew", padx=16, pady=(14, 6))
         self.progress_bar = ctk.CTkProgressBar(prog_card, height=10, corner_radius=5, progress_color=ACCENT,
                                                fg_color=SECONDARY)
@@ -664,7 +753,7 @@ class App(ctk.CTk):
         log_card.grid(row=5, column=0, sticky="nsew")
         log_card.grid_columnconfigure(0, weight=1)
         log_card.grid_rowconfigure(1, weight=1)
-        self._section_label(log_card, "ACTIVITY").grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+        self._section_label(log_card, "activity.title").grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
         self.console = ctk.CTkTextbox(log_card, height=100, font=ctk.CTkFont(family="Consolas", size=12),
                                       fg_color="transparent", text_color=TEXT, wrap="word")
         self.console.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
@@ -672,9 +761,32 @@ class App(ctk.CTk):
         for card_widget in self.main_frame.grid_slaves():
             card_widget.grid_configure(padx=(0, 16))
         self._scroll_canvas.bind("<Configure>", lambda _e: self.after_idle(self._fill_height), add="+")
-        self.log("Welcome! Paste a link and press Analyze.")
+        self.log(tr("activity.welcome"))
 
     # --- small UI helpers ---------------------------------------------------
+
+    def _live(self, widget, text, option="text"):
+        """Show ``text()`` on ``widget`` now and again after a language change."""
+        self._texts[(widget, option)] = text
+        widget.configure(**{option: text()})
+
+    def _show_media(self, text, color):
+        """The line under the link field: a hint, what was found, or an error."""
+        self.lbl_media.configure(text_color=color)
+        self._live(self.lbl_media, text)
+
+    def _apply_language(self):
+        """Redraw every translated text in the current language."""
+        for (widget, option), text in list(self._texts.items()):
+            try:
+                widget.configure(**{option: text()})
+            except tkinter.TclError:
+                del self._texts[(widget, option)]  # widget gone
+        for choice in (self.cmb_mode, self.cmb_quality):
+            choice.relabel()
+        if self.settings_view is not None:
+            # Rebuilt after the language menu's own callback has returned.
+            self.after_idle(self._rebuild_settings_view)
 
     def log(self, message):
         """Queue a console line; safe to call from any thread."""
@@ -683,16 +795,19 @@ class App(ctk.CTk):
         self.console.insert("end", f"> {message}\n")
         self.console.see("end")
     def _show_progress(self, fraction, text, detail=""):
+        """``text`` and ``detail`` are strings, or functions for translated text."""
         self.progress_bar.set(fraction)
-        self.lbl_progress.configure(text=text)
-        self.lbl_detail.configure(text=detail)
+        self._live(self.lbl_progress, text if callable(text) else (lambda: text))
+        self._live(self.lbl_detail, detail if callable(detail) else (lambda: detail))
     def _show_stage(self, text):
-        self.lbl_detail.configure(text=text)
+        self._live(self.lbl_detail, lambda: i18n.tr_message(text))
     def _on_item_started(self, position, total, title):
-        prefix = f"{position} of {total}:  " if total > 1 else ""
-        self.lbl_item.configure(text=f"{prefix}{title}")
+        if total > 1:
+            self._live(self.lbl_item, lambda: tr("progress.item", position=position, total=total, title=title))
+        else:
+            self._live(self.lbl_item, lambda: title)
         self.progress_bar.configure(progress_color=ACCENT)
-        self._show_progress(0, "Starting...")
+        self._show_progress(0, lambda: tr("progress.starting"))
     def _show_folder(self):
         self.lbl_folder.configure(text="   " + shorten_path(self.download_folder))
     def _refresh_logo_bg(self):
@@ -705,7 +820,7 @@ class App(ctk.CTk):
         self._refresh_logo_bg()
         self._save_settings()
     def _on_setting_changed(self, name, value):
-        """Called by the settings dialog; applies and saves one setting."""
+        """Called by the settings page; applies and saves one setting."""
         if name == "theme":
             self._on_theme_changed(value)
             return
@@ -713,8 +828,9 @@ class App(ctk.CTk):
         if name == "text_size":
             ctk.set_widget_scaling(settings_store.TEXT_SIZES[value])
             self.after(50, self._fit_to_content)
-            if self.settings_dialog is not None and self.settings_dialog.winfo_exists():
-                self.settings_dialog.after(60, self.settings_dialog.fit)
+        elif name == "language":
+            i18n.set_language(value)
+            self._apply_language()
         self._save_settings()
     LOG_HEIGHT = 100  # activity box height the window is sized for
     LOG_MIN_HEIGHT = 60
@@ -760,13 +876,43 @@ class App(ctk.CTk):
             pass
 
     def open_settings(self):
-        if self.settings_dialog is not None and self.settings_dialog.winfo_exists():
-            self.settings_dialog.focus_force()
+        """Show the settings page in place of the download page."""
+        if self.settings_view is not None:
             return
-        self.settings_dialog = SettingsDialog(self, self.settings, self.tools, self._on_setting_changed)
+        self._build_settings_view()
+        self.main_frame.grid_remove()
+        self.settings_view.btn_back.focus_set()
+    def toggle_settings(self):
+        if self.settings_view is None:
+            self.open_settings()
+        else:
+            self.close_settings()
+    def _rebuild_settings_view(self):
+        if self.settings_view is not None:
+            self._build_settings_view()
+            self.settings_view.cmb_language.focus_set()
+    def _build_settings_view(self):
+        if self.settings_view is not None:
+            self.settings_view.destroy()
+        self.settings_view = SettingsView(self, self.settings, self.tools, self._on_setting_changed,
+                                          self.close_settings)
+        self.settings_view.grid(row=1, column=0, sticky="nsew")
+    def close_settings(self):
+        """Back to the download page."""
+        if self.settings_view is None:
+            return
+        self.settings_view.destroy()
+        self.settings_view = None
+        self.main_frame.grid()
+        self.after_idle(self._fill_height)
+    def _on_escape(self):
+        if self.settings_view is not None:
+            self.close_settings()
+        else:
+            self.cancel_job()
     def _bind_shortcuts(self):
         self.bind("<Control-Return>", lambda _e: self._shortcut(self.start_download_queue, self.btn_download))
-        self.bind("<Escape>", lambda _e: self.cancel_job())
+        self.bind("<Escape>", lambda _e: self._on_escape())
         self.bind("<Control-o>", lambda _e: self._shortcut(self.select_folder, self.btn_dest))
         self.bind("<Control-comma>", lambda _e: self.open_settings())
         # The link field's own Enter binding would otherwise also run.
@@ -774,8 +920,9 @@ class App(ctk.CTk):
                             lambda _e: self._shortcut(self.start_download_queue, self.btn_download))
         self.after(300, self.url_entry.focus_set)
     def _shortcut(self, action, button):
-        # A shortcut does what its button does, and only when it is enabled.
-        if button.cget("state") == "normal":
+        # A shortcut does what its button does, and only when it is enabled
+        # and on screen.
+        if self.settings_view is None and button.cget("state") == "normal":
             action()
         return "break"
     def _save_settings(self):
@@ -794,11 +941,11 @@ class App(ctk.CTk):
     def _on_mode_changed(self, mode, save=True):
         """Offer only the formats and qualities that are valid for ``mode``."""
         choices = formats.formats_for_mode(mode)
-        self.cmb_format.configure(values=choices)
+        self.cmb_format.set_choices(choices)
         if self.cmb_format.get() not in choices:
             self.cmb_format.set(choices[0])
         qualities = formats.qualities_for_mode(mode)
-        self.cmb_quality.configure(values=qualities)
+        self.cmb_quality.set_choices(qualities)
         if self.cmb_quality.get() not in qualities:
             self.cmb_quality.set(qualities[0])
         if save:
@@ -813,7 +960,7 @@ class App(ctk.CTk):
             self.download_folder = os.path.normpath(folder)
             self._show_folder()
             self._save_settings()
-            self._append_log(f"Saving to {self.download_folder}")
+            self._append_log(tr("log.folder", folder=self.download_folder))
     def open_folder(self):
         folder = self.download_folder
         try:
@@ -829,7 +976,9 @@ class App(ctk.CTk):
         self.url_entry.insert(0, text)
         self._on_url_changed()
     def _set_status(self, text, color):
-        self.lbl_status.configure(text=text, text_color=color)
+        """``text`` is a function returning the (translated) status text."""
+        self.lbl_status.configure(text_color=color)
+        self._live(self.lbl_status, text)
         self.lbl_status_dot.configure(text_color=color)
     def is_busy(self):
         return self._job_kind is not None
@@ -865,8 +1014,8 @@ class App(ctk.CTk):
         self.ent_end.configure(state=trim_state)
         # Only downloads can be cancelled; analysis is a single request
         # bounded by the network timeout.
-        self.btn_cancel.configure(state="normal" if busy and self._job_kind == "download" else "disabled",
-                                  text="Cancel")
+        self.btn_cancel.configure(state="normal" if busy and self._job_kind == "download" else "disabled")
+        self._live(self.btn_cancel, lambda: tr("action.cancel"))
         set_primary_state(self.btn_analyze, state)
         if busy:
             set_primary_state(self.btn_download, "disabled")
@@ -878,12 +1027,12 @@ class App(ctk.CTk):
     def _refresh_download_button(self):
         count = len(self.download_queue)
         if self.tools is not None and not self.tools.ok:
-            set_primary_state(self.btn_download, "disabled", text="FFmpeg missing")
-        elif count:
-            set_primary_state(self.btn_download, "normal",
-                              text=f"Download {count} items" if count > 1 else "Download")
+            set_primary_state(self.btn_download, "disabled")
+            self._live(self.btn_download, lambda: tr("top.ffmpeg_missing"))
         else:
-            set_primary_state(self.btn_download, "disabled", text="Download")
+            set_primary_state(self.btn_download, "normal" if count else "disabled")
+            self._live(self.btn_download,
+                       lambda: tr("action.download_n", count=count) if count > 1 else tr("action.download"))
 
     def _failed_items(self):
         if self.last_summary is None:
@@ -893,24 +1042,23 @@ class App(ctk.CTk):
 
     def _refresh_retry_button(self):
         count = len(self._failed_items())
-        if count:
-            self.btn_retry.configure(state="normal", text=f"Retry {count} failed")
-        else:
-            self.btn_retry.configure(state="disabled", text="Retry failed")
+        self.btn_retry.configure(state="normal" if count else "disabled")
+        self._live(self.btn_retry, lambda: tr("action.retry_n", count=count) if count else tr("action.retry"))
 
     def cancel_job(self):
         """Ask the running download to stop; results arrive via job_done."""
         if self._job_kind != "download" or self._cancel_event.is_set():
             return
         self._cancel_event.set()
-        self.btn_cancel.configure(state="disabled", text="Cancelling...")
-        self._append_log("Cancelling...")
+        self.btn_cancel.configure(state="disabled")
+        self._live(self.btn_cancel, lambda: tr("action.cancelling"))
+        self._append_log(tr("action.cancelling"))
 
     def retry_failed(self):
         items = self._failed_items()
         if not items or self.is_busy():
             return
-        self._append_log(f"Retrying {len(items)} failed item(s).")
+        self._append_log(tr("log.retrying", count=len(items)))
         self.download_queue = items
         self.skipped_items = []
         self.start_download_queue()
@@ -922,8 +1070,7 @@ class App(ctk.CTk):
         if self._closing:
             return
         if self._job_kind == "download":
-            if not messagebox.askyesno("Download in progress",
-                                       "A download is still running. Cancel it and quit?", parent=self):
+            if not messagebox.askyesno(tr("quit.title"), tr("quit.body"), parent=self):
                 return
             self._closing = True
             self.cancel_job()
@@ -956,9 +1103,10 @@ class App(ctk.CTk):
             return
         try:
             url = urls.normalize_url(self.url_entry.get())
-        except ValueError as e:
+        except urls.UrlError as e:
             # Rejected before any network request (ISSUES.md #32).
-            self.lbl_media.configure(text=str(e), text_color=DANGER)
+            key, values = e.key, e.values  # ``e`` is unbound after the except block
+            self._show_media(lambda: tr(key, **values), DANGER)
             return
         if url != self.url_entry.get().strip():
             self.url_entry.delete(0, "end")
@@ -967,10 +1115,10 @@ class App(ctk.CTk):
         self.analyzed_url = None
         self.set_queue([])
         self._show_progress(0, "0%")
-        self.lbl_item.configure(text="Ready")
+        self._live(self.lbl_item, lambda: tr("progress.ready"))
         if self._start_job("analysis", self.run_analysis, url):
-            self.btn_analyze.configure(text="Checking...")
-            self.lbl_media.configure(text="Reading the link...", text_color=MUTED)
+            self._live(self.btn_analyze, lambda: tr("link.checking"))
+            self._show_media(lambda: tr("link.reading"), MUTED)
     def run_tool_check(self):
         """Worker thread: find and verify FFmpeg/ffprobe."""
         try:
@@ -983,14 +1131,15 @@ class App(ctk.CTk):
         self._end_job()
         self._append_log(status.summary())
         if status.ok:
-            self._set_status(f"FFmpeg {status.version.split('-')[0]} ready", SUCCESS)
+            version = status.version.split('-')[0]
+            self._set_status(lambda: tr("top.ffmpeg_ready", version=version), SUCCESS)
         else:
-            self._set_status("FFmpeg missing", DANGER)
-            messagebox.showerror("FFmpeg missing", f"{status.error}\n\nDownloads are disabled.", parent=self)
+            self._set_status(lambda: tr("top.ffmpeg_missing"), DANGER)
+            messagebox.showerror(tr("top.ffmpeg_missing"), tr("ffmpeg.body", error=status.error), parent=self)
     def run_analysis(self, url):
         """Worker thread: fetch info and post the result; no widget access."""
         try:
-            self.log("Fetching info...")
+            self.log(tr("log.fetching"))
             info = self.manager.fetch_info(url)
             if info is None:
                 self.events.post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
@@ -1002,51 +1151,56 @@ class App(ctk.CTk):
             self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
     def _on_analysis_failed(self, message):
         self._append_log(message)
-        self.btn_analyze.configure(text="Analyze")
-        self.lbl_media.configure(text=message, text_color=DANGER)
+        self._live(self.btn_analyze, lambda: tr("link.analyze"))
+        self._show_media(lambda: message, DANGER)
         self._end_job()
     def _on_analysis_done(self, analysis, url):
-        self.btn_analyze.configure(text="Analyze")
+        self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._end_job()
         self._describe_analysis(analysis)
         for item in analysis.skipped:
-            self._append_log(f"Skipped: {item.title} ({item.skip_reason})")
+            self._append_log(tr("log.skipped_entry", title=item.title, reason=i18n.tr_message(item.skip_reason)))
         if not analysis.items:
-            message = "Nothing downloadable was found at this link."
+            message = tr("link.nothing")
             if analysis.skipped:
-                message = f"Nothing downloadable: {analysis.skipped[0].skip_reason}."
+                message = tr("link.nothing_reason", reason=i18n.tr_message(analysis.skipped[0].skip_reason))
             self._append_log(message)
-            messagebox.showwarning("Nothing to download", message, parent=self)
+            messagebox.showwarning(tr("link.nothing_title"), message, parent=self)
             return
         if analysis.is_playlist:
-            self._append_log(f"Playlist: {analysis.title} ({len(analysis.items)} downloadable, "
-                             f"{len(analysis.skipped)} skipped)")
+            self._append_log(tr("log.playlist", title=analysis.title, count=len(analysis.items),
+                                skipped=len(analysis.skipped)))
             self._pending_skipped = [item.as_dict() for item in analysis.skipped]
             self.playlist_dialog = PlaylistSelector(
                 self, analysis, lambda items: self._on_playlist_selected(url, items))
         else:
-            self._append_log(f"Single Video: {analysis.title}")
+            self._append_log(tr("log.video", title=analysis.title))
             self.analyzed_url = url
             self.set_queue([item.as_dict() for item in analysis.items])
     def _describe_analysis(self, analysis):
+        title = analysis.title
         if not analysis.items:
-            self.lbl_media.configure(text=f"{analysis.title}: nothing downloadable", text_color=WARNING)
+            self._show_media(lambda: tr("link.nothing_short", title=title), WARNING)
             return
-        if analysis.is_playlist:
-            detail = f"Playlist  \u00b7  {len(analysis.items)} videos"
-            if analysis.skipped:
-                detail += f"  \u00b7  {len(analysis.skipped)} unavailable"
-        else:
-            duration = analysis.items[0].duration
-            detail = "Video" + (f"  \u00b7  {format_duration(duration)}" if duration else "")
-        self.lbl_media.configure(text=f"{analysis.title}\n{detail}", text_color=TEXT)
+        count, skipped = len(analysis.items), len(analysis.skipped)
+        duration = analysis.items[0].duration
+
+        def text():
+            if analysis.is_playlist:
+                parts = [tr("media.playlist"), tr("media.videos", count=count)]
+                if skipped:
+                    parts.append(tr("media.unavailable", count=skipped))
+            else:
+                parts = [tr("media.video")] + ([format_duration(duration)] if duration else [])
+            return f"{title}\n" + "  \u00b7  ".join(parts)
+        self._show_media(text, TEXT)
     def _on_playlist_selected(self, url, items):
         self.playlist_dialog = None
         if items is None:
-            self._append_log("Playlist selection cancelled.")
+            self._append_log(tr("log.selection_cancelled"))
             return
         if self.url_entry.get().strip() != url:
-            self._append_log("The link changed; analyse it again.")
+            self._append_log(tr("link.changed"))
             return
         self.analyzed_url = url
         self.set_queue([item.as_dict() for item in items], skipped=self._pending_skipped)
@@ -1055,7 +1209,7 @@ class App(ctk.CTk):
         # Entries that cannot be downloaded; reported as skipped in the result.
         self.skipped_items = list(skipped) if self.download_queue else []
         if self.download_queue:
-            self.log(f"Queue ready: {len(self.download_queue)} item(s).")
+            self.log(tr("log.queue", count=len(self.download_queue)))
         if not self.is_busy():
             self._refresh_download_button()
     def start_download_queue(self):
@@ -1064,15 +1218,15 @@ class App(ctk.CTk):
             # Kötü trim değerleriyle kuyruğu hiç başlatma
             try:
                 if parse_trim_range(self.ent_start.get(), self.ent_end.get()) is None:
-                    raise TrimError("Enter a trim start and/or end time")
+                    raise TrimError(tr("trim.empty"))
             except TrimError as e:
                 self.log(f"Trim error: {e}")
-                messagebox.showerror("Invalid trim range", str(e), parent=self)
+                messagebox.showerror(tr("trim.error_title"), str(e), parent=self)
                 return
         error, warning = filenames.check_folder(self.download_folder)
         if error:
             self._append_log(error)
-            messagebox.showerror("Download folder", error, parent=self)
+            messagebox.showerror(tr("folder.error_title"), error, parent=self)
             return
         if warning:
             self._append_log(f"Warning: {warning}")
@@ -1085,7 +1239,7 @@ class App(ctk.CTk):
             'trim_end': self.ent_end.get() if self.chk_trim.get() else None
         }
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
-            self.btn_download.configure(text="Downloading...")
+            self._live(self.btn_download, lambda: tr("action.downloading"))
     def run_queue(self, items, opts, cancel_event=None):
         """Worker thread: download each item and post events; no widget access."""
         summary = JobSummary()
@@ -1121,25 +1275,30 @@ class App(ctk.CTk):
         # Bound at start so a later job's event cannot leak into this one.
         self.run_queue(items, opts, self._cancel_event)
     def _on_item_done(self, result):
-        self._append_log(result.describe())
+        self._append_log(describe_result(result))
     def _on_job_done(self, summary):
-        self._append_log(f"Result: {summary.headline()}")
+        self._append_log(tr("log.result", summary=summary.headline(
+            label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))))
         self.last_summary = summary
         self._end_job()
         if self._closing:
             return
-        self.lbl_item.configure(text=f"{summary.title()}: {summary.headline()}")
+        def headline():
+            return summary.headline(label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))
+        self._live(self.lbl_item, lambda: f"{tr(summary.title_key())}: {headline()}")
         done = len(summary.with_status(ItemStatus.COMPLETED))
         self.progress_bar.configure(progress_color=SUCCESS if summary.all_ok else WARNING if done else DANGER)
         if summary.all_ok:
-            self._show_progress(1, "Complete")
+            self._show_progress(1, lambda: tr("progress.complete"))
         else:
-            self._show_progress(done / len(summary.results) if summary.results else 0, summary.headline())
+            self._show_progress(done / len(summary.results) if summary.results else 0, headline)
         if done and self.settings.open_folder_when_done:
             self.open_folder()
         if self.settings.show_summary:
             show = messagebox.showinfo if summary.all_ok else messagebox.showwarning
-            show(summary.title(), summary.report(), parent=self)
+            report = summary.report(label=lambda status: tr("status." + status.value),
+                                    nothing=tr("summary.nothing"), more=tr("summary.more", count="{count}"))
+            show(tr(summary.title_key()), report, parent=self)
     def progress_hook(self, d):
         """yt-dlp progress and postprocessor hook; runs on the worker thread."""
         stage = events.stage_from_hook(d)
@@ -1149,7 +1308,15 @@ class App(ctk.CTk):
         progress = events.progress_from_hook(d)
         if progress is not None:
             fraction, text = progress
-            self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=events.detail_from_hook(d))
+            self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=events.detail_from_hook(d, left=tr("progress.left", time="{time}")))
+
+
+def describe_result(result):
+    """One translated activity line for a finished item (see ItemResult.describe)."""
+    if result.status is ItemStatus.COMPLETED:
+        return tr("log.saved", path=result.path)
+    line = tr("log." + result.status.value, title=result.title)
+    return line + (f" ({i18n.tr_message(result.error)})" if result.error else "")
 
 
 def format_duration(seconds):

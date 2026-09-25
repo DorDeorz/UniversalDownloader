@@ -43,6 +43,12 @@ With it, `bin\deno.exe` is bundled next to FFmpeg when present;
 `PATH`, where yt-dlp looks for Deno, and logs at startup whether it found
 one.
 
+`curl_cffi` (in `requirements.txt`) lets yt-dlp make browser-like requests.
+TikTok needs it: without it TikTok answers with a page yt-dlp cannot read
+("Unexpected response from webpage request"). yt-dlp's PyInstaller hook
+bundles it automatically, the preflight refuses to build without it, and the
+app logs at startup whether it is available.
+
 `installer\UniversalDownloader.iss` (Inno Setup 6) makes
 `dist\UniversalDownloader-Setup-<version>.exe`, which:
 

@@ -70,6 +70,18 @@ def base_ydl_options(log_callback=None):
     }
 
 
+def impersonation_available():
+    """True when yt-dlp can impersonate a browser (curl_cffi is installed).
+
+    TikTok's extractor asks for impersonation; without it TikTok often
+    answers with a challenge page instead of the video data.
+    """
+    from yt_dlp.networking.common import _REQUEST_HANDLERS
+    from yt_dlp.networking.impersonate import ImpersonateRequestHandler
+    return any(issubclass(handler, ImpersonateRequestHandler) and handler.supported_targets
+               for handler in _REQUEST_HANDLERS.values())
+
+
 SOCKET_TIMEOUT = 30
 RETRIES = 5
 
@@ -236,6 +248,10 @@ class DownloadManager:
                 _log.info("JavaScript runtime for YouTube: %s", deno)
             else:
                 _log.warning("No Deno found; yt-dlp may offer fewer YouTube formats")
+            if impersonation_available():
+                _log.info("Browser impersonation (curl_cffi) is available")
+            else:
+                _log.warning("curl_cffi is missing; TikTok and some other sites may refuse downloads")
         return self.tools
 
     def fetch_info(self, url, log_callback=None):

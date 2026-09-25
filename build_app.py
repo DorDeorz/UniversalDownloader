@@ -65,7 +65,17 @@ def check_deno(path, run=subprocess.run):
     return None
 
 
-def preflight(root=ROOT, run=subprocess.run, require_windows=True, require_deno=False):
+def check_impersonation(available=None):
+    """Error text when yt-dlp cannot impersonate a browser (no curl_cffi)."""
+    if available is None:
+        from logic import impersonation_available
+        available = impersonation_available()
+    if not available:
+        return "curl_cffi is not installed; TikTok downloads would fail (pip install -r requirements.txt)"
+    return None
+
+
+def preflight(root=ROOT, run=subprocess.run, require_windows=True, require_deno=False, impersonation=None):
     """All problems that must be fixed before building."""
     problems = []
     if require_windows and sys.platform != "win32":
@@ -84,6 +94,9 @@ def preflight(root=ROOT, run=subprocess.run, require_windows=True, require_deno=
     for name in ("app.png", "THIRD_PARTY_NOTICES.md"):
         if not os.path.isfile(os.path.join(root, name)):
             problems.append(f"{name} not found")
+    impersonate = check_impersonation(impersonation)
+    if impersonate:
+        problems.append(impersonate)
     if require_deno:
         deno = check_deno(os.path.join(bin_dir, "deno.exe"), run)
         if deno:
@@ -121,7 +134,7 @@ def write_manifest(exe_path, dist=DIST, root=ROOT):
         for name, digest in sums.items():
             f.write(f"{digest}  {name}\n")
     packages = {}
-    for name in ("customtkinter", "yt-dlp", "yt-dlp-ejs", "mutagen", "certifi", "pyinstaller"):
+    for name in ("customtkinter", "yt-dlp", "yt-dlp-ejs", "curl-cffi", "mutagen", "certifi", "pyinstaller"):
         try:
             packages[name] = metadata.version(name)
         except metadata.PackageNotFoundError:

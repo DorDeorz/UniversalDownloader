@@ -4,6 +4,8 @@ Covers ISSUES.md #2 (certificate verification disabled), #5 (errors
 silenced by ignoreerrors/quiet/no_warnings) and #26 (error type lost).
 yt_dlp.YoutubeDL is replaced with a fake, so no network is used.
 """
+import sys
+
 import pytest
 import yt_dlp
 
@@ -117,3 +119,35 @@ def test_fetch_info_keeps_reason_when_ignoreerrors_returns_none(fake_ydl, manage
         "error": "[generic] x: Unable to download webpage: certificate verify failed",
         "error_type": "DownloadError",
     }
+
+
+def _error_text(monkeypatch, options):
+    # Pretend stderr is a colour console, as it is on Windows.
+    monkeypatch.setattr(sys.modules["yt_dlp.YoutubeDL"], "supports_terminal_sequences", lambda stream: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+    with yt_dlp.YoutubeDL(options) as ydl:
+        with pytest.raises(yt_dlp.utils.DownloadError) as exc:
+            ydl.report_error("boom")
+    return str(exc.value)
+
+
+def test_errors_have_no_colour_codes_on_a_colour_console(monkeypatch):
+    lines = []
+    options = logic.base_ydl_options(lines.append)
+    # Without the option yt-dlp colours the message (what Windows users saw).
+    assert "\x1b[" in _error_text(monkeypatch, {k: v for k, v in options.items() if k != "color"})
+    text = _error_text(monkeypatch, options)
+    assert "\x1b" not in text
+    assert logic.describe_error(text) == "boom"
+    assert all("\x1b" not in line for line in lines)
+
+
+def test_colour_codes_are_stripped_from_messages():
+    lines = []
+    logger = logic.YtDlpLogger(lines.append)
+    logger.error("\x1b[0;31mERROR:\x1b[0m video unavailable")
+    logger.warning("\x1b[0;33mslow\x1b[0m")
+    assert lines == ["ERROR: video unavailable", "Warning: slow"]
+    assert logger.errors == ["video unavailable"]
+    assert logic.describe_error(RuntimeError("\x1b[0;31mERROR:\x1b[0m 403")) == "403"

@@ -26,6 +26,7 @@ class YtDlpLogger:
         self.errors = []
 
     def _emit(self, level, prefix, msg):
+        msg = strip_ansi(msg)
         _log.log(level, msg)
         if self.log_callback is not None:
             self.log_callback(f"{prefix}{msg}")
@@ -55,6 +56,9 @@ def base_ydl_options(log_callback=None):
     return {
         'logger': YtDlpLogger(log_callback),
         'noprogress': True,
+        # yt-dlp colours messages when stderr is a console (as on Windows),
+        # and the escape codes would end up in the UI log and dialogs.
+        'color': 'no_color',
         # Give up on a stalled connection instead of hanging forever, and
         # retry transient network errors a bounded number of times.
         'socket_timeout': SOCKET_TIMEOUT,
@@ -74,10 +78,24 @@ class PartialFiles:
 
     yt-dlp reports its working names through progress hooks; it also leaves
     ``.part``, ``.ytdl`` and ``.part-FragN`` files next to them.
+
+    :meth:`claim` registers the output base name chosen for the item. It was
+    free when chosen (see ``filenames.unique_base``), so every file that
+    starts with it (thumbnail, ``.fNNN`` format parts, ``.temp`` files)
+    belongs to this download. A folder the download created is removed too
+    when it is left empty.
     """
 
     def __init__(self):
         self.paths = set()
+        self.bases = set()
+        self.folders = []
+
+    def claim(self, base, new_folders=()):
+        """Own every file starting with ``base.`` and the folders listed
+        (outermost first) that this download created."""
+        self.bases.add(base)
+        self.folders.extend(new_folders)
 
     def track(self, d):
         for key in ('tmpfilename', 'filename'):
@@ -102,12 +120,37 @@ class PartialFiles:
                     pass
                 except OSError as e:
                     _log.warning("Could not remove partial file %s: %s", candidate, e)
+        for base in self.bases:
+            folder, prefix = os.path.dirname(base) or '.', os.path.basename(base) + '.'
+            if not os.path.isdir(folder):
+                continue
+            for f in os.listdir(folder):
+                path = os.path.join(folder, f)
+                if f.startswith(prefix) and os.path.isfile(path):
+                    try:
+                        os.remove(path)
+                        removed.append(path)
+                    except OSError as e:
+                        _log.warning("Could not remove partial file %s: %s", path, e)
+        for folder in reversed(self.folders):
+            try:
+                os.rmdir(folder)  # only succeeds when empty
+            except OSError:
+                pass
         return removed
+
+
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+
+
+def strip_ansi(text):
+    """Remove terminal colour codes such as '\x1b[0;31m'."""
+    return _ANSI_RE.sub('', str(text))
 
 
 def describe_error(exc):
     """Readable message for a yt-dlp or other exception, without yt-dlp's 'ERROR: ' prefix."""
-    msg = str(exc).strip()
+    msg = strip_ansi(exc).strip()
     if msg.startswith('ERROR: '):
         msg = msg[len('ERROR: '):]
     return msg or type(exc).__name__
@@ -314,11 +357,16 @@ class DownloadManager:
             check_cancel()
             # Phase 2: download with options that depend on the selection.
             folder = filenames.output_folder(base_folder, info, options.get('playlist_title'))
+            # The chosen download folder is never removed; only the
+            # platform or playlist folders made for this item can be.
+            os.makedirs(base_folder, exist_ok=True)
+            new_folders = _missing_folders(folder)
             os.makedirs(folder, exist_ok=True)
             ydl_opts['outtmpl'] = filenames.output_template(folder, options.get('playlist_index'))
             with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
                 prepared = ydl.prepare_filename(info)
             base = filenames.unique_base(prepared, plan.ext)
+            partial.claim(base, new_folders)
             if base != os.path.splitext(prepared)[0] and log_callback:
                 log_callback(f"File exists; saving as {os.path.basename(base)}.{plan.ext}")
             ydl_opts['outtmpl'] = filenames.escape_template(base) + '.%(ext)s'
@@ -350,6 +398,18 @@ class DownloadManager:
         if problem:
             return failed(problem)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
+
+
+def _missing_folders(folder):
+    """``folder`` and its parents that do not exist yet, outermost first."""
+    missing = []
+    while folder and not os.path.exists(folder):
+        missing.append(folder)
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            break
+        folder = parent
+    return list(reversed(missing))
 
 
 def explain_format_error(message, mode, quality):

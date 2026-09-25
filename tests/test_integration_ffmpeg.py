@@ -206,3 +206,25 @@ def test_cancel_stops_and_cleans_up(manager, server, tmp_path, monkeypatch):
 
     assert result.status is ItemStatus.CANCELLED
     assert [f for _, _, files in os.walk(tmp_path) for f in files] == []
+
+
+def test_cancel_removes_the_thumbnail_and_new_folders(manager, server, media, tmp_path, monkeypatch):
+    # A web page with a video and a thumbnail: yt-dlp writes the thumbnail
+    # before the video, so a cancel used to leave it behind.
+    subprocess.run([TOOLS.ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=red:s=64x36",
+                    "-frames:v", "1", str(media / "thumb.webp")], check=True)
+    (media / "page.html").write_text(
+        f'<html><head><title>Page clip</title><meta property="og:image" content="{server}/thumb.webp">'
+        f'</head><body><video src="{server}/clip.mp4"></video></body></html>')
+    monkeypatch.setattr(_Handler, "throttle", 0.05)
+    cancel = threading.Event()
+
+    def hook(d):
+        if d.get("status") == "downloading":
+            cancel.set()
+
+    result = manager.download_video(f"{server}/page.html", {"save_path": str(tmp_path), "format": "mkv"},
+                                    progress_hook=hook, cancel_event=cancel)
+
+    assert result.status is ItemStatus.CANCELLED
+    assert list(tmp_path.iterdir()) == []

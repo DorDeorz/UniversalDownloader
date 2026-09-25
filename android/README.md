@@ -113,7 +113,5 @@ Download the `.apk` on the phone and open it. Android asks to allow
 "Install unknown apps" for the browser or file manager you opened it from;
 allow it, go back and tap **Install**. Play Protect may warn about an
 unknown developer; choose **More details → Install anyway**. The APK is
-debug-signed. The workflow caches its debug key, so later previews install
-over earlier ones built with that key; Android refuses an update signed
-with another key (for example 0.1.0), and then the old app has to be
-uninstalled first.
+debug-signed, so a later preview installs over it only if it was built with
+the same debug key; otherwise uninstall the old one first.

@@ -112,12 +112,6 @@ jobs:
           path: ~/.buildozer
           key: buildozer-${{ matrix.arch }}-${{ env.BUILDOZER_VERSION }}-${{ env.P4A_VERSION }}-${{ hashFiles('android/buildozer.spec') }}
           restore-keys: buildozer-${{ matrix.arch }}-${{ env.BUILDOZER_VERSION }}-${{ env.P4A_VERSION }}-
-      # The same debug key for every build, so a new preview installs over
-      # the previous one instead of asking to uninstall it first.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-v1
       - name: Build APK
         working-directory: android
         env:

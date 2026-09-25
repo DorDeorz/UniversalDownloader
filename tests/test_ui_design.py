@@ -535,3 +535,55 @@ def test_place_on_screen_caps_size_and_keeps_window_visible():
     # Sizes are in CustomTkinter units (pixels / 1.25); the position moves up.
     assert window.calls["geometry"] == f"1040x{round(992 / 1.25)}+100+0"
     assert window.calls["minsize"] == (900, int(992 / 1.25))
+
+
+@needs_display
+def test_zz_trace_mode_button_width(monkeypatch):  # TEMPORARY diagnostic
+    import traceback
+    ui_helpers.isolate_settings(monkeypatch)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    log = []
+    watched = set()
+
+    def wrap(cls, name):
+        orig = getattr(cls, name)
+
+        def f(self, *a, **k):
+            before = self.winfo_reqwidth() if self in watched else None
+            out = orig(self, *a, **k)
+            if self in watched:
+                after = self.winfo_reqwidth()
+                stack = " < ".join(f"{fr.name}:{fr.lineno}" for fr in traceback.extract_stack()[-7:-1])
+                log.append(f"{name}{a}{k} req {before}->{after} | {stack}")
+            return out
+        monkeypatch.setattr(cls, name, f)
+
+    for name in ("configure", "_set_scaling", "_set_dimensions", "_draw", "_create_grid", "_update_dimensions_event"):
+        wrap(ctk.CTkButton, name)
+    orig_init = ui.ChoiceSegment.__init__
+
+    def init(self, *a, **k):
+        orig_init(self, *a, **k)
+        watched.update(self._buttons_dict.values())
+        log.append(f"created {[b.winfo_reqwidth() for b in self._buttons_dict.values()]}")
+    monkeypatch.setattr(ui.ChoiceSegment, "__init__", init)
+    window = new_app()
+    try:
+        m = window.cmb_mode
+        b = list(m._buttons_dict.values())[0]
+        log.append(f"after App() {b.winfo_reqwidth()}")
+        seen = []
+
+        def poll():
+            seen.append(b.winfo_reqwidth())
+            window.after(5, poll)
+        poll()
+        window.after(1500, window.quit)
+        window.mainloop()
+        log.append(f"polled {sorted(set(seen), key=seen.index)} final {b.winfo_reqwidth()}")
+        tkinter.Frame.configure(b, width=1)
+        window.update()
+        log.append(f"raw frame width=1 -> {b.winfo_reqwidth()}")
+    finally:
+        window.destroy()
+    assert sys.platform != "win32", "\n".join(log[:200])

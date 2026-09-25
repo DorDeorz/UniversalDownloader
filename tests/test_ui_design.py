@@ -1,6 +1,7 @@
 """Tests for the redesigned main window: link checks, saved settings,
 progress details and the end-of-job display. They drive a real window."""
 
+import json
 import os
 import sys
 
@@ -15,6 +16,7 @@ import i18n  # noqa: E402
 import playlist  # noqa: E402
 import ui  # noqa: E402
 from results import ItemResult, ItemStatus, JobSummary  # noqa: E402
+import ui_helpers  # noqa: E402
 from ui_helpers import ToolsOnlyManager, make_app, new_app, pump  # noqa: E402
 
 needs_display = pytest.mark.skipif(
@@ -352,13 +354,59 @@ def test_activity_box_takes_spare_height(app):
 
 
 @needs_display
-def test_settings_page_fits_larger_text(app, larger_text):
+@pytest.mark.parametrize("screen, dpi, text_size, language", [
+    ((1280, 720), 1.0, "Larger", "tr"),
+    ((1366, 768), 1.0, "Larger", "ru"),
+    ((1366, 768), 1.25, "Normal", "de"),
+    ((1366, 768), 1.25, "Larger", "tr"),
+    ((1920, 1080), 1.5, "Larger", "de"),
+])
+def test_settings_page_fits_without_scrolling(monkeypatch, screen, dpi, text_size, language):
+    # Windows display scaling (125%, 150%) is simulated for every window.
+    monkeypatch.setattr(ctk.ScalingTracker, "get_window_dpi_scaling", classmethod(lambda cls, window: dpi))
+    monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, screen[0], screen[1] - 40))  # taskbar
+    ui_helpers.isolate_settings(monkeypatch)
+    folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
+    os.makedirs(folder)
+    with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump({"text_size": text_size, "language": language}, f)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    window = new_app()
+    try:
+        pump(window, timeout=0.5)
+        window.open_settings()
+        pump(window, timeout=0.5)
+        view = window.settings_view
+        assert not any(isinstance(w, ctk.CTkScrollableFrame) for w in _descendants(view))
+        assert view.content_fits
+        assert view.winfo_reqheight() <= view.winfo_height() + 1
+        assert _outer_bottom(window) <= screen[1] - 40
+    finally:
+        window.destroy()
+        ctk.set_widget_scaling(1.0)
+
+
+def _descendants(widget):
+    for child in widget.winfo_children():
+        yield child
+        yield from _descendants(child)
+
+
+@needs_display
+def test_settings_page_drops_hints_before_it_would_overflow(app):
+    app.geometry("1040x800")
     app.open_settings()
     pump(app, timeout=0.3)
     view = app.settings_view
-    # The page scrolls inside the window instead of growing past it.
-    assert view.winfo_height() <= app.winfo_height()
-    assert view.btn_back.winfo_ismapped()
+    assert view.hints_shown and not view.tight
+    app.minsize(200, 200)
+    app.geometry("1040x520")
+    pump(app, timeout=0.5)
+    assert not view.hints_shown
+    assert view.content_fits
+    app.geometry("1040x800")
+    pump(app, timeout=0.5)
+    assert view.hints_shown and not view.tight  # roomy again when there is space
 
 
 @needs_display

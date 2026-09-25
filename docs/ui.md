@@ -33,8 +33,15 @@ the work area and uses the app icon.
 
 The Settings button (or Ctrl+,) opens the settings page inside the main
 window, in place of the download page; Back, Esc or the Settings button
-again return to it. The page scrolls when it does not fit. Changes apply at
-once and are saved:
+again return to it. Changes apply at once and are saved.
+
+The page never scrolls. Its cards sit in two columns (appearance on the
+left; finish actions and shortcuts on the right). When the window is too
+short, the hints under the appearance settings are hidden first, then the
+spacing tightens. It fits at every text size on 1280x720 and 1366x768 at
+100%, 1366x768 at 125% and 1920x1080 at 150% Windows scaling. The one
+setup found that does not fit is Larger text at 150% scaling on a
+1280x720 screen. The settings are:
 
 - **Language**: one of 25 languages, or the system language (the
   default). The whole window switches at once, without a restart.
@@ -43,8 +50,8 @@ once and are saved:
   controls.
 - **When downloads finish**: show a summary window (on by default) and
   open the download folder (off by default; only when something was saved).
-- **Keyboard shortcuts** and **About** (version, FFmpeg found, a button to
-  open the log folder).
+- **Keyboard shortcuts**. The page header also shows the version and a
+  button that opens the log folder.
 
 ## Keyboard
 

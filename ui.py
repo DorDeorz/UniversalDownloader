@@ -386,8 +386,13 @@ class PlaylistSelector(ctk.CTkToplevel):
 
 class SettingsView(ctk.CTkFrame):
     """The settings page, shown inside the main window in place of the
-    download page: appearance, language, what happens after a download,
-    shortcuts and about.
+    download page: appearance and language, what happens after a download,
+    and the keyboard shortcuts.
+
+    The page never scrolls: its cards sit in two columns, and the hints
+    under each appearance setting are hidden when the window is too short
+    for them (large text on a small screen). Below ``TWO_COLUMNS`` units of
+    width the cards stack in one column.
 
     Every change applies at once and is saved; ``on_change(name, value)``
     tells the app which setting changed. ``on_back`` returns to the
@@ -401,91 +406,164 @@ class SettingsView(ctk.CTkFrame):
         ("Ctrl+O", "shortcut.folder"),
         ("Ctrl+,", "shortcut.settings"),
     )
+    TWO_COLUMNS = 680  # narrowest width (in unscaled units) for two columns
 
-    def __init__(self, parent, settings, tools, on_change, on_back):
+    def __init__(self, parent, settings, on_change, on_back):
         super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.on_change = on_change
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
+        self._hints = []
+        self._columns = None
+        self.hints_shown = True
+        self.content_fits = True
+        self._spacing = []  # (widget, normal pady, tight pady) for short windows
+        self.tight = False
 
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=(32, 28), pady=(18, 10))
-        self.btn_back = secondary_button(header, "\u2190  " + tr("settings.back"), on_back, width=110)
-        self.btn_back.pack(side="left")
-        ctk.CTkLabel(header, text=tr("settings.title"), font=font(22, "bold"), text_color=TEXT).pack(
-            side="left", padx=16)
+        header.grid(row=0, column=0, sticky="ew", padx=32, pady=(14, 10))
+        self._spacing.append((header, (14, 10), (8, 8)))
+        header.grid_columnconfigure(2, weight=1)
+        self.btn_back = secondary_button(header, "\u2190  " + tr("settings.back"), on_back, width=100, height=34)
+        self.btn_back.grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(header, text=tr("settings.title"), font=font(20, "bold"), text_color=TEXT).grid(
+            row=0, column=1, sticky="w", padx=16)
+        ctk.CTkLabel(header, text=f"{DISPLAY_NAME} {__version__}", font=font(12), text_color=MUTED).grid(
+            row=0, column=2, sticky="e", padx=12)
+        self.btn_logs = secondary_button(header, tr("settings.logs"), self.open_logs, height=34)
+        self.btn_logs.grid(row=0, column=3, sticky="e")
 
-        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        body.grid(row=1, column=0, sticky="nsew", padx=(20, 12), pady=(0, 16))
-        body.grid_columnconfigure(0, weight=1)
-        self.body = body
+        self.body = body = ctk.CTkFrame(self, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="new", padx=32, pady=(0, 16))
 
         # Appearance
-        look = self._section(body, 0, tr("settings.appearance"))
+        self.card_look = look = self._section(body, tr("settings.appearance"))
         self._row_label(look, 1, tr("settings.language"), tr("settings.language_hint"))
         languages = [i18n.AUTO, *i18n.LANGUAGES]
         self.cmb_language = option_menu(
             look, languages, lambda v: self.on_change("language", v), width=240,
             label=lambda c: tr("settings.language_auto") if c == i18n.AUTO else i18n.LANGUAGES[c])
         self.cmb_language.set(settings.language)
-        self.cmb_language.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 14))
-        self._row_label(look, 3, tr("settings.theme"), tr("settings.theme_hint"))
+        self.cmb_language.grid(row=3, column=0, sticky="w", padx=16)
+        self._spacing.append((self.cmb_language, (0, 12), (0, 8)))
+        self._row_label(look, 4, tr("settings.theme"), tr("settings.theme_hint"))
         self.seg_theme = segmented(look, list(settings_store.THEMES), lambda v: self.on_change("theme", v),
                                    label=lambda v: tr(f"theme.{v}"))
         self.seg_theme.set(settings.theme)
-        self.seg_theme.grid(row=4, column=0, sticky="w", padx=16, pady=(0, 14))
-        self._row_label(look, 5, tr("settings.text_size"), tr("settings.text_size_hint"))
+        self.seg_theme.grid(row=6, column=0, sticky="w", padx=16)
+        self._spacing.append((self.seg_theme, (0, 12), (0, 8)))
+        self._row_label(look, 7, tr("settings.text_size"), tr("settings.text_size_hint"))
         self.seg_text = segmented(look, list(settings_store.TEXT_SIZES), lambda v: self.on_change("text_size", v),
                                   label=lambda v: tr(f"size.{v}"))
         self.seg_text.set(settings.text_size)
-        self.seg_text.grid(row=6, column=0, sticky="w", padx=16, pady=(0, 16))
+        self.seg_text.grid(row=9, column=0, sticky="w", padx=16)
+        self._spacing.append((self.seg_text, (0, 14), (0, 10)))
 
         # After downloading
-        after = self._section(body, 1, tr("settings.finish"))
+        self.card_finish = after = self._section(body, tr("settings.finish"))
         self.sw_summary = self._switch(after, 1, tr("settings.summary"), settings.show_summary, "show_summary")
         self.sw_open = self._switch(after, 2, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
+        self._spacing[-1] = (self.sw_open, (0, 14), (0, 10))
 
         # Keyboard
-        keys = self._section(body, 2, tr("settings.shortcuts"))
+        self.card_keys = keys = self._section(body, tr("settings.shortcuts"))
+        keys.grid_columnconfigure(1, weight=1)
         for i, (key, action) in enumerate(self.SHORTCUTS, start=1):
-            row = ctk.CTkFrame(keys, fg_color="transparent")
-            row.grid(row=i, column=0, sticky="ew", padx=16, pady=(0, 8 if i < len(self.SHORTCUTS) else 16))
-            ctk.CTkLabel(row, text=key, font=font(12, "bold"), text_color=TEXT, fg_color=FIELD, corner_radius=6,
-                         width=96, height=26).pack(side="left")
-            ctk.CTkLabel(row, text=tr(action), font=font(13), text_color=TEXT, anchor="w").pack(
-                side="left", padx=12)
+            last = i == len(self.SHORTCUTS)
+            chip = ctk.CTkLabel(keys, text=key, font=font(12, "bold"), text_color=TEXT, fg_color=FIELD,
+                                corner_radius=6, width=88, height=24)
+            chip.grid(row=i, column=0, sticky="w", padx=(16, 10))
+            text = ctk.CTkLabel(keys, text=tr(action), font=font(12), text_color=TEXT, anchor="w", justify="left",
+                                height=24)
+            text.grid(row=i, column=1, sticky="ew", padx=(0, 16))
+            for widget in (chip, text):
+                self._spacing.append((widget, (0, 14 if last else 6), (0, 10 if last else 3)))
+        self.card_keys.grid_columnconfigure(0, weight=0)
 
-        # About
-        about = self._section(body, 3, tr("settings.about"))
-        ctk.CTkLabel(about, text=f"{DISPLAY_NAME} {__version__}", font=font(13, "bold"), text_color=TEXT,
-                     anchor="w").grid(row=1, column=0, sticky="ew", padx=16)
-        tools_text = tools.summary() if tools is not None else tr("top.ffmpeg_checking")
-        ctk.CTkLabel(about, text=tools_text, font=font(12), text_color=MUTED, anchor="w", justify="left",
-                     wraplength=640).grid(row=2, column=0, sticky="ew", padx=16, pady=(4, 10))
-        self.btn_logs = secondary_button(about, tr("settings.logs"), self.open_logs, width=150, height=34)
-        self.btn_logs.grid(row=3, column=0, sticky="w", padx=16, pady=(0, 16))
+        self._set_tight(False)
+        self._fit_pending = False
+        # The frame's own resize event (CTkFrame.bind would bind its canvas).
+        tkinter.Misc.bind(self, "<Configure>", self._schedule_fit, "+")
 
-    def _section(self, parent, row, title):
+    def _section(self, parent, title):
         frame = card(parent)
-        frame.grid(row=row, column=0, sticky="ew", padx=(12, 16), pady=(0, 12))
         frame.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(frame, text=title, font=font(15, "bold"), text_color=TEXT, anchor="w").grid(
-            row=0, column=0, sticky="ew", padx=16, pady=(14, 10))
+        label = ctk.CTkLabel(frame, text=title, font=font(15, "bold"), text_color=TEXT, anchor="w")
+        label.grid(row=0, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((label, (12, 8), (8, 4)))
         return frame
 
     def _row_label(self, parent, row, title, hint):
-        box = ctk.CTkFrame(parent, fg_color="transparent")
-        box.grid(row=row, column=0, sticky="ew", padx=16, pady=(0, 6))
-        ctk.CTkLabel(box, text=title, font=font(13, "bold"), text_color=TEXT, anchor="w").pack(anchor="w")
-        ctk.CTkLabel(box, text=hint, font=font(12), text_color=MUTED, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(parent, text=title, font=font(13, "bold"), text_color=TEXT, anchor="w").grid(
+            row=row, column=0, sticky="ew", padx=16, pady=(0, 4))
+        label = ctk.CTkLabel(parent, text=hint, font=font(12), text_color=MUTED, anchor="w", justify="left")
+        label.grid(row=row + 1, column=0, sticky="ew", padx=16, pady=(0, 6))
+        self._hints.append(label)
 
     def _switch(self, parent, row, text, value, name):
         widget = switch(parent, text, lambda: self.on_change(name, bool(widget.get())))
         if value:
             widget.select()
-        widget.grid(row=row, column=0, sticky="w", padx=16, pady=(0, 14))
+        widget.grid(row=row, column=0, sticky="w", padx=16)
+        self._spacing.append((widget, (0, 10), (0, 6)))
         return widget
+
+    def _layout(self, columns):
+        """Place the cards in one column or two."""
+        self._columns = columns
+        body = self.body
+        for c in range(2):
+            body.grid_columnconfigure(c, weight=1 if c < columns else 0, uniform="col" if columns == 2 else "")
+        for r in range(3):
+            body.grid_rowconfigure(r, weight=1 if (columns == 2 and r == 2) else 0)
+        if columns == 2:
+            # An empty last row takes the spare height, so the right cards stay together.
+            self.card_look.grid(row=0, column=0, rowspan=3, sticky="nsew", padx=(0, 8))
+            self.card_finish.grid(row=0, column=1, sticky="new", padx=(8, 0), pady=(0, 12))
+            self.card_keys.grid(row=1, column=1, sticky="new", padx=(8, 0))
+        else:
+            self.card_look.grid(row=0, column=0, rowspan=1, sticky="ew", padx=0, pady=(0, 12))
+            self.card_finish.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 12))
+            self.card_keys.grid(row=2, column=0, sticky="ew", padx=0)
+
+    def _set_tight(self, tight):
+        self.tight = tight
+        for widget, normal, small in self._spacing:
+            widget.grid_configure(pady=small if tight else normal)
+
+    def _show_hints(self, show):
+        self.hints_shown = show
+        for label in self._hints:
+            label.grid() if show else label.grid_remove()
+
+    def _schedule_fit(self, _event=None):
+        if not self._fit_pending:
+            self._fit_pending = True
+            self.after_idle(self._fit)
+
+    def _fit(self):
+        """Choose the columns for the width, then the roomiest spacing that fits:
+        hints and normal spacing, no hints, or no hints and tight spacing."""
+        self._fit_pending = False
+        try:
+            scale = ctk.ScalingTracker.get_widget_scaling(self)
+            columns = 2 if self.winfo_width() / scale >= self.TWO_COLUMNS else 1
+            if columns != self._columns:
+                self._layout(columns)
+            self.update_idletasks()
+            available = self.winfo_height()
+            for hints, tight in ((True, False), (False, False), (False, True)):
+                if (hints, tight) != (self.hints_shown, self.tight):
+                    self._show_hints(hints)
+                    self._set_tight(tight)
+                    self.update_idletasks()
+                need = self.winfo_reqheight()
+                if need <= available + 1:
+                    break
+            self.content_fits = need <= available + 1
+        except tkinter.TclError:
+            pass  # page closed
 
     def open_logs(self):
         open_path(app_setup.data_dir())
@@ -894,8 +972,7 @@ class App(ctk.CTk):
     def _build_settings_view(self):
         if self.settings_view is not None:
             self.settings_view.destroy()
-        self.settings_view = SettingsView(self, self.settings, self.tools, self._on_setting_changed,
-                                          self.close_settings)
+        self.settings_view = SettingsView(self, self.settings, self._on_setting_changed, self.close_settings)
         self.settings_view.grid(row=1, column=0, sticky="nsew")
     def close_settings(self):
         """Back to the download page."""

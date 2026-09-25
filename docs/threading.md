@@ -54,8 +54,10 @@ results of a different URL.
   progress hook and the postprocessor hook raise `DownloadCancelled` when it
   is set, so a download stops at its next progress update and conversions
   stop before the next step. The item is reported as `cancelled`, the files
-  it was writing (`.part`, `.ytdl`, `.part-FragN` and finished intermediate
-  streams) are removed, and the remaining queue items are reported as
+  it was writing (`.part`, `.ytdl`, `.part-FragN`, finished intermediate
+  streams and the thumbnail: every file starting with the item's output
+  name) are removed, as are platform or playlist folders the item created
+  if they are left empty, and the remaining queue items are reported as
   `cancelled` without starting.
 - **Network limits**: every yt-dlp instance uses a 30 s socket timeout and
   bounded retries (`retries`, `fragment_retries`, `extractor_retries`), so a

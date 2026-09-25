@@ -9,6 +9,9 @@ All `yt_dlp.YoutubeDL` instances are built from `logic.base_ydl_options()`.
   goes through `logic.YtDlpLogger`. Warnings and errors are forwarded to the
   optional `log_callback` (prefixed `Warning: ` for warnings) and to the
   `logic` Python logger; routine output goes to the logger at debug level.
+- **No colour codes.** yt-dlp colours messages when stderr is a console (as
+  on Windows), so the options set `color='no_color'`, and the logger and
+  `describe_error` also strip any ANSI codes left in a message.
 - **Single downloads raise on failure.** `download_video` does not use
   `ignoreerrors`, so any failure (network, extractor, format, postprocessor)
   reaches `error_callback` and `complete_callback` is not called. A missing
@@ -18,5 +21,3 @@ All `yt_dlp.YoutubeDL` instances are built from `logic.base_ydl_options()`.
   but the entry errors are still logged, and when the whole lookup fails the
   returned `{'error', 'error_type'}` carries yt-dlp's real reason.
 
-The UI does not yet pass `log_callback`; that wiring lands with the UI event
-queue change so log lines are delivered on the main thread.

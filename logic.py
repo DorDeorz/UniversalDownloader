@@ -84,13 +84,13 @@ class DownloadManager:
         else:
             # Video Modları
             if quality == 'Best':
-                ydl_opts['format'] = f"bestvideo+bestaudio/best"
+                ydl_opts['format'] = "bestvideo+bestaudio/best"
             elif quality == '4K':
-                ydl_opts['format'] = f"bestvideo[height<=2160]+bestaudio/best"
+                ydl_opts['format'] = "bestvideo[height<=2160]+bestaudio/best"
             elif quality == '1080p':
-                ydl_opts['format'] = f"bestvideo[height<=1080]+bestaudio/best"
+                ydl_opts['format'] = "bestvideo[height<=1080]+bestaudio/best"
             elif quality == '720p':
-                ydl_opts['format'] = f"bestvideo[height<=720]+bestaudio/best"
+                ydl_opts['format'] = "bestvideo[height<=720]+bestaudio/best"
             else:
                 ydl_opts['format'] = "best"
             

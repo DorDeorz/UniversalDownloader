@@ -1,0 +1,21 @@
+[project]
+name = "universaldownloader"
+version = "0.1.0"
+description = "Windows desktop media downloader built on CustomTkinter, yt-dlp and FFmpeg"
+requires-python = ">=3.11"
+# Exact pins live in requirements.txt / requirements-dev.txt.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+xfail_strict = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Start with errors that are always bugs (syntax, undefined names, unused imports).
+# Widen the rule set once the existing code has been cleaned up step by step.
+select = ["E9", "F"]

@@ -1,6 +1,4 @@
-import sys
 import ctypes
-import os
 from ui import App
 
 # --- 1. UYGULAMA KİMLİĞİNİ TANIMLA (APP ID) ---

@@ -1,5 +1,6 @@
-customtkinter
-yt-dlp
-ffmpeg-python
-pillow
-pyinstaller
+# Runtime dependencies, pinned for reproducible builds.
+# Upgrade deliberately: bump the pin, run the tests, rebuild.
+customtkinter==6.0.0
+darkdetect==0.8.0
+packaging==26.3
+yt-dlp==2026.8.19

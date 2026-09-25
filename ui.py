@@ -1,7 +1,6 @@
 import customtkinter as ctk
 import threading
 import os
-import sys
 from tkinter import filedialog, messagebox
 from logic import DownloadManager
 from utils import resource_path
@@ -181,7 +180,7 @@ class App(ctk.CTk):
                 self.log(f"FAILED: {info['error']}")
                 return
             if 'entries' in info:
-                self.log(f"Playlist detected.")
+                self.log("Playlist detected.")
                 self.after(0, lambda: PlaylistSelector(self, list(info['entries']), self.set_queue))
             else:
                 title = info.get('title', 'Unknown')

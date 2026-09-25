@@ -191,6 +191,28 @@ def clipboard_text():
     return Clipboard.paste() or ""
 
 
+def forward_native_stderr(callback):
+    """Pass each line programs started by the app write to stderr to ``callback``.
+
+    Python's own output goes to Android's log, but the process's stderr
+    (which FFmpeg inherits from yt-dlp) goes nowhere, so FFmpeg's reason
+    for failing would be lost.
+    """
+    import threading
+    read_fd, write_fd = os.pipe()
+    os.dup2(write_fd, 2)
+    os.close(write_fd)
+
+    def pump():
+        with os.fdopen(read_fd, "r", encoding="utf-8", errors="replace") as lines:
+            for line in lines:
+                line = line.rstrip()
+                if line:
+                    callback(line)
+
+    threading.Thread(target=pump, name="native-stderr", daemon=True).start()
+
+
 def night_mode():
     """True when the phone uses its dark theme."""
     config = _activity().getResources().getConfiguration()

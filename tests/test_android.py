@@ -463,3 +463,23 @@ def test_release_notes_cover_the_app_version():
     assert notes[0]["version"] == version
     for release in notes:
         assert release["en"] and len(release["tr"]) == len(release["en"])
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Android is POSIX")
+def test_forward_native_stderr_catches_child_programs(tmp_path):
+    # In a separate process, because it takes over file descriptor 2.
+    import subprocess
+    script = tmp_path / "probe.py"
+    script.write_text(
+        "import subprocess, sys, time\n"
+        f"sys.path.insert(0, {os.path.join(ROOT, 'android', 'app')!r})\n"
+        "import android_env\n"
+        "seen = []\n"
+        "android_env.forward_native_stderr(seen.append)\n"
+        "subprocess.run([sys.executable, '-c', 'import sys; sys.stderr.write(\"boom\\\\n\\\\n\")'])\n"
+        "for _ in range(50):\n"
+        "    if seen: break\n"
+        "    time.sleep(0.05)\n"
+        "print(seen)\n")
+    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=30)
+    assert out.stdout.strip() == "['boom']"

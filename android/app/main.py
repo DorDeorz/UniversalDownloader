@@ -14,6 +14,7 @@ import os
 import sys
 import threading
 import time
+from collections import deque
 
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -214,6 +215,7 @@ class UniversalDownloaderApp(MDApp):
         self._log_lines = []
         self._menu = None
         self._wake_lock = None
+        self._stderr = deque(maxlen=12)  # last lines FFmpeg printed, shown when an item fails
         self._apply_language()
         self._apply_theme()
         Builder.load_string(layout.KV)
@@ -249,6 +251,10 @@ class UniversalDownloaderApp(MDApp):
         if android_env.on_android():
             os.environ["TMPDIR"] = android_env.cache_dir()
             self._wake_lock = android_env.WakeLock()
+            try:
+                android_env.forward_native_stderr(self._on_native_stderr)
+            except OSError as e:
+                _log.warning("Cannot capture stderr: %s", e)
             android_env.request_storage_permission()
             self._selftest = self._selftest_url()
             Clock.schedule_once(self._fit_system_bars, 0.3)
@@ -678,6 +684,7 @@ class UniversalDownloaderApp(MDApp):
         selftest(f"analysis failed: {message}")
 
     def _on_item_started(self, position, total, title):
+        self._stderr.clear()
         self.ids.progress.value = 0
         self.ids.progress_title.text = title if total == 1 else self.tr(
             "progress.item", position=position, total=total, title=title)
@@ -704,7 +711,15 @@ class UniversalDownloaderApp(MDApp):
         else:
             line = self.tr("log." + result.status.value, title=result.title)
             self.log(line + (f" ({i18n.tr_message(result.error)})" if result.error else ""))
+            if result.status is ItemStatus.FAILED:
+                for detail in list(self._stderr)[-6:]:
+                    self.log(f"  {detail}")
         selftest(f"item {result.status.value} path={result.path} error={result.error}")
+
+    def _on_native_stderr(self, line):
+        """Worker thread: a line a program (usually FFmpeg) wrote to stderr."""
+        self._stderr.append(line)
+        _log.info("stderr: %s", line)
 
     def _on_job_done(self, summary):
         self.job = None

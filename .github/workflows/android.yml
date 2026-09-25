@@ -144,6 +144,10 @@ jobs:
         with:
           name: apk-x86_64
           path: apk
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk-arm64-v8a
+          path: apk-arm64
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -165,6 +169,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
             bash android/emulator_ui_test.sh apk/*.apk
+            bash android/emulator_ui_test.sh apk-arm64/*.apk || echo "::warning::The phone APK failed the UI test under ARM translation"
             bash android/emulator_test.sh apk/*.apk http://10.0.2.2:8000/sample.mp4
 
   publish:

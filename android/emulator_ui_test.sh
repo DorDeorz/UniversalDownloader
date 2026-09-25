@@ -10,11 +10,18 @@ APK=$1
 PKG=io.github.dordeorz.universaldownloader
 ACTIVITY="$PKG/org.kivy.android.PythonActivity"
 
-adb install -r -g "$APK" || exit 1
+adb uninstall "$PKG" >/dev/null 2>&1  # each CI job signs with its own debug key
+adb install -g "$APK" || exit 1
 adb shell am force-stop "$PKG"
 adb logcat -c
 adb shell am start -n "$ACTIVITY"
-sleep 25  # first start unpacks the app and checks FFmpeg
+# The first start unpacks the app and checks FFmpeg; wait for that to finish.
+for _ in $(seq 1 36); do
+  adb logcat -d 2>/dev/null | grep -a -q "UDSELFTEST tools" && break
+  adb shell pidof "$PKG" >/dev/null || break
+  sleep 5
+done
+sleep 3
 
 size=$(adb shell wm size | tr -d '\r' | awk '{print $3}' | tail -n 1)
 W=${size%x*}

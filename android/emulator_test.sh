@@ -12,7 +12,8 @@ URL=$2
 PKG=io.github.dordeorz.universaldownloader
 TIMEOUT=${TIMEOUT:-900}
 
-adb install -r -g "$APK" || exit 1
+adb uninstall "$PKG" >/dev/null 2>&1  # each CI job signs with its own debug key
+adb install -g "$APK" || exit 1
 adb logcat -c
 adb shell am start -n "$PKG/org.kivy.android.PythonActivity" --es selftest_url "$URL"
 

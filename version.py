@@ -6,6 +6,6 @@ read these values.
 
 APP_NAME = "UniversalDownloader"
 DISPLAY_NAME = "Universal Video Downloader"
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 # Windows taskbar grouping id; keep it stable across versions.
 APP_USER_MODEL_ID = "DorDeorz.UniversalDownloader"

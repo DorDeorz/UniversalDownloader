@@ -272,7 +272,10 @@ def test_mode_buttons_have_their_full_size_when_the_app_is_reopened(monkeypatch,
     monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
     window = new_app()
     try:
-        pump(window, timeout=1.5)
+        # Start the way main.py does: on Windows, CustomTkinter's mainloop hides
+        # and re-shows the window to colour its title bar.
+        window.after(1500, window.quit)
+        window.mainloop()
 
         def sizes():
             buttons = window.cmb_mode._buttons_dict.values()

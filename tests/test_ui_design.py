@@ -225,6 +225,88 @@ def test_activity_lines_are_translated(monkeypatch):
 
 
 @needs_display
+@pytest.mark.parametrize("dpi, text_size", [(1.0, "Larger"), (1.25, "Normal"), (1.5, "Larger")])
+def test_mode_buttons_keep_their_size_when_the_language_changes(monkeypatch, dpi, text_size):
+    # Regression: each language change rebuilt the mode buttons at CustomTkinter's
+    # last measured (rounded down) height, so they shrank and stayed small.
+    monkeypatch.setattr(ctk.ScalingTracker, "get_window_dpi_scaling", classmethod(lambda cls, window: dpi))
+    ui_helpers.isolate_settings(monkeypatch)
+    folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
+    os.makedirs(folder)
+    with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump({"text_size": text_size}, f)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    window = new_app()
+    try:
+        pump(window, timeout=0.5)
+        height = window.cmb_mode.winfo_height()
+        assert height == window.cmb_format.winfo_height()
+        window.open_settings()  # the language is changed while the download page is hidden
+        for language in ("tr", "de", "ja", "fr", "en"):
+            window._on_setting_changed("language", language)
+            pump(window, timeout=0.2)
+        window.close_settings()
+        pump(window, timeout=0.3)
+        assert window.cmb_mode.winfo_height() == height
+        assert all(b.winfo_height() == height for b in window.cmb_mode._buttons_dict.values())
+    finally:
+        window.destroy()
+        ctk.set_widget_scaling(1.0)
+
+
+@needs_display
+@pytest.mark.parametrize("saved", [
+    {},
+    {"language": "tr", "text_size": "Larger", "mode": "Audio Only", "theme": "Light"},
+    {"language": "de", "text_size": "Normal", "mode": "Video Only", "theme": "Dark"},
+    {"language": "ja", "text_size": "Large", "mode": "Video + Audio", "theme": "System"},
+])
+def test_mode_buttons_have_their_full_size_when_the_app_is_reopened(monkeypatch, saved):
+    # Regression: on Windows the mode buttons came up squeezed to a square on
+    # every start (see ui._keep_size_on_state_change); a language change,
+    # which rebuilds them, made them normal again. Rebuilding must change nothing.
+    ui_helpers.isolate_settings(monkeypatch)
+    folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
+    os.makedirs(folder)
+    with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump(saved, f)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    window = new_app()
+    try:
+        # Start the way main.py does: on Windows, CustomTkinter's mainloop hides
+        # and re-shows the window to colour its title bar.
+        window.after(1500, window.quit)
+        window.mainloop()
+
+        def sizes():
+            buttons = window.cmb_mode._buttons_dict.values()
+            return ((window.cmb_mode.winfo_width(), window.cmb_mode.winfo_height()),
+                    [(b.winfo_width(), b.winfo_height(), b._text_label.winfo_reqwidth()) for b in buttons])
+
+        at_start = sizes()
+        window.cmb_mode.relabel()
+        pump(window, timeout=0.5)
+        assert at_start == sizes()
+        assert at_start[0][1] == window.cmb_format.winfo_height()
+    finally:
+        window.destroy()
+        ctk.set_widget_scaling(1.0)
+
+
+@needs_display
+def test_buttons_keep_the_width_of_their_text_when_disabled_and_enabled(app):
+    button = ui.secondary_button(app, "A label much wider than the button", lambda: None, width=40)
+    button.grid(row=9, column=0)
+    pump(app, timeout=0.2)
+    width = button.winfo_reqwidth()
+    assert width >= button._text_label.winfo_reqwidth()
+    for state in ("disabled", "normal"):
+        button.configure(state=state)
+        pump(app, timeout=0.2)
+        assert button.winfo_reqwidth() == width
+
+
+@needs_display
 def test_choice_widgets_show_labels_but_return_values(app):
     labels = {"a": "Alpha", "b": "Beta"}
     picked = []
@@ -452,3 +534,4 @@ def test_place_on_screen_caps_size_and_keeps_window_visible():
     # Sizes are in CustomTkinter units (pixels / 1.25); the position moves up.
     assert window.calls["geometry"] == f"1040x{round(992 / 1.25)}+100+0"
     assert window.calls["minsize"] == (900, int(992 / 1.25))
+

@@ -48,6 +48,27 @@ SUCCESS = ("#1d7a50", "#3dd68c")
 WARNING = ("#946214", "#f0b429")
 
 
+def _keep_size_on_state_change(set_cursor):
+    """Wrap CTkButton._set_cursor so a button keeps the width its text needs.
+
+    On Windows, enabling or disabling a button sets its cursor through the
+    button's frame. Tk then requests the frame's own width again (0 for the
+    mode buttons), which replaces the width the text needs, and nothing
+    lays the button out again. The app disables its controls at every start
+    while it checks FFmpeg, so the mode buttons came up squeezed to squares
+    until a language or text size change rebuilt them. Turning propagation
+    off and on makes Tk lay the button out again.
+    """
+    def _set_cursor(self):
+        set_cursor(self)
+        self.grid_propagate(False)
+        self.grid_propagate(True)
+    return _set_cursor
+
+
+ctk.CTkButton._set_cursor = _keep_size_on_state_change(ctk.CTkButton._set_cursor)
+
+
 def font(size=13, weight="normal"):
     return ctk.CTkFont(size=size, weight=weight)
 
@@ -182,6 +203,16 @@ class ChoiceSegment(ctk.CTkSegmentedButton):
 
     def set(self, value, *args, **kwargs):
         super().set(self._label(value) if value in self._choices else value, *args, **kwargs)
+
+    def configure(self, **kwargs):
+        if "values" in kwargs:
+            # New values rebuild the buttons, and CustomTkinter makes them as
+            # tall as the last size it measured, not the height asked for.
+            # Measured sizes round down at 125-175% display scaling and can be
+            # tiny while the page is hidden, so every language change made the
+            # mode buttons smaller. Build them at the requested height instead.
+            self._current_height = self._desired_height
+        super().configure(**kwargs)
 
     def relabel(self):
         value = self.get()

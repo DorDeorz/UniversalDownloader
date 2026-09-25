@@ -7,6 +7,7 @@ from tkinter import filedialog, messagebox
 import events
 import filenames
 import formats
+import media_tools
 import playlist
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
@@ -174,9 +175,14 @@ class App(ctk.CTk):
         self.skipped_items = []
         self._poll_id = None
 
+        self.tools = None
+        self.events.register(events.TOOLS_CHECKED, self._on_tools_checked)
+
         self.create_sidebar()
         self.create_main_view()
         self._poll_events()
+        # Check FFmpeg off the main thread; downloads stay disabled until then.
+        self._start_job("setup", self.run_tool_check)
 
     POLL_INTERVAL_MS = 50
 
@@ -338,7 +344,9 @@ class App(ctk.CTk):
 
     def _refresh_download_button(self):
         count = len(self.download_queue)
-        if count:
+        if self.tools is not None and not self.tools.ok:
+            self.btn_download.configure(state="disabled", text="FFMPEG MISSING")
+        elif count:
             self.btn_download.configure(state="normal", text=f"DOWNLOAD ({count})")
         else:
             self.btn_download.configure(state="disabled", text="START DOWNLOAD")
@@ -418,6 +426,20 @@ class App(ctk.CTk):
         self._show_progress(0, "0%")
         if self._start_job("analysis", self.run_analysis, url):
             self.btn_analyze.configure(text="Checking...")
+    def run_tool_check(self):
+        """Worker thread: find and verify FFmpeg/ffprobe."""
+        try:
+            status = self.manager.ensure_tools()
+        except Exception as e:
+            status = media_tools.ToolStatus(False, error=f"FFmpeg check failed: {e}")
+        self.events.post(events.TOOLS_CHECKED, status=status)
+    def _on_tools_checked(self, status):
+        self.tools = status
+        self._end_job()
+        self._append_log(status.summary())
+        if not status.ok:
+            self.lbl_status.configure(text="FFmpeg missing", text_color="#e63946")
+            messagebox.showerror("FFmpeg missing", f"{status.error}\n\nDownloads are disabled.", parent=self)
     def run_analysis(self, url):
         """Worker thread: fetch info and post the result; no widget access."""
         try:

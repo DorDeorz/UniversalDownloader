@@ -10,6 +10,7 @@ import yt_dlp  # noqa: E402
 from yt_dlp.postprocessor.ffmpeg import ACODECS  # noqa: E402
 
 import logic  # noqa: E402
+import media_tools  # noqa: E402
 
 _RealYoutubeDL = yt_dlp.YoutubeDL
 
@@ -51,6 +52,12 @@ class FakeYoutubeDL:
 
     def __exit__(self, *exc):
         return False
+
+    def report_warning(self, *args, **kwargs):
+        pass
+
+    def write_debug(self, *args, **kwargs):
+        pass
 
     def add_post_processor(self, pp, when="post_process"):
         self.added_pps.append((pp, when))
@@ -108,6 +115,9 @@ def fake_ydl(monkeypatch):
     return FakeYoutubeDL
 
 
+FAKE_TOOLS = media_tools.ToolStatus(True, directory="/fake/ffmpeg/bin", version="7.1", source="bundled")
+
+
 @pytest.fixture
 def manager():
-    return logic.DownloadManager()
+    return logic.DownloadManager(tools=FAKE_TOOLS)

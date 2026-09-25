@@ -13,15 +13,6 @@ def resource_path(relative_path):
     base_path = getattr(sys, "_MEIPASS", _BASE_DIR)
     return os.path.join(base_path, relative_path)
 
-def get_ffmpeg_path():
-    """ Returns path to bundled ffmpeg """
-    return resource_path(os.path.join("bin", "ffmpeg.exe"))
-
-def get_ffprobe_path():
-    """ Returns path to bundled ffprobe """
-    return resource_path(os.path.join("bin", "ffprobe.exe"))
-
-
 # FOLDERID_Downloads, see KNOWNFOLDERID in the Windows SDK.
 _FOLDERID_DOWNLOADS = "{374DE290-123F-4565-9164-39C4925E467B}"
 

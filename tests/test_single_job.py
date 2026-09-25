@@ -14,6 +14,7 @@ ctk = pytest.importorskip("customtkinter")
 pytest.importorskip("tkinter.messagebox")
 
 import ui  # noqa: E402
+from ui_helpers import make_app  # noqa: E402
 
 needs_display = pytest.mark.skipif(
     not (sys.platform.startswith("win") or sys.platform == "darwin" or os.environ.get("DISPLAY")),
@@ -45,8 +46,7 @@ def pump(app, until, timeout=5):
 
 @pytest.fixture
 def app(monkeypatch):
-    monkeypatch.setattr(ui.messagebox, "showinfo", lambda *a, **k: None)
-    window = ui.App()
+    window = make_app(monkeypatch)
     yield window
     window.destroy()
 
@@ -122,3 +122,21 @@ def test_worker_thread_is_daemon_and_tracked(app):
     manager.release.set()
     assert pump(app, lambda: not app.is_busy())
     assert app._job_thread is None
+
+
+@needs_display
+def test_missing_ffmpeg_disables_download(monkeypatch):
+    import media_tools
+    from ui_helpers import make_app
+
+    errors = []
+    status = media_tools.ToolStatus(False, error="bin/ffmpeg.exe is a Git LFS pointer")
+    app = make_app(monkeypatch, tools=status)
+    monkeypatch.setattr(ui.messagebox, "showerror", lambda *a, **k: errors.append(a))
+    try:
+        app.set_queue([{"url": "a", "title": "A"}])
+        assert app.btn_download.cget("state") == "disabled"
+        assert app.btn_download.cget("text") == "FFMPEG MISSING"
+        assert "FFmpeg problem: bin/ffmpeg.exe is a Git LFS pointer" in app.console.get("1.0", "end")
+    finally:
+        app.destroy()

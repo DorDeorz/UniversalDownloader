@@ -8,6 +8,8 @@ import logic
 from logic import DownloadManager, TrimError, parse_timestamp, parse_trim_range
 from results import ItemStatus
 
+from conftest import FAKE_TOOLS
+
 
 @pytest.mark.parametrize("text, expected", [
     ("10", 10.0),
@@ -84,7 +86,7 @@ def _run_download(options, info, tmp_path):
     ydl_cls.return_value.__enter__.return_value = ydl
     with mock.patch.object(logic.yt_dlp, "YoutubeDL", ydl_cls), \
             mock.patch.object(logic, "verify_output", return_value=None):
-        result = DownloadManager().download_video("https://youtu.be/x", options, lambda d: None)
+        result = DownloadManager(tools=FAKE_TOOLS).download_video("https://youtu.be/x", options, lambda d: None)
     return ydl_cls, ydl, result
 
 

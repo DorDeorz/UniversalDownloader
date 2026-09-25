@@ -6,8 +6,8 @@ from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 
 import filenames
 import formats
+import media_tools
 from results import ItemResult, ItemStatus, verify_output
-from utils import get_ffmpeg_path, get_ffprobe_path
 
 _log = logging.getLogger(__name__)
 _log.addHandler(logging.NullHandler())
@@ -178,9 +178,16 @@ def parse_trim_range(start_text, end_text, duration=None):
 
 
 class DownloadManager:
-    def __init__(self):
-        self.ffmpeg_path = get_ffmpeg_path()
-        self.ffprobe_path = get_ffprobe_path()
+    def __init__(self, tools=None):
+        # media_tools.ToolStatus; None means "detect on first download".
+        self.tools = tools
+
+    def ensure_tools(self):
+        """FFmpeg/ffprobe status, detected (and put on PATH) on first use."""
+        if self.tools is None:
+            self.tools = media_tools.find_tools()
+            media_tools.activate(self.tools)
+        return self.tools
 
     def fetch_info(self, url, log_callback=None):
         """ 
@@ -263,6 +270,9 @@ class DownloadManager:
             return failed(str(e))
 
         base_folder = options.get('save_path', os.getcwd())
+        tools = self.ensure_tools()
+        if not tools.ok:
+            return failed(tools.error)
 
         # A failed download must raise, so it becomes a failed result
         # instead of being reported as finished (no 'ignoreerrors').
@@ -273,7 +283,7 @@ class DownloadManager:
             'outtmpl': os.path.join(filenames.escape_template(base_folder), '%(title)s.%(ext)s'),
             'windowsfilenames': True,
             'overwrites': False,
-            'ffmpeg_location': self.ffmpeg_path,
+            'ffmpeg_location': tools.directory,
             'progress_hooks': [on_progress],
             # Postprocessing (merge, conversion) can take a while too.
             'postprocessor_hooks': [check_cancel],
@@ -308,6 +318,9 @@ class DownloadManager:
             ydl_opts['outtmpl'] = filenames.escape_template(base) + '.%(ext)s'
             ydl_opts['postprocessors'] = formats.postprocessors_for(plan, info)
             if trim_requested:
+                if not info.get('duration') and log_callback:
+                    log_callback("Warning: this source does not report its length; "
+                                 "the trim end cannot be checked in advance")
                 trim_range = parse_trim_range(
                     options.get('trim_start'), options.get('trim_end'), info.get('duration'))
                 # yt-dlp (start, end) çiftleri bekler

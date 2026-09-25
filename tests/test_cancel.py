@@ -88,6 +88,7 @@ pytest.importorskip("tkinter.messagebox")
 
 import events  # noqa: E402
 import ui  # noqa: E402
+from ui_helpers import make_app  # noqa: E402
 
 needs_display = pytest.mark.skipif(
     not (sys.platform.startswith("win") or sys.platform == "darwin" or os.environ.get("DISPLAY")),
@@ -150,9 +151,7 @@ def pump(app, until, timeout=5):
 
 @pytest.fixture
 def app(monkeypatch):
-    monkeypatch.setattr(ui.messagebox, "showinfo", lambda *a, **k: None)
-    monkeypatch.setattr(ui.messagebox, "showwarning", lambda *a, **k: None)
-    window = ui.App()
+    window = make_app(monkeypatch)
     yield window
     try:
         window.destroy()

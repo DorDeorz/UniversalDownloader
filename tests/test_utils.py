@@ -17,10 +17,3 @@ def test_resource_path_uses_pyinstaller_bundle_dir_when_frozen(tmp_path, monkeyp
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
 
     assert utils.resource_path("app.ico") == os.path.join(str(tmp_path), "app.ico")
-
-
-def test_ffmpeg_and_ffprobe_paths_point_into_bin(monkeypatch):
-    monkeypatch.delattr(sys, "_MEIPASS", raising=False)
-
-    assert utils.get_ffmpeg_path() == os.path.join(REPO_ROOT, "bin", "ffmpeg.exe")
-    assert utils.get_ffprobe_path() == os.path.join(REPO_ROOT, "bin", "ffprobe.exe")

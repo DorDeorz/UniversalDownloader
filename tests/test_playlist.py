@@ -90,6 +90,7 @@ ctk = pytest.importorskip("customtkinter")
 pytest.importorskip("tkinter.messagebox")
 
 import ui  # noqa: E402
+from ui_helpers import make_app  # noqa: E402
 
 needs_display = pytest.mark.skipif(
     not (sys.platform.startswith("win") or sys.platform == "darwin" or os.environ.get("DISPLAY")),
@@ -99,8 +100,7 @@ needs_display = pytest.mark.skipif(
 
 @pytest.fixture
 def app(monkeypatch):
-    monkeypatch.setattr(ui.messagebox, "showwarning", lambda *a, **k: None)
-    window = ui.App()
+    window = make_app(monkeypatch)
     yield window
     window.destroy()
 

@@ -43,7 +43,6 @@ def test_download_writes_into_platform_subfolder(manager, fake_ydl, tmp_path):
 
     opts = fake_ydl.instances[-1].opts
     assert opts["outtmpl"] == os.path.join(str(tmp_path), "YouTube", "clip") + ".%(ext)s"
-    assert opts["ffmpeg_location"] == manager.ffmpeg_path
     assert opts["windowsfilenames"] is True
     assert opts["overwrites"] is False
 
@@ -120,11 +119,32 @@ def test_no_trim_means_no_download_ranges(manager, fake_ydl, tmp_path):
     assert "download_ranges" not in fake_ydl.instances[-1].params
 
 
-def test_manager_uses_bundled_ffmpeg_paths():
+def test_manager_passes_tools_folder_to_yt_dlp(manager, fake_ydl, tmp_path):
+    _download(manager, {"save_path": str(tmp_path)})
+
+    assert fake_ydl.instances[-1].opts["ffmpeg_location"] == "/fake/ffmpeg/bin"
+
+
+def test_missing_ffmpeg_fails_item_with_clear_error(fake_ydl, tmp_path):
+    tools = logic.media_tools.ToolStatus(False, error="bin/ffmpeg.exe is a Git LFS pointer")
+    result = DownloadManager(tools=tools).download_video("https://youtu.be/abc", {"save_path": str(tmp_path)})
+
+    assert result.status is ItemStatus.FAILED
+    assert result.error == "bin/ffmpeg.exe is a Git LFS pointer"
+    assert fake_ydl.instances == []
+
+
+def test_tools_are_detected_once_on_first_use(fake_ydl, tmp_path, monkeypatch):
+    calls = []
+    status = logic.media_tools.ToolStatus(True, directory=str(tmp_path))
+    monkeypatch.setattr(logic.media_tools, "find_tools", lambda: calls.append(1) or status)
+    monkeypatch.setattr(logic.media_tools, "activate", lambda s: None)
     manager = DownloadManager()
 
-    assert manager.ffmpeg_path.endswith(os.path.join("bin", "ffmpeg.exe"))
-    assert manager.ffprobe_path.endswith(os.path.join("bin", "ffprobe.exe"))
+    manager.download_video("https://youtu.be/a", {"save_path": str(tmp_path)})
+    manager.download_video("https://youtu.be/b", {"save_path": str(tmp_path)})
+
+    assert calls == [1]
 
 
 # --- format handling in download_video ----------------------------------

@@ -3,7 +3,7 @@ import threading
 import os
 from tkinter import filedialog, messagebox
 import events
-from logic import DownloadManager
+from logic import DownloadManager, TrimError, parse_trim_range
 from utils import resource_path
 
 ctk.set_appearance_mode("Dark")
@@ -240,6 +240,15 @@ class App(ctk.CTk):
             self.btn_download.configure(state="disabled", text="START DOWNLOAD")
     def start_download_queue(self):
         if not self.download_queue: return
+        if self.chk_trim.get():
+            # Kötü trim değerleriyle kuyruğu hiç başlatma
+            try:
+                if parse_trim_range(self.ent_start.get(), self.ent_end.get()) is None:
+                    raise TrimError("Enter a trim start and/or end time")
+            except TrimError as e:
+                self.log(f"Trim error: {e}")
+                messagebox.showerror("Invalid trim range", str(e))
+                return
         self.btn_download.configure(state="disabled", text="DOWNLOADING...")
         self._show_progress(0, "0%")
         items = list(self.download_queue)

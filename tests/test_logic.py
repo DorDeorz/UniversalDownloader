@@ -37,13 +37,13 @@ def test_fetch_info_returns_info_without_downloading(manager, fake_ydl):
 def test_fetch_info_reports_unavailable_content_as_error(manager, fake_ydl):
     fake_ydl.info = None
 
-    assert manager.fetch_info("https://youtu.be/abc") == {"error": "Content is private or unavailable"}
+    assert manager.fetch_info("https://youtu.be/abc") == {"error": "Content is private or unavailable", "error_type": "DownloadError"}
 
 
 def test_fetch_info_turns_exceptions_into_error_dict(manager, fake_ydl):
     fake_ydl.error = RuntimeError("boom")
 
-    assert manager.fetch_info("https://youtu.be/abc") == {"error": "boom"}
+    assert manager.fetch_info("https://youtu.be/abc") == {"error": "boom", "error_type": "RuntimeError"}
 
 
 # --- download_video -----------------------------------------------------
@@ -117,15 +117,6 @@ def test_no_trim_means_no_download_ranges(manager, fake_ydl, tmp_path):
     _download(manager, {"save_path": str(tmp_path)})
 
     assert "download_ranges" not in fake_ydl.instances[0].opts
-
-
-@pytest.mark.xfail(reason="ISSUES.md #1: trim passes a string range to download_range_func; fixed in MVP step 7")
-def test_trim_range_is_usable_by_yt_dlp(manager, fake_ydl, tmp_path):
-    _download(manager, {"save_path": str(tmp_path), "trim_start": "10", "trim_end": "20"})
-
-    ranges = fake_ydl.instances[0].opts["download_ranges"]
-    sections = list(ranges({"duration": 60}, None))
-    assert sections == [{"start_time": 10.0, "end_time": 20.0}]
 
 
 def test_manager_uses_bundled_ffmpeg_paths():

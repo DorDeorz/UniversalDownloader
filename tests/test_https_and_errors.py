@@ -4,17 +4,10 @@ Covers ISSUES.md #2 (certificate verification disabled), #5 (errors
 silenced by ignoreerrors/quiet/no_warnings) and #26 (error type lost).
 yt_dlp.YoutubeDL is replaced with a fake, so no network is used.
 """
-import sys
-import types
-
 import pytest
+import yt_dlp
 
-# The UI toolkit is not needed for logic tests.
-sys.modules.setdefault("customtkinter", types.ModuleType("customtkinter"))
-
-import yt_dlp  # noqa: E402
-
-import logic  # noqa: E402
+import logic
 
 SILENCING_KEYS = ("nocheckcertificate", "quiet", "no_warnings")
 

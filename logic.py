@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import yt_dlp
 from utils import get_ffmpeg_path, get_ffprobe_path
 
@@ -58,6 +59,71 @@ def describe_error(exc):
     if msg.startswith('ERROR: '):
         msg = msg[len('ERROR: '):]
     return msg or type(exc).__name__
+
+
+_NUMBER_RE = re.compile(r'^\d+(\.\d+)?$')
+
+
+class TrimError(ValueError):
+    """Trim zaman aralığı geçersiz olduğunda fırlatılır."""
+
+
+def parse_timestamp(text):
+    """
+    'SS', 'SS.ms', 'MM:SS' veya 'HH:MM:SS[.ms]' biçimindeki zamanı saniyeye çevirir.
+    Boş değer için None döner; geçersiz biçimde TrimError fırlatır.
+    """
+    if text is None:
+        return None
+    text = str(text).strip()
+    if not text:
+        return None
+
+    parts = text.split(':')
+    if len(parts) > 3:
+        raise TrimError(f"Invalid time '{text}': use SS, MM:SS or HH:MM:SS")
+    # Sadece son parça ondalıklı olabilir
+    for i, part in enumerate(parts):
+        is_last = i == len(parts) - 1
+        if not (_NUMBER_RE.match(part) if is_last else part.isdigit()):
+            raise TrimError(f"Invalid time '{text}': use SS, MM:SS or HH:MM:SS")
+
+    values = [float(part) for part in parts]
+    # İlk parça dışındakiler (dakika/saniye) 60'tan küçük olmalı
+    if any(v >= 60 for v in values[1:]):
+        raise TrimError(f"Invalid time '{text}': minutes and seconds must be below 60")
+
+    seconds = 0.0
+    for v in values:
+        seconds = seconds * 60 + v
+    return seconds
+
+
+def parse_trim_range(start_text, end_text, duration=None):
+    """
+    Trim başlangıç/bitiş metnini doğrulanmış (start, end) saniye çiftine çevirir.
+    İkisi de boşsa None döner (kırpma yok). Başlangıç boşsa 0, bitiş boşsa
+    video sonu (duration bilinmiyorsa sonsuz) kabul edilir.
+    Kurallar: 0 <= start < end ve duration biliniyorsa end <= duration.
+    """
+    start = parse_timestamp(start_text)
+    end = parse_timestamp(end_text)
+    if start is None and end is None:
+        return None
+    if start is None:
+        start = 0.0
+    if end is None:
+        end = float(duration) if duration else float('inf')
+
+    if duration:
+        if start >= duration:
+            raise TrimError(f"Trim start ({start:g}s) is beyond the video length ({duration:g}s)")
+        if end > duration:
+            raise TrimError(f"Trim end ({end:g}s) is beyond the video length ({duration:g}s)")
+    if start >= end:
+        raise TrimError(f"Trim start ({start:g}s) must be before end ({end:g}s)")
+    return start, end
+
 
 class DownloadManager:
     def __init__(self):
@@ -160,18 +226,34 @@ class DownloadManager:
                 {'key': 'FFmpegMetadata'}
             ]
 
-        # Trim (Kırpma)
-        if options.get('trim_start') or options.get('trim_end'):
-            start = options.get('trim_start', '')
-            end = options.get('trim_end', 'inf')
-            if not start: start = "0"
-            section = f"*{start}-{end}"
-            ydl_opts['download_ranges'] = yt_dlp.utils.download_range_func(None, [section])
+        # Trim (Kırpma): metni önceden doğrula, kötü değerle indirmeye başlama
+        try:
+            trim_requested = parse_trim_range(options.get('trim_start'), options.get('trim_end')) is not None
+        except TrimError as e:
+            error_callback(str(e))
+            return
+        if trim_requested:
             ydl_opts['force_keyframes_at_cuts'] = True
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
+                if trim_requested:
+                    # Süreyi öğrenmek için önce bilgiyi çek, aralığı videonun süresine göre doğrula
+                    info = ydl.extract_info(url, download=False)
+                    if info is None:
+                        error_callback("Content is private or unavailable")
+                        return
+                    try:
+                        trim_range = parse_trim_range(
+                            options.get('trim_start'), options.get('trim_end'), info.get('duration'))
+                    except TrimError as e:
+                        error_callback(str(e))
+                        return
+                    # yt-dlp (start, end) çiftleri bekler
+                    ydl.params['download_ranges'] = yt_dlp.utils.download_range_func(None, [trim_range])
+                    info = ydl.process_ie_result(info, download=True)
+                else:
+                    info = ydl.extract_info(url, download=True)
                 if info is None:
                     raise yt_dlp.utils.DownloadError('No media information returned')
                 filename = ydl.prepare_filename(info)

@@ -183,6 +183,16 @@ class ChoiceSegment(ctk.CTkSegmentedButton):
     def set(self, value, *args, **kwargs):
         super().set(self._label(value) if value in self._choices else value, *args, **kwargs)
 
+    def configure(self, **kwargs):
+        if "values" in kwargs:
+            # New values rebuild the buttons, and CustomTkinter makes them as
+            # tall as the last size it measured, not the height asked for.
+            # Measured sizes round down at 125-175% display scaling and can be
+            # tiny while the page is hidden, so every language change made the
+            # mode buttons smaller. Build them at the requested height instead.
+            self._current_height = self._desired_height
+        super().configure(**kwargs)
+
     def relabel(self):
         value = self.get()
         self.configure(values=self._labels())

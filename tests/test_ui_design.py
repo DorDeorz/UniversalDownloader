@@ -225,6 +225,36 @@ def test_activity_lines_are_translated(monkeypatch):
 
 
 @needs_display
+@pytest.mark.parametrize("dpi, text_size", [(1.0, "Larger"), (1.25, "Normal"), (1.5, "Larger")])
+def test_mode_buttons_keep_their_size_when_the_language_changes(monkeypatch, dpi, text_size):
+    # Regression: each language change rebuilt the mode buttons at CustomTkinter's
+    # last measured (rounded down) height, so they shrank and stayed small.
+    monkeypatch.setattr(ctk.ScalingTracker, "get_window_dpi_scaling", classmethod(lambda cls, window: dpi))
+    ui_helpers.isolate_settings(monkeypatch)
+    folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
+    os.makedirs(folder)
+    with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump({"text_size": text_size}, f)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    window = new_app()
+    try:
+        pump(window, timeout=0.5)
+        height = window.cmb_mode.winfo_height()
+        assert height == window.cmb_format.winfo_height()
+        window.open_settings()  # the language is changed while the download page is hidden
+        for language in ("tr", "de", "ja", "fr", "en"):
+            window._on_setting_changed("language", language)
+            pump(window, timeout=0.2)
+        window.close_settings()
+        pump(window, timeout=0.3)
+        assert window.cmb_mode.winfo_height() == height
+        assert all(b.winfo_height() == height for b in window.cmb_mode._buttons_dict.values())
+    finally:
+        window.destroy()
+        ctk.set_widget_scaling(1.0)
+
+
+@needs_display
 def test_choice_widgets_show_labels_but_return_values(app):
     labels = {"a": "Alpha", "b": "Beta"}
     picked = []

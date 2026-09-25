@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 # Event kinds posted by workers.
 LOG = "log"                      # payload: message
 PROGRESS = "progress"            # payload: fraction (0..1), text
-ANALYSIS_DONE = "analysis_done"  # payload: info, url
+ANALYSIS_DONE = "analysis_done"  # payload: analysis (playlist.AnalysisResult), url
 ANALYSIS_FAILED = "analysis_failed"  # payload: message
 ITEM_DONE = "item_done"          # payload: result (results.ItemResult)
 JOB_DONE = "job_done"            # payload: summary (results.JobSummary)

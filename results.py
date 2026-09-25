@@ -24,6 +24,9 @@ class ItemResult:
     status: ItemStatus
     path: str | None = None
     error: str | None = None
+    # The queue item this result is for, so failed items can be retried
+    # with the same playlist position and folder.
+    source: dict | None = field(default=None, compare=False, repr=False)
 
     @property
     def ok(self):

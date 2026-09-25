@@ -77,11 +77,12 @@ def test_analysis_single_video_posts_done_event():
     info = {"title": "Clip", "original_url": "https://example.com/v"}
     w = WorkerSide(FakeManager(info=info))
     run_in_thread(w.run_analysis, "https://example.com/v")
-    kinds = [(e.kind, e.payload) for e in w.drain()]
-    assert kinds == [
-        (events.LOG, {"message": "Fetching info..."}),
-        (events.ANALYSIS_DONE, {"info": info, "url": "https://example.com/v"}),
-    ]
+    evs = w.drain()
+    assert [e.kind for e in evs] == [events.LOG, events.ANALYSIS_DONE]
+    assert evs[0].payload == {"message": "Fetching info..."}
+    analysis = evs[1].payload["analysis"]
+    assert evs[1].payload["url"] == "https://example.com/v"
+    assert [(i.url, i.title) for i in analysis.items] == [("https://example.com/v", "Clip")]
 
 
 @pytest.mark.parametrize(

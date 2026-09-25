@@ -6,6 +6,7 @@ import os
 from tkinter import filedialog, messagebox
 import events
 import formats
+import playlist
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
 from utils import resource_path
@@ -16,66 +17,118 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 class PlaylistSelector(ctk.CTkToplevel):
-    def __init__(self, parent, video_list, callback):
+    """Modal list of playlist entries to pick from.
+
+    Calls ``callback(items)`` with the chosen queue items on confirm, or
+    ``callback(None)`` when the dialog is cancelled or closed.
+    """
+
+    BATCH = 50  # checkboxes created per idle step, so big playlists stay responsive
+
+    def __init__(self, parent, analysis, callback):
         super().__init__(parent)
         self.title("Select Videos")
-        self.geometry("600x500")
-        
-        # Pencere ikonunu burada da ayarla
-        try:
-            icon_path = resource_path("app.ico")
-            self.after(100, lambda: self.iconbitmap(icon_path))
-        except: pass
+        self.geometry("640x540")
+        self.minsize(420, 360)
+        # Modal: stays above the main window and blocks it until closed.
+        self.transient(parent)
+        self.protocol("WM_DELETE_WINDOW", self.cancel)
 
         self.callback = callback
-        self.checkboxes = []
+        self.items = list(analysis.items)
         self.vars = []
-        self.video_data = video_list
+        self._done = False
 
-        valid_count = len([v for v in video_list if v is not None])
-        self.lbl_title = ctk.CTkLabel(self, text=f"Found {valid_count} playable videos.", font=("Arial", 16, "bold"))
-        self.lbl_title.pack(pady=10)
+        heading = f"{analysis.title}: {len(self.items)} downloadable"
+        if analysis.skipped:
+            heading += f", {len(analysis.skipped)} skipped"
+        self.lbl_title = ctk.CTkLabel(self, text=heading, font=("Arial", 16, "bold"), wraplength=600)
+        self.lbl_title.pack(pady=(12, 4), padx=10)
+        if analysis.skipped:
+            reasons = {}
+            for item in analysis.skipped:
+                reasons[item.skip_reason] = reasons.get(item.skip_reason, 0) + 1
+            detail = "Skipped: " + ", ".join(f"{n} {reason}" for reason, n in reasons.items())
+            ctk.CTkLabel(self, text=detail, text_color="gray", wraplength=600).pack(padx=10)
 
-        self.btn_frame = ctk.CTkFrame(self)
-        self.btn_frame.pack(fill="x", padx=10)
+        self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.btn_frame.pack(fill="x", padx=10, pady=(8, 0))
         self.btn_all = ctk.CTkButton(self.btn_frame, text="Select All", command=self.select_all, width=100)
         self.btn_all.pack(side="left", padx=5)
-        self.btn_none = ctk.CTkButton(self.btn_frame, text="Select None", command=self.select_none, width=100, fg_color="gray")
+        self.btn_none = ctk.CTkButton(self.btn_frame, text="Select None", command=self.select_none, width=100,
+                                      fg_color="gray")
         self.btn_none.pack(side="left", padx=5)
+        self.lbl_count = ctk.CTkLabel(self.btn_frame, text="")
+        self.lbl_count.pack(side="right", padx=5)
 
-        self.scroll = ctk.CTkScrollableFrame(self, width=550, height=350)
+        self.scroll = ctk.CTkScrollableFrame(self)
         self.scroll.pack(pady=10, padx=10, fill="both", expand=True)
 
-        self.clean_list_indices = []
-        for i, vid in enumerate(video_list):
-            if vid is None: continue
-            title = vid.get('title', 'Unknown Title')
-            if not title: title = f"Video #{i+1}"
-            var = ctk.IntVar(value=1)
-            chk = ctk.CTkCheckBox(self.scroll, text=title, variable=var)
-            chk.pack(anchor="w", pady=5, padx=5)
-            self.checkboxes.append(chk)
-            self.vars.append(var)
-            self.clean_list_indices.append(i)
+        self.bottom = ctk.CTkFrame(self, fg_color="transparent")
+        self.bottom.pack(fill="x", padx=20, pady=(0, 12))
+        self.btn_cancel = ctk.CTkButton(self.bottom, text="Cancel", command=self.cancel, fg_color="gray", width=110,
+                                        height=40)
+        self.btn_cancel.pack(side="right", padx=(8, 0))
+        self.btn_confirm = ctk.CTkButton(self.bottom, text="CONFIRM SELECTION", command=self.confirm_selection,
+                                         fg_color="#2a9d8f", height=40)
+        self.btn_confirm.pack(side="right", fill="x", expand=True)
 
-        self.btn_confirm = ctk.CTkButton(self, text="CONFIRM SELECTION", command=self.confirm_selection, fg_color="#2a9d8f", height=40)
-        self.btn_confirm.pack(pady=10, fill="x", padx=20)
+        self._add_rows(0)
+        self.after(100, self._grab)
+
+    def _grab(self):
+        try:
+            self.grab_set()
+            self.focus_force()
+        except Exception:
+            pass  # window not viewable yet or already closed
+
+    def _add_rows(self, start):
+        for item in self.items[start:start + self.BATCH]:
+            var = ctk.IntVar(value=1)
+            label = f"{item.index:>3}. {item.title}" if item.index else item.title
+            ctk.CTkCheckBox(self.scroll, text=label, variable=var, command=self._update_count).pack(
+                anchor="w", pady=3, padx=5)
+            self.vars.append(var)
+        self._update_count()
+        if start + self.BATCH < len(self.items):
+            self.after(1, self._add_rows, start + self.BATCH)
+
+    def selected_items(self):
+        return [item for item, var in zip(self.items, self.vars) if var.get() == 1]
+
+    def _update_count(self):
+        count = len(self.selected_items())
+        self.lbl_count.configure(text=f"{count} selected")
+        # An empty selection cannot be confirmed (ISSUES.md #24).
+        self.btn_confirm.configure(state="normal" if count else "disabled")
 
     def select_all(self):
         for var in self.vars: var.set(1)
+        self._update_count()
     def select_none(self):
         for var in self.vars: var.set(0)
+        self._update_count()
+
     def confirm_selection(self):
-        selected = []
-        for i, var in enumerate(self.vars):
-            if var.get() == 1:
-                idx = self.clean_list_indices[i]
-                v = self.video_data[idx]
-                url = v.get('original_url') or v.get('url') or v.get('webpage_url')
-                if not url and v.get('id'): url = f"https://www.youtube.com/watch?v={v.get('id')}"
-                if url: selected.append({'url': url, 'title': v.get('title', 'Unknown')})
-        self.callback(selected)
+        selected = self.selected_items()
+        if not selected:
+            return
+        self._finish(selected)
+
+    def cancel(self):
+        self._finish(None)
+
+    def _finish(self, result):
+        if self._done:
+            return
+        self._done = True
+        try:
+            self.grab_release()
+        except Exception:
+            pass
         self.destroy()
+        self.callback(result)
 
 class App(ctk.CTk):
     def __init__(self):
@@ -115,6 +168,9 @@ class App(ctk.CTk):
         self.events.register(events.ITEM_DONE, self._on_item_done)
         self.events.register(events.JOB_DONE, self._on_job_done)
         self.last_summary = None
+        self.playlist_dialog = None
+        self._pending_skipped = []
+        self.skipped_items = []
         self._poll_id = None
 
         self.create_sidebar()
@@ -289,7 +345,8 @@ class App(ctk.CTk):
     def _failed_items(self):
         if self.last_summary is None:
             return []
-        return [{'url': r.url, 'title': r.title} for r in self.last_summary.with_status(ItemStatus.FAILED)]
+        return [r.source or {'url': r.url, 'title': r.title}
+                for r in self.last_summary.with_status(ItemStatus.FAILED)]
 
     def _refresh_retry_button(self):
         count = len(self._failed_items())
@@ -312,6 +369,7 @@ class App(ctk.CTk):
             return
         self._append_log(f"Retrying {len(items)} failed item(s).")
         self.download_queue = items
+        self.skipped_items = []
         self.start_download_queue()
 
     CLOSE_TIMEOUT_MS = 15000
@@ -369,26 +427,49 @@ class App(ctk.CTk):
             elif 'error' in info:
                 self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {info['error']}")
             else:
-                self.events.post(events.ANALYSIS_DONE, info=info, url=url)
+                self.events.post(events.ANALYSIS_DONE, analysis=playlist.analyze(info, url), url=url)
         except Exception as e:
             self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
     def _on_analysis_failed(self, message):
         self._append_log(message)
         self.btn_analyze.configure(text="ANALYZE")
         self._end_job()
-    def _on_analysis_done(self, info, url):
+    def _on_analysis_done(self, analysis, url):
         self.btn_analyze.configure(text="ANALYZE")
         self._end_job()
-        self.analyzed_url = url
-        if 'entries' in info:
-            self._append_log("Playlist detected.")
-            PlaylistSelector(self, list(info['entries']), self.set_queue)
+        for item in analysis.skipped:
+            self._append_log(f"Skipped: {item.title} ({item.skip_reason})")
+        if not analysis.items:
+            message = "Nothing downloadable was found at this link."
+            if analysis.skipped:
+                message = f"Nothing downloadable: {analysis.skipped[0].skip_reason}."
+            self._append_log(message)
+            messagebox.showwarning("Nothing to download", message, parent=self)
+            return
+        if analysis.is_playlist:
+            self._append_log(f"Playlist: {analysis.title} ({len(analysis.items)} downloadable, "
+                             f"{len(analysis.skipped)} skipped)")
+            self._pending_skipped = [item.as_dict() for item in analysis.skipped]
+            self.playlist_dialog = PlaylistSelector(
+                self, analysis, lambda items: self._on_playlist_selected(url, items))
         else:
-            title = info.get('title', 'Unknown')
-            self._append_log(f"Single Video: {title}")
-            self.set_queue([{'url': info.get('original_url', url), 'title': title}])
-    def set_queue(self, items):
+            self._append_log(f"Single Video: {analysis.title}")
+            self.analyzed_url = url
+            self.set_queue([item.as_dict() for item in analysis.items])
+    def _on_playlist_selected(self, url, items):
+        self.playlist_dialog = None
+        if items is None:
+            self._append_log("Playlist selection cancelled.")
+            return
+        if self.url_entry.get().strip() != url:
+            self._append_log("The link changed; analyse it again.")
+            return
+        self.analyzed_url = url
+        self.set_queue([item.as_dict() for item in items], skipped=self._pending_skipped)
+    def set_queue(self, items, skipped=()):
         self.download_queue = list(items)
+        # Entries that cannot be downloaded; reported as skipped in the result.
+        self.skipped_items = list(skipped) if self.download_queue else []
         if self.download_queue:
             self.log(f"Queue ready: {len(self.download_queue)} items.")
         if not self.is_busy():
@@ -405,7 +486,7 @@ class App(ctk.CTk):
                 messagebox.showerror("Invalid trim range", str(e))
                 return
         self._show_progress(0, "0%")
-        items = list(self.download_queue)
+        items = list(self.download_queue) + list(self.skipped_items)
         opts = {
             'save_path': self.download_folder, 'mode': self.cmb_mode.get(),
             'format': self.cmb_format.get(), 'quality': self.cmb_quality.get(),
@@ -420,6 +501,12 @@ class App(ctk.CTk):
         total = len(items)
         try:
             for i, item in enumerate(items):
+                if item.get('skip_reason'):
+                    # Unavailable playlist entries count in the summary as skipped.
+                    result = ItemResult(item['url'], item['title'], ItemStatus.SKIPPED, error=item['skip_reason'])
+                    summary.add(result)
+                    self.events.post(events.ITEM_DONE, result=result)
+                    continue
                 if cancel_event is not None and cancel_event.is_set():
                     result = ItemResult(item['url'], item['title'], ItemStatus.CANCELLED, error='Cancelled by user')
                     summary.add(result)
@@ -432,6 +519,7 @@ class App(ctk.CTk):
                         cancel_event=cancel_event)
                 except Exception as e:
                     result = ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
+                result.source = item
                 summary.add(result)
                 self.events.post(events.ITEM_DONE, result=result)
         finally:

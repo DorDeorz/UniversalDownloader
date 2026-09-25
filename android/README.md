@@ -87,8 +87,11 @@ shared modules:
    by the contents of `android/native/`).
 2. `apk`: the debug-signed APK for phones (arm64-v8a) and one for the
    emulator (x86_64), as workflow artifacts.
-3. `emulator`: installs the x86_64 APK on an Android 14 emulator and runs
-   `android/emulator_test.sh`, which starts the app with a `selftest_url`
+3. `emulator`: on an Android 14 emulator, `android/emulator_ui_test.sh`
+   first starts the app normally and taps through its tabs and buttons,
+   for the x86_64 APK and for the phone APK under the emulator's ARM
+   translation; it fails if the app closes or logs a `UDCRASH` error. Then
+   `android/emulator_test.sh` starts the app with a `selftest_url`
    extra. The app then downloads a local test video as MP4, as MP3 and
    trimmed to seconds 1 to 3, and logs `UDSELFTEST` lines the script
    checks. Setting `UD_SELFTEST_URL` runs the same passes on a desktop.
@@ -115,3 +118,12 @@ allow it, go back and tap **Install**. Play Protect may warn about an
 unknown developer; choose **More details → Install anyway**. The APK is
 debug-signed, so a later preview installs over it only if it was built with
 the same debug key; otherwise uninstall the old one first.
+
+## When it goes wrong
+
+A Python error in the app no longer closes it: the app records it, shows
+it in a snackbar and keeps running. If the app does close (a crash in
+native code), `faulthandler` has written the stack of every Python thread
+to the app's folder, and the next start shows that report with a **Copy
+report** button (`android/app/crash_report.py`). The Android log carries
+the same text on lines starting with `UDCRASH`.

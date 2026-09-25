@@ -54,7 +54,7 @@ import worker
 from app_settings import AppSettings
 from results import ItemStatus
 
-APP_VERSION = "0.2.0"  # keep in step with android/buildozer.spec
+APP_VERSION = "0.2.1"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]

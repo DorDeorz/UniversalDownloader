@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.1",
+    "date": "2026-09-25",
+    "en": [
+      "When something goes wrong, the app now stays open and shows the error instead of closing.",
+      "If the app still closes unexpectedly, the next start shows a report you can copy and send to the developer."
+    ],
+    "tr": [
+      "Bir sorun olduğunda uygulama artık kapanmak yerine açık kalıyor ve hatayı gösteriyor.",
+      "Uygulama yine de beklenmedik şekilde kapanırsa, bir sonraki açılışta kopyalayıp geliştiriciye gönderebileceğiniz bir rapor çıkıyor."
+    ]
+  },
+  {
     "version": "0.2.0",
     "date": "2026-09-25",
     "en": [

@@ -17,8 +17,7 @@ adb logcat -c
 adb shell am start -n "$ACTIVITY"
 # The first start unpacks the app and checks FFmpeg; wait for that to finish.
 for _ in $(seq 1 36); do
-  adb logcat -d 2>/dev/null | grep -a -q "UDSELFTEST tools" && break
-  adb shell pidof "$PKG" >/dev/null || break
+  adb logcat -d 2>/dev/null | grep -a -q -E "UDSELFTEST tools|UDCRASH" && break
   sleep 5
 done
 sleep 3

@@ -3,7 +3,7 @@ name: YouTube probe (temporary)
 on:
   push:
     branches: [claude/android-prototype-hea08y]
-    paths: [".github/workflows/yt-probe.yml", ".github/probe/**"]
+    paths: [".github/workflows/yt-probe.yml", ".github/probe/**", "android/app/browser_route.py"]
 
 permissions:
   contents: read

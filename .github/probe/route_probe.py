@@ -48,7 +48,7 @@ def probe(mode, vid):
             import urllib.parse as up
             q = up.parse_qs(up.urlsplit(fmts[0]["url"]).query)
             media.append("c=%s pot=%s" % (q.get("c"), "pot" in q))
-            if mode == "browser":
+            if mode != "plain":
                 r = BRIDGE.fetch("GET", fmts[0]["url"], {"Range": "bytes=0-65535"}, None, 30)
                 media.append("viabrowser=%s" % r[0])
             for f in fmts:
@@ -63,7 +63,7 @@ def probe(mode, vid):
         result = "BOT " if "not a bot" in msg else "FAIL " + msg.splitlines()[0][:150]
     routed = browser_route.request_count() - before
     print("%-8s %s %s (browser requests: %d)" % (mode, vid, result, routed), flush=True)
-    if mode == "browser":
+    if mode != "plain":
         for line in lines:
             if "UDBrowser" in line or "WARNING" in line or "ERROR" in line or "pot" in line.lower():
                 print("       " + line[:200])
@@ -84,5 +84,7 @@ with sync_playwright() as p:
         probe("plain", vid)
         browser_route.enable(bridge)
         probe("browser", vid)
+        page.evaluate("minter = null")
+        probe("fresh", vid)
         time.sleep(1)
     browser.close()

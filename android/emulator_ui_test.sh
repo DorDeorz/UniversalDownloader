@@ -116,7 +116,34 @@ if [ $status -eq 0 ]; then
   fi
 fi
 
-# Updates (updates.py, UpdateInstaller.java): with UD_UPDATE_RELEASES set to
+# A Java crash must come back as a report on the next start: have Android
+# crash the app's main thread (am crash) and start it again.
+if [ $status -eq 0 ]; then
+  adb logcat -c
+  # By process id: with the browser route's WebView running, the package
+  # also has a page process, and that one ending no longer closes the app.
+  adb shell am crash "$(adb shell pidof "$PKG" | tr -d '\r' | awk '{print $1}')"
+  sleep 5
+  adb shell pidof "$PKG" >/dev/null && echo "note: the app is still running after am crash"
+  adb shell am start -n "$ACTIVITY"
+  for _ in $(seq 1 24); do
+    adb logcat -d 2>/dev/null | grep -a -q "UDCRASH previous run" && break
+    sleep 5
+  done
+  sleep 3  # the report reaches the log a line at a time
+  # Kept in a variable: with pipefail, grep -q ending a pipe early fails it.
+  report=$(adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run")
+  echo "$report" | head -n 60
+  if grep -a -q -E "FATAL EXCEPTION|CrashedByAdb" <<<"$report"; then
+    echo "ok: crash report after a Java crash"
+  else
+    echo "FAIL: no crash report after a Java crash"
+    status=1
+  fi
+fi
+
+# Updates (self_update.py, UpdateInstaller.java), last because the update
+# replaces the app and ends it: with UD_UPDATE_RELEASES set to
 # a releases list that offers this same APK as a newer version, the app must
 # find it, download it and hand it to Android's installer; the test then taps
 # Update on Android's screen and checks that the package was replaced.
@@ -174,32 +201,6 @@ for node in re.findall(r"<node [^>]*>", sys.stdin.read()):
   else
     adb logcat -d 2>/dev/null | grep -a -E " python |PackageInstaller|AndroidRuntime" | tail -n 80
     echo "FAIL: the update was not installed"
-    status=1
-  fi
-fi
-
-# A Java crash must come back as a report on the next start: have Android
-# crash the app's main thread (am crash) and start it again.
-if [ $status -eq 0 ]; then
-  adb logcat -c
-  # By process id: with the browser route's WebView running, the package
-  # also has a page process, and that one ending no longer closes the app.
-  adb shell am crash "$(adb shell pidof "$PKG" | tr -d '\r' | awk '{print $1}')"
-  sleep 5
-  adb shell pidof "$PKG" >/dev/null && echo "note: the app is still running after am crash"
-  adb shell am start -n "$ACTIVITY"
-  for _ in $(seq 1 24); do
-    adb logcat -d 2>/dev/null | grep -a -q "UDCRASH previous run" && break
-    sleep 5
-  done
-  sleep 3  # the report reaches the log a line at a time
-  # Kept in a variable: with pipefail, grep -q ending a pipe early fails it.
-  report=$(adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run")
-  echo "$report" | head -n 60
-  if grep -a -q -E "FATAL EXCEPTION|CrashedByAdb" <<<"$report"; then
-    echo "ok: crash report after a Java crash"
-  else
-    echo "FAIL: no crash report after a Java crash"
     status=1
   fi
 fi

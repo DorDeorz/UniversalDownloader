@@ -213,6 +213,23 @@ def forward_native_stderr(callback):
     threading.Thread(target=pump, name="native-stderr", daemon=True).start()
 
 
+def app_log(buffers="main,system,crash", lines=None):
+    """This app's own lines from Android's log, oldest first.
+
+    Apps may read only what their own user id logged, which includes the
+    Java exception or fatal signal that closed an earlier run of the app.
+    """
+    import subprocess
+    args = ["logcat", "-d", "-v", "threadtime", "-b", buffers]
+    if lines:
+        args += ["-t", str(lines)]
+    try:
+        out = subprocess.run(args, capture_output=True, text=True, errors="replace", timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout
+
+
 def night_mode():
     """True when the phone uses its dark theme."""
     config = _activity().getResources().getConfiguration()

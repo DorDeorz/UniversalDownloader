@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.2",
+    "date": "2026-09-26",
+    "en": [
+      "After an unexpected close, the report now also includes what Android itself logged about it.",
+      "Settings › About › Copy diagnostic log copies the app's recent Android log for the developer."
+    ],
+    "tr": [
+      "Beklenmedik bir kapanmadan sonraki rapor artık Android'in bu kapanma hakkında tuttuğu kaydı da içeriyor.",
+      "Ayarlar › Hakkında › Tanılama kaydını kopyala, uygulamanın son Android kaydını geliştirici için kopyalar."
+    ]
+  },
+  {
     "version": "0.2.1",
     "date": "2026-09-25",
     "en": [

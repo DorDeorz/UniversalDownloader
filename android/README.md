@@ -125,5 +125,10 @@ A Python error in the app no longer closes it: the app records it, shows
 it in a snackbar and keeps running. If the app does close (a crash in
 native code), `faulthandler` has written the stack of every Python thread
 to the app's folder, and the next start shows that report with a **Copy
-report** button (`android/app/crash_report.py`). The Android log carries
-the same text on lines starting with `UDCRASH`.
+report** button (`android/app/crash_report.py`). That report also carries
+what Android's crash log holds for the app since the last report (Java
+exceptions, fatal signals), which apps may read for their own user id. The
+Android log carries the same text on lines starting with `UDCRASH`, and
+Settings › About › **Copy diagnostic log** copies the app's recent log at
+any time. The emulator UI test kills the app with SIGSEGV and checks that
+the next start reports it.

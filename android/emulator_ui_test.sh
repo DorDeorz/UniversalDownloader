@@ -62,5 +62,26 @@ if adb logcat -d 2>/dev/null | grep -a -q "UDCRASH"; then
   echo "FAIL: Python reported an error (UDCRASH above)"
   status=1
 fi
+
+# A native crash must come back as a report on the next start: kill the app
+# with SIGSEGV (run-as works because the APK is debuggable) and restart it.
+if [ $status -eq 0 ]; then
+  adb logcat -c
+  adb shell run-as "$PKG" kill -SEGV "$(adb shell pidof "$PKG" | tr -d '\r')"
+  sleep 5
+  adb shell am start -n "$ACTIVITY"
+  for _ in $(seq 1 24); do
+    adb logcat -d 2>/dev/null | grep -a -q "UDCRASH previous run" && break
+    sleep 5
+  done
+  if adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run" | grep -a -q -E "Fatal signal|SIGSEGV|Segmentation fault"; then
+    echo "ok: crash report after SIGSEGV"
+  else
+    echo "FAIL: no crash report after SIGSEGV"
+    status=1
+  fi
+  adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run" | head -n 60
+fi
+
 adb shell am force-stop "$PKG"
 exit $status

@@ -524,3 +524,24 @@ def test_crash_report_catches_a_native_crash(tmp_path):
     import crash_report
     previous = crash_report.CrashReport(str(tmp_path)).take_previous()
     assert "Segmentation fault" in previous and "deep_in_a_library" in previous
+
+
+def test_new_log_lines_starts_after_the_last_reported_line():
+    import crash_report
+    log = "--------- beginning of crash\nE one\nE two\nE three\n"
+    assert crash_report.new_log_lines(log, "") == ("E one\nE two\nE three", "E three")
+    assert crash_report.new_log_lines(log, "E two") == ("E three", "E three")
+    assert crash_report.new_log_lines(log, "E three") == ("", "E three")
+    assert crash_report.new_log_lines(log, "gone from the buffer") == ("E one\nE two\nE three", "E three")
+    assert crash_report.new_log_lines("", "E three") == ("", "E three")
+
+
+def test_system_crashes_are_reported_once(tmp_path):
+    import crash_report
+    report = crash_report.CrashReport(str(tmp_path))
+    assert report.new_system_crashes("F libc: Fatal signal 11") == "F libc: Fatal signal 11"
+    assert report.new_system_crashes("F libc: Fatal signal 11") == ""
+    assert report.new_system_crashes("F libc: Fatal signal 11\nE AndroidRuntime: FATAL EXCEPTION") == \
+        "E AndroidRuntime: FATAL EXCEPTION"
+    assert "FATAL EXCEPTION" in report.take_previous(extra="E AndroidRuntime: FATAL EXCEPTION")
+    assert crash_report.tail("a\nb\nc", 2) == "b\nc"

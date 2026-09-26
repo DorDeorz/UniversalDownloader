@@ -54,7 +54,7 @@ import worker
 from app_settings import AppSettings
 from results import ItemStatus
 
-APP_VERSION = "0.2.1"  # keep in step with android/buildozer.spec
+APP_VERSION = "0.2.2"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
@@ -211,7 +211,7 @@ class UniversalDownloaderApp(MDApp):
 
     def build(self):
         self.crash = crash_report.CrashReport(self.user_data_dir)
-        self._previous_crash = self.crash.take_previous()
+        self._previous_crash = self.crash.take_previous(self._android_crash_log())
         if self._previous_crash:
             print(f"UDCRASH previous run:\n{self._previous_crash}", flush=True)
         try:
@@ -318,14 +318,32 @@ class UniversalDownloaderApp(MDApp):
             pass
         return True
 
+    def _android_crash_log(self):
+        """What Android logged when an earlier run of the app closed, or ""."""
+        if not android_env.on_android():
+            return ""
+        crashes = self.crash.new_system_crashes(android_env.app_log("crash"))
+        if not crashes:
+            return ""
+        before = android_env.app_log("main,system", lines=600)
+        return (f"Android crash log:\n{crash_report.tail(crashes, 150)}\n\n"
+                f"Android log:\n{crash_report.tail(before, 600)}")
+
+    def copy_diagnostics(self):
+        from kivy.core.clipboard import Clipboard
+        text = f"UniversalDownloader {APP_VERSION}\n" + android_env.app_log(lines=1500)
+        Clipboard.copy(text)
+        self.snack(self.t("crash.copied"))
+
     def show_crash(self, text):
         from kivy.core.clipboard import Clipboard
 
         def copy():
-            Clipboard.copy(text)
+            Clipboard.copy(f"UniversalDownloader {APP_VERSION}\n{text}")
             self.snack(self.t("crash.copied"))
 
-        label = MDLabel(text=text, adaptive_height=True, font_style="Body", role="small")
+        # A label this long would outgrow a texture; the copy keeps everything.
+        label = MDLabel(text=crash_report.tail(text, 60), adaptive_height=True, font_style="Body", role="small")
         scroll = MDScrollView(label, size_hint_y=None, height=min(dp(360), Window.height * 0.5),
                               do_scroll_x=False)
         self._dialog(self.t("crash.title"), self.t("crash.body"), content=scroll,
@@ -952,6 +970,9 @@ class UniversalDownloaderApp(MDApp):
         info("information-outline", t("settings.version"), f"{APP_VERSION} · {t('settings.whats_new')}",
              on_release=self.show_release_notes)
         info("puzzle-outline", t("settings.components"), *self._components_text())
+        if android_env.on_android():
+            info("bug-outline", t("settings.diagnostics"), t("settings.diagnostics_hint"),
+                 on_release=self.copy_diagnostics)
         info("restore", t("settings.reset"), on_release=self.confirm_reset)
 
     def _add_fragments_row(self, box):

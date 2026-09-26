@@ -1,6 +1,10 @@
 **Android preview. This is not a Windows release;** the Windows installer is in the `v<version>` releases.
 
-UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.1. It is debug-signed and not on Google Play.
+UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.2. It is debug-signed and not on Google Play.
+
+**New in 0.2.2**
+- After an unexpected close, the report also includes what Android logged about it.
+- Settings › About › Copy diagnostic log copies the app's recent Android log.
 
 **New in 0.2.1**
 - When something goes wrong, the app stays open and shows the error instead of closing.

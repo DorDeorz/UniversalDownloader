@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.5",
+    "date": "2026-09-26",
+    "en": [
+      "YouTube: sign in to YouTube inside the app (Settings › YouTube, or the button that appears with the \"confirm you're not a bot\" error). YouTube lets signed-in sessions through; the sign-in stays on this phone.",
+      "Copy diagnostic log now starts with the app's own log and leaves out the lines of the first start, so it fits in a message."
+    ],
+    "tr": [
+      "YouTube: uygulamanın içinden YouTube'a giriş yapabilirsiniz (Ayarlar › YouTube ya da \"bot olmadığınızı doğrulayın\" hatasıyla çıkan düğme). YouTube giriş yapılmış oturumları geçiriyor; giriş yalnızca bu telefonda kalır.",
+      "Tanılama kaydını kopyala artık uygulamanın kendi kaydıyla başlıyor ve ilk açılış satırlarını atlıyor; bir mesaja sığıyor."
+    ]
+  },
+  {
     "version": "0.2.4",
     "date": "2026-09-26",
     "en": [

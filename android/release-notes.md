@@ -1,6 +1,10 @@
 **Android preview. This is not a Windows release;** the Windows installer is in the `v<version>` releases.
 
-UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.4. It is debug-signed and not on Google Play.
+UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.5. It is debug-signed and not on Google Play.
+
+**New in 0.2.5**
+- YouTube: sign in to YouTube inside the app (Settings › YouTube, or the button shown with the "confirm you're not a bot" error). YouTube lets signed-in sessions through; the sign-in stays on the phone. A spare Google account is safest.
+- Copy diagnostic log starts with the app's own log and skips the first-start lines.
 
 **New in 0.2.4**
 - YouTube: when YouTube asks to "confirm you're not a bot", the app retries with YouTube's TV and embedded players, which are often let through, and keeps using the one that worked.

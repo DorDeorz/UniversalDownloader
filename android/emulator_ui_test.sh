@@ -64,6 +64,26 @@ if grep -a -q "UDCRASH" <<<"$(adb logcat -d 2>/dev/null)"; then
   status=1
 fi
 
+# The YouTube sign-in page: a WebView over the app that closes again (the
+# selftest_login extra opens it with this page and closes it after 4 s).
+if [ $status -eq 0 ]; then
+  adb shell am force-stop "$PKG"
+  adb logcat -c
+  adb shell am start -n "$ACTIVITY" --es selftest_login "about:blank"
+  for _ in $(seq 1 24); do
+    adb logcat -d 2>/dev/null | grep -a -q -E "UDSELFTEST login closed|UDCRASH" && break
+    sleep 5
+  done
+  login=$(adb logcat -d 2>/dev/null | grep -a -E "UDSELFTEST login|UDCRASH")
+  echo "$login"
+  if grep -a -q "UDSELFTEST login closed signed_in=False" <<<"$login" && ! grep -a -q UDCRASH <<<"$login"; then
+    alive "YouTube sign-in page opened and closed"
+  else
+    echo "FAIL: the YouTube sign-in page did not open and close cleanly"
+    status=1
+  fi
+fi
+
 # A Java crash must come back as a report on the next start: have Android
 # crash the app's main thread (am crash) and start it again.
 if [ $status -eq 0 ]; then

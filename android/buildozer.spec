@@ -8,7 +8,7 @@ package.domain = io.github.dordeorz
 # Filled by android/stage.py: android/app plus the shared modules.
 source.dir = .build/src
 source.include_exts = py,json
-version = 0.2.4
+version = 0.2.5
 # The app icon and start screen, drawn from android/icon/icon.svg (see
 # android/icon/render.py). Android 8+ shows the adaptive layers in the
 # launcher's shape; older versions show icon.png.

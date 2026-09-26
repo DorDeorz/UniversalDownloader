@@ -51,12 +51,13 @@ import texts
 import urls
 import version
 import worker
+import youtube_login
 from app_settings import AppSettings
 from results import ItemStatus
 
 md_patches.disable_gpu_ripple()  # before any KivyMD widget exists; see md_patches
 
-APP_VERSION = "0.2.4"  # keep in step with android/buildozer.spec
+APP_VERSION = "0.2.5"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
@@ -248,6 +249,8 @@ class UniversalDownloaderApp(MDApp):
         # Settings and History are rebuilt when shown, and only after a change.
         self._stale = {"settings": True, "history": True}
         self._dark = None
+        self._login = None           # youtube_login.LoginView while it is open
+        self._retry_after_login = False
         self._wake_lock = None
         self._stderr = deque(maxlen=12)  # last lines FFmpeg printed, shown when an item fails
         self._apply_language()
@@ -258,7 +261,15 @@ class UniversalDownloaderApp(MDApp):
         self.ids.screens.transition.duration = TAB_SECONDS
         self._wire_handlers()
         Clock.schedule_interval(lambda *_: self.events.dispatch_pending(), 0.1)
+        Window.bind(on_keyboard=self._on_key)
         return self.root_view
+
+    def _on_key(self, _window, key, *_args):
+        """Back (Escape) closes the YouTube sign-in page instead of the app."""
+        if key == 27 and self._login is not None:
+            self._login.close()
+            return True
+        return False
 
     def _wire_handlers(self):
         self.events.register(events.LOG, self.log)
@@ -271,6 +282,7 @@ class UniversalDownloaderApp(MDApp):
         self.events.register(events.ITEM_DONE, self._on_item_done)
         self.events.register(events.JOB_DONE, self._on_job_done)
         self.events.register("shared_link", self._on_shared_text)
+        self.events.register("youtube_login", self._on_youtube_login)
 
     def on_start(self):
         self._show_mode()
@@ -480,7 +492,11 @@ class UniversalDownloaderApp(MDApp):
         self.ids.btn_analyze.disabled = False
         self.ids.btn_download.disabled = not (self.analysis and self.analysis.items)
         self._refresh("settings")
-        if self._selftest:
+        login_test = self._intent_extra("selftest_login")
+        if login_test:
+            self.sign_in_youtube(url=login_test)
+            Clock.schedule_once(lambda *_: self._login and self._login.close(), 4)
+        elif self._selftest:
             self.ids.url.text = self._selftest
             self._selftest_passes = [("video", None), ("audio", None), ("video", ("0:01", "0:03"))]
             self.analyze()
@@ -489,10 +505,15 @@ class UniversalDownloaderApp(MDApp):
 
     def _selftest_url(self):
         """The ``selftest_url`` extra of the launching intent (CI only)."""
+        return self._intent_extra("selftest_url")
+
+    def _intent_extra(self, name):
+        if not android_env.on_android():
+            return os.environ.get("UD_" + name.upper())
         try:
             from jnius import autoclass
             activity = autoclass("org.kivy.android.PythonActivity").mActivity
-            return activity.getIntent().getStringExtra("selftest_url")
+            return activity.getIntent().getStringExtra(name)
         except Exception:
             return None
 
@@ -757,8 +778,11 @@ class UniversalDownloaderApp(MDApp):
             self.log(self.tr("log.folder", folder=self.download_dir))
 
     def _set_platform_options(self):
-        logic.set_platform_options({**getattr(self, "_js_options", {}),
-                                    **app_settings.download_speed_options(self.settings)})
+        options = {**getattr(self, "_js_options", {}), **app_settings.download_speed_options(self.settings)}
+        cookies = youtube_login.saved(self.user_data_dir)
+        if cookies:
+            options["cookiefile"] = cookies
+        logic.set_platform_options(options)
 
     def _keep_awake(self, on):
         if not android_env.on_android():
@@ -818,6 +842,8 @@ class UniversalDownloaderApp(MDApp):
         self._show_media(self.tr("link.nothing_reason", reason=message), "", "alert-circle-outline")
         self.log(message)
         selftest(f"analysis failed: {message}")
+        if logic.is_bot_check(message) and android_env.on_android():
+            self._offer_youtube_sign_in()
 
     def _on_item_started(self, position, total, title):
         self._stderr.clear()
@@ -940,6 +966,52 @@ class UniversalDownloaderApp(MDApp):
         self._dialog(self.t("history.clear"), self.t("history.clear_body"),
                      buttons=[(self.t("common.cancel"), None), (self.t("common.remove"), clear)])
 
+    # --- YouTube sign-in ----------------------------------------------------------
+
+    def _offer_youtube_sign_in(self):
+        def sign_in():
+            self._retry_after_login = True
+            self.sign_in_youtube()
+
+        self._dialog(self.t("youtube.bot_title"), self.t("youtube.bot_body"),
+                     buttons=[(self.t("common.cancel"), None), (self.t("youtube.sign_in"), sign_in)])
+
+    def sign_in_youtube(self, url=None):
+        if not android_env.on_android() or self._login is not None:
+            return
+        self._login = youtube_login.LoginView(
+            lambda header: self.events.post("youtube_login", header=header), done_text=self.t("youtube.done"))
+        try:
+            self._login.open(url or youtube_login.LOGIN_URL)
+        except Exception as e:
+            self._login = None
+            self.snack(self.t("crash.error", error=e))
+
+    def _on_youtube_login(self, header):
+        self._login = None
+        ok = youtube_login.save(self.user_data_dir, header)
+        selftest(f"login closed signed_in={ok}")
+        self._set_platform_options()
+        self._refresh("settings")
+        self.snack(self.t("youtube.ok" if ok else "youtube.failed"))
+        retry, self._retry_after_login = self._retry_after_login, False
+        if ok and retry and self.job is None and self.ids.url.text.strip():
+            self.analyze()
+
+    def sign_out_youtube(self):
+        def sign_out():
+            youtube_login.forget(self.user_data_dir)
+            try:
+                youtube_login.clear_webview_cookies()
+            except Exception as e:
+                _log.warning("Clear WebView cookies: %s", e)
+            self._set_platform_options()
+            self._refresh("settings")
+            self.snack(self.t("youtube.signed_out"))
+
+        self._dialog(self.t("youtube.signed_in"), buttons=[(self.t("common.cancel"), None),
+                                                          (self.t("youtube.sign_out"), sign_out)])
+
     # --- Settings -----------------------------------------------------------------
 
     def _save_settings(self, **changes):
@@ -1025,6 +1097,15 @@ class UniversalDownloaderApp(MDApp):
         switch("cellphone-screenshot", t("settings.keep_screen"), s.keep_screen_on,
                lambda v: self._save_settings(keep_screen_on=v), t("settings.keep_screen_hint"))
         switch("history", t("settings.history"), s.save_history, lambda v: self._save_settings(save_history=v))
+
+        # YouTube
+        section(t("youtube.section"))
+        if youtube_login.saved(self.user_data_dir):
+            info("account-check-outline", t("youtube.signed_in"), t("youtube.sign_out_hint"),
+                 on_release=self.sign_out_youtube)
+        else:
+            info("account-outline", t("youtube.sign_in"), t("youtube.sign_in_hint"),
+                 on_release=self.sign_in_youtube)
 
         # About
         section(t("settings.about"))

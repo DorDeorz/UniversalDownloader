@@ -656,3 +656,46 @@ def test_diagnostics_put_the_app_log_first_without_unpacking_noise():
     assert "extracting" not in text
     assert text.rstrip().endswith("UDSELFTEST tools ok")
 
+
+
+# --- YouTube sign-in ----------------------------------------------------------------
+
+SIGNED_IN = "PREF=f6=40000000; SID=abc; SAPISID=xyz/123; __Secure-3PAPISID=xyz/123; LOGIN_INFO=AFm:QUQ="
+
+
+def test_youtube_cookie_header_is_parsed():
+    import youtube_login
+    cookies = youtube_login.parse_cookie_header(SIGNED_IN)
+    assert cookies["SAPISID"] == "xyz/123" and cookies["LOGIN_INFO"] == "AFm:QUQ="
+    assert youtube_login.signed_in(cookies)
+    assert not youtube_login.signed_in(youtube_login.parse_cookie_header("PREF=1; VISITOR_INFO1_LIVE=x"))
+    assert youtube_login.parse_cookie_header(None) == {}
+
+
+def test_youtube_cookies_are_saved_for_yt_dlp(tmp_path):
+    import http.cookiejar
+    import youtube_login
+    assert youtube_login.saved(str(tmp_path)) is None
+    assert youtube_login.save(str(tmp_path), SIGNED_IN)
+    path = youtube_login.saved(str(tmp_path))
+    jar = http.cookiejar.MozillaCookieJar(path)
+    jar.load()  # the format yt-dlp's cookiefile reads
+    values = {c.name: (c.value, c.domain, c.secure) for c in jar}
+    assert values["SAPISID"] == ("xyz/123", ".youtube.com", True)
+    assert len(values) == 5
+    youtube_login.forget(str(tmp_path))
+    assert youtube_login.saved(str(tmp_path)) is None
+
+
+def test_signed_out_session_is_not_saved(tmp_path):
+    import youtube_login
+    assert not youtube_login.save(str(tmp_path), "PREF=1; YSC=abc")
+    assert not os.path.exists(youtube_login.cookie_path(str(tmp_path)))
+
+
+def test_cookie_file_reaches_yt_dlp(tmp_path, fake_ydl, manager):
+    import youtube_login
+    youtube_login.save(str(tmp_path), SIGNED_IN)
+    logic.set_platform_options({"cookiefile": youtube_login.saved(str(tmp_path))})
+    manager.fetch_info("https://youtu.be/abc")
+    assert fake_ydl.instances[0].opts["cookiefile"].endswith(youtube_login.COOKIE_FILE)

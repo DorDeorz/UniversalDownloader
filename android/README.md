@@ -45,6 +45,14 @@ Speed and YouTube:
   `logic.BOT_CHECK_CLIENTS`, so it then retries with the `tv` and
   `web_embedded`/`tv_downgraded` player clients (none needs a PO token) and
   keeps the one that worked. The Windows app does not turn this on.
+  When that is not enough (it was not on the owner's phone), Settings ›
+  YouTube › **Sign in** (also offered with the error) opens YouTube's
+  sign-in page in an Android WebView (`android/app/youtube_login.py`). On
+  **Done** the WebView's youtube.com cookies go to a Netscape cookie file in
+  the app's private folder, which yt-dlp reads as `cookiefile`; yt-dlp then
+  uses its signed-in player clients. The WebView's user agent leaves out
+  the WebView markers, or Google refuses to sign in. Signing out deletes the
+  file and the WebView's cookies.
 - Progress is sent to the screen at most four times a second, the log is
   drawn only while it is open, and History and Settings are rebuilt only
   when shown after a change.

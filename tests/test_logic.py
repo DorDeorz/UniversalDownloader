@@ -1,11 +1,12 @@
 import os
 
-
+import pytest
 import yt_dlp
 
 import logic
 from logic import DownloadManager
 from results import ItemStatus
+from conftest import FAKE_TOOLS
 
 
 # --- fetch_info ---------------------------------------------------------
@@ -209,3 +210,120 @@ def test_format_is_logged(manager, fake_ydl, tmp_path):
     manager.download_video("https://youtu.be/abc", {"save_path": str(tmp_path)}, log_callback=lines.append)
 
     assert "Format: 1280x720 avc1 mp4a -> mp4" in lines
+
+
+# --- YouTube bot check ------------------------------------------------------------
+
+BOT_ERROR = ("ERROR: [youtube] abc: Sign in to confirm you’re not a bot. "
+             "Use --cookies-from-browser or --cookies for the authentication.")
+
+
+def _clients(instance):
+    return instance.opts.get("extractor_args", {}).get("youtube", {}).get("player_client")
+
+
+@pytest.fixture
+def bot_check(fake_ydl, monkeypatch):
+    """YouTube refuses every player client except the ones in ``allowed``."""
+    allowed = {"clients": ("tv",)}
+    real_extract = fake_ydl.extract_info
+
+    def extract_info(self, url, download=False):
+        clients = _clients(self)
+        if not clients or tuple(clients) != allowed["clients"]:
+            self.extract_calls.append((url, download))
+            raise yt_dlp.utils.DownloadError(BOT_ERROR)
+        return real_extract(self, url, download)
+
+    monkeypatch.setattr(fake_ydl, "extract_info", extract_info)
+    return allowed
+
+
+def test_is_bot_check_matches_youtube_refusal():
+    assert logic.is_bot_check(BOT_ERROR)
+    assert logic.is_bot_check("Sign in to confirm you're not a bot")
+    assert not logic.is_bot_check("Video unavailable")
+    assert not logic.is_bot_check(None)
+
+
+def test_bot_check_is_not_retried_by_default(manager, fake_ydl, bot_check):
+    info = manager.fetch_info("https://youtu.be/abc")
+    assert "not a bot" in info["error"]
+    assert len(fake_ydl.instances) == 1
+
+
+def test_fetch_info_retries_bot_check_with_other_clients(fake_ydl, bot_check):
+    manager = DownloadManager(tools=FAKE_TOOLS, bot_check_clients=logic.BOT_CHECK_CLIENTS)
+    lines = []
+    info = manager.fetch_info("https://youtu.be/abc", log_callback=lines.append)
+    assert info["title"] == "clip"
+    assert [_clients(i) for i in fake_ydl.instances] == [None, ["tv"]]
+    assert any("not a bot" in line for line in lines)
+
+
+def test_fetch_info_reports_bot_check_when_every_client_is_refused(fake_ydl, bot_check):
+    bot_check["clients"] = ("nothing",)
+    manager = DownloadManager(tools=FAKE_TOOLS, bot_check_clients=logic.BOT_CHECK_CLIENTS)
+    info = manager.fetch_info("https://youtu.be/abc")
+    assert "not a bot" in info["error"]
+    assert len(fake_ydl.instances) == 1 + len(logic.BOT_CHECK_CLIENTS)
+
+
+def test_clients_that_passed_are_tried_first_next_time(fake_ydl, bot_check, tmp_path):
+    manager = DownloadManager(tools=FAKE_TOOLS, bot_check_clients=logic.BOT_CHECK_CLIENTS)
+    manager.fetch_info("https://youtu.be/abc")
+    fake_ydl.instances = []
+    result = manager.download_video("https://youtu.be/abc", {"save_path": str(tmp_path)})
+    assert result.status is ItemStatus.COMPLETED
+    assert _clients(fake_ydl.instances[0]) == ["tv"]
+
+
+def test_download_retries_bot_check(fake_ydl, bot_check, tmp_path):
+    manager = DownloadManager(tools=FAKE_TOOLS, bot_check_clients=logic.BOT_CHECK_CLIENTS)
+    result = manager.download_video("https://youtu.be/abc", {"save_path": str(tmp_path)})
+    assert result.status is ItemStatus.COMPLETED
+    assert [_clients(i) for i in fake_ydl.instances[:2]] == [None, ["tv"]]
+
+
+def test_player_clients_keep_other_extractor_args():
+    options = {"extractor_args": {"youtube": {"lang": ["en"]}, "tiktok": {"x": ["1"]}}}
+    changed = logic.with_player_clients(options, ("tv",))
+    assert changed["extractor_args"] == {"youtube": {"lang": ["en"], "player_client": ["tv"]},
+                                         "tiktok": {"x": ["1"]}}
+    assert options["extractor_args"]["youtube"] == {"lang": ["en"]}
+    assert logic.with_player_clients(options, None) is options
+
+
+# --- Reusing the analysis ---------------------------------------------------------
+
+def test_download_reuses_analysed_info_without_asking_again(manager, fake_ydl, tmp_path):
+    info = manager.fetch_info("https://example.com/v")
+    fake_ydl.instances = []
+    result = manager.download_video("https://example.com/v", {"save_path": str(tmp_path)}, info=info)
+    assert result.status is ItemStatus.COMPLETED
+    assert not any(i.extract_calls for i in fake_ydl.instances)
+
+
+def test_reusable_info_drops_earlier_format_selection():
+    info = {"id": "x", "formats": [{"format_id": "a"}], "requested_formats": [{"format_id": "a"}],
+            "requested_downloads": [{}], "_filename": "x.mp4"}
+    copy_ = logic.reusable_info(info)
+    assert copy_ == {"id": "x", "formats": [{"format_id": "a"}]}
+    assert "requested_formats" in info  # the cached original is left alone
+    copy_["formats"][0]["format_id"] = "b"
+    assert info["formats"][0]["format_id"] == "a"
+
+
+def test_real_yt_dlp_selects_again_from_reused_info():
+    """yt-dlp keeps the old merge in 'requested_formats' unless it is dropped."""
+    raw = {"id": "x", "title": "t", "extractor": "generic", "extractor_key": "Generic",
+           "webpage_url": "http://e/x", "formats": [
+               {"format_id": "v", "url": "http://e/v.mp4", "ext": "mp4", "vcodec": "avc1", "acodec": "none"},
+               {"format_id": "a", "url": "http://e/a.m4a", "ext": "m4a", "vcodec": "none", "acodec": "mp4a"}]}
+    with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+        analysed = ydl.process_ie_result(raw, download=False)
+    assert analysed["format_id"] == "v+a"
+    with yt_dlp.YoutubeDL({"quiet": True, "format": "ba"}) as ydl:
+        again = ydl.process_ie_result(logic.reusable_info(analysed), download=False)
+    assert again["format_id"] == "a"
+    assert "requested_formats" not in again

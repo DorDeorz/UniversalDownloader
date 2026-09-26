@@ -1,0 +1,116 @@
+[
+  {
+    "version": "0.2.6",
+    "date": "2026-09-26",
+    "en": [
+      "YouTube without an account: when YouTube asks to \"confirm you're not a bot\", the app tries again through the phone's own browser engine, the way a browser would open the video. No sign-in needed.",
+      "If YouTube blocks even that, the app says so and suggests Wi-Fi or another network. Signing in (Settings › YouTube) stays available but optional."
+    ],
+    "tr": [
+      "Hesapsız YouTube: YouTube \"bot olmadığınızı doğrulayın\" dediğinde uygulama, videoyu bir tarayıcı gibi açarak telefonun kendi tarayıcı motoru üzerinden yeniden dener. Giriş gerekmez.",
+      "YouTube bunu da engellerse uygulama bunu söyler ve Wi-Fi ya da başka bir ağ önerir. Giriş yapma (Ayarlar › YouTube) isteğe bağlı olarak duruyor."
+    ]
+  },
+  {
+    "version": "0.2.5",
+    "date": "2026-09-26",
+    "en": [
+      "YouTube: sign in to YouTube inside the app (Settings › YouTube, or the button that appears with the \"confirm you're not a bot\" error). YouTube lets signed-in sessions through; the sign-in stays on this phone.",
+      "Copy diagnostic log now starts with the app's own log and leaves out the lines of the first start, so it fits in a message."
+    ],
+    "tr": [
+      "YouTube: uygulamanın içinden YouTube'a giriş yapabilirsiniz (Ayarlar › YouTube ya da \"bot olmadığınızı doğrulayın\" hatasıyla çıkan düğme). YouTube giriş yapılmış oturumları geçiriyor; giriş yalnızca bu telefonda kalır.",
+      "Tanılama kaydını kopyala artık uygulamanın kendi kaydıyla başlıyor ve ilk açılış satırlarını atlıyor; bir mesaja sığıyor."
+    ]
+  },
+  {
+    "version": "0.2.4",
+    "date": "2026-09-26",
+    "en": [
+      "YouTube: when YouTube asks to \"confirm you're not a bot\", the app tries YouTube's TV and embedded players, which are often let through, and keeps using the one that worked.",
+      "Faster: a video's download starts from what Analyze already found instead of asking the site again, and YouTube's player code is kept between runs.",
+      "Quality, format and settings choices open in a dialog that scrolls, so long lists fit on every screen.",
+      "Smoother: progress and the log redraw a few times a second instead of on every chunk, History and Settings are rebuilt only after a change, and switching tabs is quicker.",
+      "New app icon and start screen."
+    ],
+    "tr": [
+      "YouTube: YouTube \"bot olmadığınızı doğrulayın\" dediğinde uygulama YouTube'un TV ve gömülü oynatıcılarını dener (bunlar çoğu zaman geçer) ve işe yarayanı kullanmaya devam eder.",
+      "Daha hızlı: indirme, siteye yeniden sormak yerine Analiz'in bulduğu bilgiden başlar; YouTube'un oynatıcı kodu çalıştırmalar arasında saklanır.",
+      "Kalite, biçim ve ayar seçimleri kaydırılabilen bir pencerede açılır; uzun listeler her ekrana sığar.",
+      "Daha akıcı: ilerleme ve günlük her parçada değil saniyede birkaç kez çizilir, Geçmiş ve Ayarlar yalnızca bir değişiklikten sonra yeniden kurulur, sekme geçişi hızlandı.",
+      "Yeni uygulama simgesi ve açılış ekranı."
+    ]
+  },
+  {
+    "version": "0.2.3",
+    "date": "2026-09-26",
+    "en": [
+      "Fixed: the app closed at the first tap on phones with Qualcomm Adreno graphics (many Xiaomi and Samsung phones). The touch ripple that crashed their graphics driver is switched off; buttons still light up when pressed."
+    ],
+    "tr": [
+      "Düzeltildi: Qualcomm Adreno ekran kartlı telefonlarda (birçok Xiaomi ve Samsung) uygulama ilk dokunuşta kapanıyordu. Ekran kartı sürücüsünü çökerten dokunma dalgası efekti kapatıldı; tuşlar basınca yine renk değiştiriyor."
+    ]
+  },
+  {
+    "version": "0.2.2",
+    "date": "2026-09-26",
+    "en": [
+      "After an unexpected close, the report now also includes what Android itself logged about it.",
+      "Settings › About › Copy diagnostic log copies the app's recent Android log for the developer."
+    ],
+    "tr": [
+      "Beklenmedik bir kapanmadan sonraki rapor artık Android'in bu kapanma hakkında tuttuğu kaydı da içeriyor.",
+      "Ayarlar › Hakkında › Tanılama kaydını kopyala, uygulamanın son Android kaydını geliştirici için kopyalar."
+    ]
+  },
+  {
+    "version": "0.2.1",
+    "date": "2026-09-25",
+    "en": [
+      "When something goes wrong, the app now stays open and shows the error instead of closing.",
+      "If the app still closes unexpectedly, the next start shows a report you can copy and send to the developer."
+    ],
+    "tr": [
+      "Bir sorun olduğunda uygulama artık kapanmak yerine açık kalıyor ve hatayı gösteriyor.",
+      "Uygulama yine de beklenmedik şekilde kapanırsa, bir sonraki açılışta kopyalayıp geliştiriciye gönderebileceğiniz bir rapor çıkıyor."
+    ]
+  },
+  {
+    "version": "0.2.0",
+    "date": "2026-09-25",
+    "en": [
+      "New Material You design with Download, History and Settings tabs; colours follow your wallpaper on Android 12 and newer.",
+      "Settings: light, dark or system theme, accent colour, language, default quality and format, parallel connections and more.",
+      "Faster downloads: streamed videos (Instagram, X, live) download several parts at once.",
+      "TikTok works: the app now impersonates a browser like the Windows version.",
+      "Trim: download only part of a video by start and end time.",
+      "Share a link from YouTube, TikTok, Instagram or the browser straight to UniversalDownloader.",
+      "Download history: open, share or remove what you downloaded.",
+      "The screen stays on and downloads keep running while the app works.",
+      "More formats: MKV video, FLAC and WAV audio, audio bitrate choice.",
+      "Smaller app: FFmpeg's code is shared between its programs."
+    ],
+    "tr": [
+      "Yeni Material You tasarımı: İndir, Geçmiş ve Ayarlar sekmeleri; Android 12 ve üstünde renkler duvar kağıdınıza uyar.",
+      "Ayarlar: aydınlık, karanlık veya sistem teması, vurgu rengi, dil, varsayılan kalite ve biçim, paralel bağlantı sayısı ve daha fazlası.",
+      "Daha hızlı indirme: parça parça gelen videolar (Instagram, X, canlı yayın) aynı anda birkaç parçadan iner.",
+      "TikTok çalışıyor: uygulama artık Windows sürümü gibi tarayıcı taklidi yapıyor.",
+      "Kırpma: videonun yalnızca başlangıç ve bitiş zamanı verdiğiniz kısmını indirin.",
+      "YouTube, TikTok, Instagram veya tarayıcıdan bir bağlantıyı doğrudan UniversalDownloader'a paylaşın.",
+      "İndirme geçmişi: indirdiklerinizi açın, paylaşın veya listeden kaldırın.",
+      "İndirme sürerken ekran açık kalır ve indirme devam eder.",
+      "Daha fazla biçim: MKV video, FLAC ve WAV ses, ses bit hızı seçimi.",
+      "Daha küçük uygulama: FFmpeg'in kodu programları arasında paylaşılıyor."
+    ]
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-09-25",
+    "en": [
+      "First test version: paste a link, choose Video + Audio or Audio Only and download with progress."
+    ],
+    "tr": [
+      "İlk deneme sürümü: bağlantıyı yapıştırın, Video + Ses veya Yalnızca Ses seçin ve ilerlemeyi izleyerek indirin."
+    ]
+  }
+]

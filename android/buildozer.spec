@@ -7,9 +7,16 @@ package.name = universaldownloader
 package.domain = io.github.dordeorz
 # Filled by android/stage.py: android/app plus the shared modules.
 source.dir = .build/src
-source.include_exts = py,json,png
-version = 0.2.3
-icon.filename = %(source.dir)s/icon.png
+source.include_exts = py,json
+version = 0.2.4
+# The app icon and start screen, drawn from android/icon/icon.svg (see
+# android/icon/render.py). Android 8+ shows the adaptive layers in the
+# launcher's shape; older versions show icon.png.
+icon.filename = icon/icon.png
+icon.adaptive_foreground.filename = icon/icon_fg.png
+icon.adaptive_background.filename = icon/icon_bg.png
+presplash.filename = icon/presplash.png
+android.presplash_color = #221B4F
 orientation = portrait
 fullscreen = 0
 

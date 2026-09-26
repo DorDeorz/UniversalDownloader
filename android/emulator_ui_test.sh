@@ -51,7 +51,8 @@ alive "start" &&
   tap "Clear" $(dp 60) $(dp 200) &&
   tap "History tab" $(( W / 2 )) "$nav_y" &&
   tap "Settings tab" $(( W * 5 / 6 )) "$nav_y" &&
-  tap "Theme row" $(( W / 2 )) $(dp 200) &&
+  tap "Theme row" $(( W / 2 )) $(dp 165) &&  # below the status bar and the Appearance heading
+  { adb shell input keyevent KEYCODE_BACK; sleep 2; alive "Back closes the choice dialog"; } &&
   tap "Download tab" $(( W / 6 )) "$nav_y" &&
   tap "Link field" $(( W / 2 )) $(dp 140) &&
   { adb shell input keyevent KEYCODE_HOME; sleep 3; adb shell am start -n "$ACTIVITY"; sleep 5; alive "background and back"; }

@@ -2,7 +2,7 @@
 
 buildozer packages one folder. The Android app reuses the download code at
 the repository root instead of keeping a copy, so this script copies the
-shared modules, the translations and the icon next to ``android/app`` into
+shared modules and the translations next to ``android/app`` into
 ``android/.build/src`` (ignored by git) before each build.
 
     python android/stage.py
@@ -43,7 +43,6 @@ def stage(dest=DEST):
         if name.endswith((".py", ".json")):
             shutil.copy2(os.path.join(ANDROID, "app", name), dest)
     shutil.copytree(os.path.join(ROOT, "locales"), os.path.join(dest, "locales"))
-    shutil.copy2(os.path.join(ROOT, "app.png"), os.path.join(dest, "icon.png"))
     return dest
 
 

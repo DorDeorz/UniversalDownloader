@@ -200,13 +200,16 @@ class FakeManager:
         self.info = info or {"title": "Clip", "webpage_url": "https://example.com/v"}
         self.fail = set(fail)
         self.calls = []
+        self.infos = []
 
     def fetch_info(self, url, log_callback=None):
         log_callback("fetching")
         return self.info
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None,
+                       info=None):
         self.calls.append((url, options))
+        self.infos.append(info)
         progress_hook({"status": "downloading", "downloaded_bytes": 5, "total_bytes": 10})
         progress_hook({"status": "started", "postprocessor": "Merger"})
         if url in self.fail:
@@ -282,7 +285,7 @@ def test_session_cancel_marks_remaining_items_cancelled():
 
     class SlowManager(FakeManager):
         def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
-                           cancel_event=None):
+                           cancel_event=None, info=None):
             release.wait(5)
             status = ItemStatus.CANCELLED if cancel_event.is_set() else ItemStatus.COMPLETED
             return ItemResult(url, title, status)
@@ -300,13 +303,113 @@ def test_session_cancel_marks_remaining_items_cancelled():
     assert done == [ItemStatus.CANCELLED, ItemStatus.CANCELLED]
 
 
+VIDEO_INFO = {"title": "Clip", "webpage_url": "https://example.com/v", "formats": [{"format_id": "18"}]}
+
+
+def _analyse_and_download(manager, queue=None):
+    queue = queue or events.EventQueue()
+    session = worker.Session(manager, queue)
+    session.analyze("https://example.com/v")
+    session.wait(5)
+    analysis = [p for k, p in _drain(queue) if k == events.ANALYSIS_DONE][0]["analysis"]
+    session.download(analysis, worker.build_options(worker.VIDEO_AUDIO, "/dl"))
+    session.wait(5)
+    return session, analysis
+
+
+def test_download_reuses_the_analysed_video():
+    manager = FakeManager(info=VIDEO_INFO)
+    _analyse_and_download(manager)
+    assert manager.infos == [VIDEO_INFO]
+
+
+def test_old_analysis_is_asked_again(monkeypatch):
+    manager = FakeManager(info=VIDEO_INFO)
+    clock = [1000.0]
+    monkeypatch.setattr(worker.time, "monotonic", lambda: clock[0])
+    queue = events.EventQueue()
+    session = worker.Session(manager, queue)
+    session.analyze("https://example.com/v")
+    session.wait(5)
+    analysis = [p for k, p in _drain(queue) if k == events.ANALYSIS_DONE][0]["analysis"]
+    clock[0] += worker.REUSE_SECONDS + 1
+    session.download(analysis, worker.build_options(worker.VIDEO_AUDIO, "/dl"))
+    session.wait(5)
+    assert manager.infos == [None]
+
+
+def test_failed_download_with_saved_info_is_retried_fresh():
+    class ExpiredLinks(FakeManager):
+        def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
+                           cancel_event=None, info=None):
+            self.infos.append(info)
+            status = ItemStatus.FAILED if info is not None else ItemStatus.COMPLETED
+            return ItemResult(url, title, status, error="HTTP Error 403")
+
+    manager = ExpiredLinks(info=VIDEO_INFO)
+    queue = events.EventQueue()
+    session, _analysis = _analyse_and_download(manager, queue)
+    assert manager.infos == [VIDEO_INFO, None]
+    done = [p["result"] for k, p in _drain(queue) if k == events.ITEM_DONE]
+    assert done[0].status is ItemStatus.COMPLETED
+    assert session._analysed is None  # not reused again
+
+
+def test_playlists_are_not_reused():
+    manager = FakeManager(info={"_type": "playlist", "title": "List",
+                                "entries": [{"url": "https://example.com/a", "title": "A"}]})
+    _analyse_and_download(manager)
+    assert manager.infos == [None]
+
+
+def test_progress_reaches_the_screen_a_few_times_a_second(monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(worker.time, "monotonic", lambda: clock[0])
+    queue = events.EventQueue()
+    session = worker.Session(FakeManager(), queue)
+    for _ in range(20):  # 20 chunks within 0.2 s
+        session._progress({"status": "downloading", "downloaded_bytes": 5, "total_bytes": 10})
+        clock[0] += 0.01
+    clock[0] += 1
+    session._progress({"status": "downloading", "downloaded_bytes": 6, "total_bytes": 10})
+    session._progress({"status": "finished"})
+    progress = [p["fraction"] for k, p in _drain(queue) if k == events.PROGRESS]
+    assert progress == [0.5, 0.6, 1.0]
+
+
+def _png_header(path):
+    """(width, height, colour type) of a PNG file."""
+    import struct
+    with open(path, "rb") as f:
+        head = f.read(26)
+    assert head[:8] == b"\x89PNG\r\n\x1a\n", path
+    width, height = struct.unpack(">II", head[16:24])
+    return width, height, head[25]
+
+
+def test_icon_files_match_the_build_settings():
+    spec = open(os.path.join(ROOT, "android", "buildozer.spec"), encoding="utf-8").read()
+    for key in ("icon.filename", "icon.adaptive_foreground.filename", "icon.adaptive_background.filename",
+                "presplash.filename"):
+        path = re.search(rf"^{re.escape(key)} = (.+)$", spec, re.M).group(1).strip()
+        assert _png_header(os.path.join(ROOT, "android", path))[:2] == (512, 512), key
+    # The launcher draws the background; the foreground layer needs transparency.
+    assert _png_header(os.path.join(ROOT, "android", "icon", "icon_fg.png"))[2] == 6  # RGBA
+    colour = re.search(r"^android.presplash_color = (#\w+)$", spec, re.M).group(1)
+    import importlib.util
+    render = importlib.util.spec_from_file_location("render", os.path.join(ROOT, "android", "icon", "render.py"))
+    module = importlib.util.module_from_spec(render)
+    render.loader.exec_module(module)
+    assert module.SPLASH_COLOUR == colour
+
+
 # --- staging ------------------------------------------------------------------------
 
 
 def test_stage_copies_app_and_shared_modules(tmp_path):
     dest = stage.stage(str(tmp_path / "src"))
     names = set(os.listdir(dest))
-    assert {"main.py", "worker.py", "android_env.py", "layout.py", "whats_new.json", "icon.png",
+    assert {"main.py", "worker.py", "android_env.py", "layout.py", "whats_new.json",
             "locales"} <= names
     assert set(stage.SHARED_MODULES) <= names
     assert "ui.py" not in names and "app_setup.py" not in names

@@ -29,9 +29,8 @@ from kivymd.uix.button import MDButton, MDButtonText
 from kivymd.uix.dialog import (MDDialog, MDDialogButtonContainer, MDDialogContentContainer,
                                MDDialogHeadlineText, MDDialogSupportingText)
 from kivymd.uix.label import MDLabel
-from kivymd.uix.list import (MDListItem, MDListItemHeadlineText, MDListItemLeadingIcon,
+from kivymd.uix.list import (MDList, MDListItem, MDListItemHeadlineText, MDListItemLeadingIcon,
                              MDListItemSupportingText, MDListItemTertiaryText, MDListItemTrailingIcon)
-from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.navigationbar import MDNavigationItem
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.slider import MDSlider, MDSliderHandle
@@ -57,11 +56,13 @@ from results import ItemStatus
 
 md_patches.disable_gpu_ripple()  # before any KivyMD widget exists; see md_patches
 
-APP_VERSION = "0.2.3"  # keep in step with android/buildozer.spec
+APP_VERSION = "0.2.4"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
 LOG_LINES = 150
+HISTORY_SHOWN = 100  # newest entries listed; each row is a handful of widgets
+TAB_SECONDS = 0.2    # tab switch animation
 SELFTEST_TAG = "UDSELFTEST"
 MODES = {"video": worker.VIDEO_AUDIO, "audio": worker.AUDIO_ONLY}
 MIME = {"mp4": "video/mp4", "mkv": "video/x-matroska", "webm": "video/webm", "mp3": "audio/mpeg",
@@ -243,7 +244,10 @@ class UniversalDownloaderApp(MDApp):
         self._selftest = None
         self._selftest_passes = []
         self._log_lines = []
-        self._menu = None
+        self._log_trigger = Clock.create_trigger(self._render_log, 0.25)
+        # Settings and History are rebuilt when shown, and only after a change.
+        self._stale = {"settings": True, "history": True}
+        self._dark = None
         self._wake_lock = None
         self._stderr = deque(maxlen=12)  # last lines FFmpeg printed, shown when an item fails
         self._apply_language()
@@ -251,6 +255,7 @@ class UniversalDownloaderApp(MDApp):
         Builder.load_string(layout.KV)
         self.root_view = Root()
         self.ids = self.root_view.ids
+        self.ids.screens.transition.duration = TAB_SECONDS
         self._wire_handlers()
         Clock.schedule_interval(lambda *_: self.events.dispatch_pending(), 0.1)
         return self.root_view
@@ -276,8 +281,6 @@ class UniversalDownloaderApp(MDApp):
         self.set_busy(False)
         self.ids.btn_download.disabled = True
         self.ids.btn_analyze.disabled = True
-        self.build_settings()
-        self.build_history()
         if android_env.on_android():
             os.environ["TMPDIR"] = android_env.cache_dir()
             self._wake_lock = android_env.WakeLock()
@@ -361,7 +364,10 @@ class UniversalDownloaderApp(MDApp):
         self.root_view.padding = [0, top, 0, bottom]
 
     def on_resume(self):
-        if self.settings.theme == "system" or self.settings.dynamic_color:
+        # Recolouring every widget is slow, so only follow a changed dark mode
+        # (wallpaper colours are read again on the next start).
+        self._stale["history"] = True  # files may have been moved meanwhile
+        if self.settings.theme == "system" and self._wants_dark() != self._dark:
             self._apply_theme()
 
     def on_pause(self):
@@ -390,14 +396,18 @@ class UniversalDownloaderApp(MDApp):
         i18n.set_language(code if code in FONT_LANGUAGES else i18n.FALLBACK)
         self.lang = i18n.current()
 
-    def _apply_theme(self):
+    def _wants_dark(self):
         s = self.settings
-        dark = s.theme == "dark"
         if s.theme == "system" and android_env.on_android():
             try:
-                dark = android_env.night_mode()
+                return bool(android_env.night_mode())
             except Exception:
-                dark = False
+                return False
+        return s.theme == "dark"
+
+    def _apply_theme(self):
+        s = self.settings
+        dark = self._dark = self._wants_dark()
         self.theme_cls.theme_style_switch_animation = False
         self.theme_cls.primary_palette = s.accent
         self.theme_cls.dynamic_color = s.dynamic_color and android_env.on_android()
@@ -427,8 +437,12 @@ class UniversalDownloaderApp(MDApp):
                 components["https"] = _ffmpeg_https(status.ffmpeg)
                 js = {}
                 candidates = [os.path.join(os.path.expanduser("~"), "Downloads", "UniversalDownloader")]
-            logic.set_platform_options({**js, **app_settings.download_speed_options(self.settings)})
+            if android_env.on_android():
+                # yt-dlp keeps YouTube's player code and solved challenges
+                # here; without a writable cache it fetches them every time.
+                js["cachedir"] = os.path.join(android_env.cache_dir(), "yt-dlp")
             self._js_options = js
+            self._set_platform_options()
             media_tools.activate(status)
 
             def check(folder):
@@ -460,13 +474,13 @@ class UniversalDownloaderApp(MDApp):
     def _on_tools_checked(self, status, components):
         self.components = components
         self.tools_ready = True
-        self.manager = logic.DownloadManager(tools=status)
+        self.manager = logic.DownloadManager(tools=status, bot_check_clients=logic.BOT_CHECK_CLIENTS)
         self.session = worker.Session(self.manager, self.events, tr=i18n.tr)
         if not status.ok:
             self.snack(self.tr("top.ffmpeg_missing"))
         self.ids.btn_analyze.disabled = False
         self.ids.btn_download.disabled = not (self.analysis and self.analysis.items)
-        self.build_settings()
+        self._refresh("settings")
         if self._selftest:
             self.ids.url.text = self._selftest
             self._selftest_passes = [("video", None), ("audio", None), ("video", ("0:01", "0:03"))]
@@ -488,10 +502,22 @@ class UniversalDownloaderApp(MDApp):
     def switch_tab(self, name):
         screens = self.ids.screens
         order = ["home", "history", "settings"]
+        if name in self._stale and self._stale[name]:
+            self._build(name)  # before the slide, so the new screen arrives filled in
         screens.transition.direction = "left" if order.index(name) > order.index(screens.current) else "right"
         screens.current = name
-        if name == "history":
-            self.build_history()
+
+    def _build(self, name):
+        self._stale[name] = False
+        (self.build_settings if name == "settings" else self.build_history)()
+
+    def _refresh(self, *names):
+        """Rebuild these tabs now if one is on screen, else when it is next shown."""
+        for name in names:
+            if self.ids.screens.current == name:
+                self._build(name)
+            else:
+                self._stale[name] = True
 
     def go_to(self, name):
         """Switch tabs from code, keeping the navigation bar in step."""
@@ -507,10 +533,16 @@ class UniversalDownloaderApp(MDApp):
     def log(self, message):
         self._log_lines.append(message)
         del self._log_lines[:-LOG_LINES]
+        if self.ids.log.parent is not None:  # drawn when the details are opened
+            self._log_trigger()
+
+    def _render_log(self, *_):
         self.ids.log.text = "\n".join(self._log_lines)
 
     def toggle_details(self):
         visible = self.ids.log.parent is None
+        if visible:
+            self._render_log()
         _show(self.ids.log, visible)
         self.ids.details_icon.icon = "chevron-up" if visible else "chevron-down"
         self.ids.details_text.text = self.t("home.hide_details" if visible else "home.details")
@@ -538,19 +570,40 @@ class UniversalDownloaderApp(MDApp):
         dialog.open()
         return dialog
 
-    def _choose(self, caller, options, current, on_pick):
-        """Drop-down menu of ``options`` [(value, label)] next to ``caller``."""
-        if self._menu:
-            self._menu.dismiss()
+    def _choose(self, title, options, current, on_pick):
+        """A dialog listing ``options`` [(value, label) or (value, label, icon)].
+
+        The list scrolls inside the dialog, so long lists (languages) and
+        small or landscape screens always fit.
+        """
+        dialog = None
 
         def pick(value):
-            self._menu.dismiss()
-            on_pick(value)
+            dialog.dismiss()
+            if value != current or current is None:
+                on_pick(value)
 
-        items = [{"text": label, "trailing_icon": "check" if value == current else "",
-                  "on_release": lambda v=value: pick(v)} for value, label in options]
-        self._menu = MDDropdownMenu(caller=caller, items=items, position="bottom")
-        self._menu.open()
+        rows = MDList(padding=0, spacing=0)
+        for value, label, *icon in options:
+            if icon:
+                lead = icon[0]
+            else:
+                lead = "radiobox-marked" if value == current else "radiobox-blank"
+            item = MDListItem(MDListItemLeadingIcon(icon=lead), MDListItemHeadlineText(text=label),
+                              theme_bg_color="Custom", md_bg_color=(0, 0, 0, 0),
+                              on_release=lambda _i, v=value: pick(v))
+            rows.add_widget(item)
+        visible = min(len(options) * dp(56), Window.height * 0.5)
+        scroll = MDScrollView(rows, size_hint_y=None, height=visible, do_scroll_x=False,
+                              bar_width=dp(4) if len(options) * dp(56) > visible else 0)
+        dialog = self._dialog(title, content=scroll, buttons=[(self.t("common.cancel"), None)])
+        if current is not None:
+            for position, (value, *_rest) in enumerate(options):
+                if value == current and len(options) > 1:
+                    # Show the current choice without scrolling to it by hand.
+                    Clock.schedule_once(lambda *_, p=position: setattr(
+                        scroll, "scroll_y", max(0.0, min(1.0, 1 - p / (len(options) - 1)))), 0)
+        return dialog
 
     # --- Link ---------------------------------------------------------------------
 
@@ -638,14 +691,15 @@ class UniversalDownloaderApp(MDApp):
         self.ids.btn_quality.label = f"{self.t('home.quality')}: {self._quality_label(self.quality[self.mode])}"
         self.ids.btn_format.label = f"{self.t('home.format')}: {self.fmt[self.mode].upper()}"
 
-    def choose_quality(self, caller):
+    def choose_quality(self, _caller=None):
         values = worker.VIDEO_QUALITIES if self.mode == "video" else worker.AUDIO_QUALITIES
-        self._choose(caller, [(v, self._quality_label(v)) for v in values], self.quality[self.mode],
+        self._choose(self.t("home.quality"), [(v, self._quality_label(v)) for v in values],
+                     self.quality[self.mode],
                      lambda v: (self.quality.__setitem__(self.mode, v), self._show_choices()))
 
-    def choose_format(self, caller):
+    def choose_format(self, _caller=None):
         values = worker.MODE_FORMATS[MODES[self.mode]]
-        self._choose(caller, [(v, v.upper()) for v in values], self.fmt[self.mode],
+        self._choose(self.t("home.format"), [(v, v.upper()) for v in values], self.fmt[self.mode],
                      lambda v: (self.fmt.__setitem__(self.mode, v), self._show_choices()))
 
     def trim_toggled(self, active):
@@ -692,8 +746,7 @@ class UniversalDownloaderApp(MDApp):
                 return
         options = worker.build_options(MODES[self.mode], self.download_dir, fmt=self.fmt[self.mode],
                                        quality=self.quality[self.mode], trim_start=start, trim_end=end)
-        logic.set_platform_options({**getattr(self, "_js_options", {}),
-                                    **app_settings.download_speed_options(self.settings)})
+        self._set_platform_options()
         if self.session.download(self.analysis, options):
             self.job = "download"
             self.set_busy(True)
@@ -703,6 +756,10 @@ class UniversalDownloaderApp(MDApp):
             self.ids.progress_title.text = self.tr("progress.starting")
             self.ids.progress_detail.text = ""
             self.log(self.tr("log.folder", folder=self.download_dir))
+
+    def _set_platform_options(self):
+        logic.set_platform_options({**getattr(self, "_js_options", {}),
+                                    **app_settings.download_speed_options(self.settings)})
 
     def _keep_awake(self, on):
         if not android_env.on_android():
@@ -783,6 +840,7 @@ class UniversalDownloaderApp(MDApp):
             if self.settings.save_history and result.path:
                 self.history.add(result.title, result.path, url=result.url,
                                  kind="audio" if self.mode == "audio" else "video")
+                self._refresh("history")
             if android_env.on_android():
                 try:
                     android_env.scan_media(result.path)
@@ -822,7 +880,7 @@ class UniversalDownloaderApp(MDApp):
     def build_history(self):
         box = self.ids.history_list
         box.clear_widgets()
-        entries = self.history.entries
+        entries = self.history.entries[:HISTORY_SHOWN]
         if not entries:
             box.add_widget(MDLabel(text=self.t("history.empty"), halign="center", adaptive_height=True,
                                    padding=(dp(24), dp(48)), theme_text_color="Secondary"))
@@ -843,18 +901,19 @@ class UniversalDownloaderApp(MDApp):
             )
             box.add_widget(item)
 
-    def _history_menu(self, caller, entry):
-        options = [("open", self.t("home.open")), ("share", self.t("history.share")),
-                   ("remove", self.t("history.delete"))]
+    def _history_menu(self, _caller, entry):
+        options = [("open", self.t("home.open"), "open-in-new"),
+                   ("share", self.t("history.share"), "share-variant-outline"),
+                   ("remove", self.t("history.delete"), "delete-outline")]
 
         def picked(action):
             if action == "remove":
                 self.history.remove(entry.path)
-                self.build_history()
+                self._refresh("history")
             else:
                 self.open_file(entry.path, share=action == "share")
 
-        self._choose(caller, options, None, picked)
+        self._choose(entry.title or os.path.basename(entry.path), options, None, picked)
 
     def open_file(self, path, share=False):
         if not os.path.exists(path):
@@ -877,7 +936,7 @@ class UniversalDownloaderApp(MDApp):
     def confirm_clear_history(self):
         def clear():
             self.history.clear()
-            self.build_history()
+            self._refresh("history")
 
         self._dialog(self.t("history.clear"), self.t("history.clear_body"),
                      buttons=[(self.t("common.cancel"), None), (self.t("common.remove"), clear)])
@@ -909,7 +968,7 @@ class UniversalDownloaderApp(MDApp):
                               MDListItemSupportingText(text=supporting or value_label))
             if supporting:
                 item.add_widget(MDListItemSupportingText(text=value_label))
-            item.bind(on_release=lambda i: self._choose(i, options, current, apply))
+            item.bind(on_release=lambda _i: self._choose(title, options, current, apply))
             box.add_widget(item)
 
         def switch(icon, title, active, apply, supporting=""):
@@ -1011,15 +1070,14 @@ class UniversalDownloaderApp(MDApp):
     def _change_look(self, **changes):
         self._save_settings(**changes)
         self._apply_theme()
-        Clock.schedule_once(lambda *_: self.build_settings(), 0.1)
+        Clock.schedule_once(lambda *_: self._refresh("settings"), 0.1)
 
     def _change_language(self, code):
         self._save_settings(language=code)
         self._apply_language()
         self._show_choices()
         Clock.schedule_once(self._redraw_field_texts, 0.2)
-        self.build_settings()
-        self.build_history()
+        self._refresh("settings", "history")
         if self.job is None:
             self.set_busy(False)
             self.ids.btn_download.disabled = not (self.analysis and self.analysis.items)
@@ -1048,7 +1106,7 @@ class UniversalDownloaderApp(MDApp):
             self.quality = {"video": s.video_quality, "audio": s.audio_quality}
             self.fmt = {"video": s.video_container, "audio": s.audio_format}
             self._show_mode()
-        self.build_settings()
+        self._refresh("settings")
 
     def confirm_reset(self):
         def reset():
@@ -1057,6 +1115,7 @@ class UniversalDownloaderApp(MDApp):
             self._apply_language()
             self._apply_theme()
             self._change_default()
+            self._refresh("history")
             self.snack(self.t("settings.reset_done"))
 
         self._dialog(self.t("settings.reset"), self.t("settings.reset_body"),

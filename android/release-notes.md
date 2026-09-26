@@ -1,6 +1,13 @@
 **Android preview. This is not a Windows release;** the Windows installer is in the `v<version>` releases.
 
-UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.3. It is debug-signed and not on Google Play.
+UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.4. It is debug-signed and not on Google Play.
+
+**New in 0.2.4**
+- YouTube: when YouTube asks to "confirm you're not a bot", the app retries with YouTube's TV and embedded players, which are often let through, and keeps using the one that worked.
+- Faster: a video's download reuses what Analyze found instead of asking the site again, and YouTube's player code is cached between runs.
+- Quality, format and settings choices open in a scrolling dialog that fits every screen.
+- Smoother: fewer redraws while downloading, History and Settings rebuilt only after a change, quicker tab switches.
+- New app icon and start screen.
 
 **New in 0.2.3**
 - Fixed: the app closed at the first tap on phones with Qualcomm Adreno graphics (many Xiaomi and Samsung phones). The touch ripple that crashed their graphics driver is off; buttons still light up when pressed.

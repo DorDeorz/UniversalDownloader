@@ -32,6 +32,27 @@ off as long as Android keeps the app alive.
 Not in the app: Video Only, picking a folder, background downloads after
 the app is closed.
 
+Speed and YouTube:
+
+- Downloading a single video starts from the information Analyze already
+  fetched (`info=` in `DownloadManager.download_video`) for up to 20
+  minutes, so the site is not asked twice; if those links have expired,
+  the worker tries once more with fresh information.
+- yt-dlp's cache (YouTube's player code and solved challenges) lives in the
+  app's cache folder.
+- YouTube sometimes answers "Sign in to confirm you're not a bot" to phone
+  networks. The app's `DownloadManager` is built with
+  `logic.BOT_CHECK_CLIENTS`, so it then retries with the `tv` and
+  `web_embedded`/`tv_downgraded` player clients (none needs a PO token) and
+  keeps the one that worked. The Windows app does not turn this on.
+- Progress is sent to the screen at most four times a second, the log is
+  drawn only while it is open, and History and Settings are rebuilt only
+  when shown after a change.
+
+The icon is `android/icon/icon.svg`; `android/icon/render.py` draws the
+PNGs buildozer uses (adaptive icon layers, a rounded icon for Android 7 and
+the start screen).
+
 ## How it is built
 
 - **UI:** [Kivy](https://kivy.org) with [KivyMD 2](https://github.com/kivymd/KivyMD)

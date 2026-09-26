@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.2.4",
+    "date": "2026-09-26",
+    "en": [
+      "YouTube: when YouTube asks to \"confirm you're not a bot\", the app tries YouTube's TV and embedded players, which are often let through, and keeps using the one that worked.",
+      "Faster: a video's download starts from what Analyze already found instead of asking the site again, and YouTube's player code is kept between runs.",
+      "Quality, format and settings choices open in a dialog that scrolls, so long lists fit on every screen.",
+      "Smoother: progress and the log redraw a few times a second instead of on every chunk, History and Settings are rebuilt only after a change, and switching tabs is quicker.",
+      "New app icon and start screen."
+    ],
+    "tr": [
+      "YouTube: YouTube \"bot olmadığınızı doğrulayın\" dediğinde uygulama YouTube'un TV ve gömülü oynatıcılarını dener (bunlar çoğu zaman geçer) ve işe yarayanı kullanmaya devam eder.",
+      "Daha hızlı: indirme, siteye yeniden sormak yerine Analiz'in bulduğu bilgiden başlar; YouTube'un oynatıcı kodu çalıştırmalar arasında saklanır.",
+      "Kalite, biçim ve ayar seçimleri kaydırılabilen bir pencerede açılır; uzun listeler her ekrana sığar.",
+      "Daha akıcı: ilerleme ve günlük her parçada değil saniyede birkaç kez çizilir, Geçmiş ve Ayarlar yalnızca bir değişiklikten sonra yeniden kurulur, sekme geçişi hızlandı.",
+      "Yeni uygulama simgesi ve açılış ekranı."
+    ]
+  },
+  {
     "version": "0.2.3",
     "date": "2026-09-26",
     "en": [

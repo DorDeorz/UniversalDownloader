@@ -77,6 +77,8 @@ class FakeYoutubeDL:
 
     def process_ie_result(self, info, download=True):
         self.process_calls.append(info)
+        if not download:
+            return dict(info)
         for hook in self.params.get("progress_hooks") or []:
             hook({"status": "downloading", "downloaded_bytes": 5, "total_bytes": 10})
         if FakeYoutubeDL.download_error is not None:

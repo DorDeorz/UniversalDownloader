@@ -36,7 +36,7 @@ requirements = python3,kivy==2.3.1,pyjnius,android,udtools,charset_normalizer,ma
 # let the app write its own files to Download/ without it.
 # WAKE_LOCK keeps a download running while the screen is off.
 # REQUEST_INSTALL_PACKAGES lets the app hand a downloaded update to Android's
-# installer (updates.py, UpdateInstaller.java).
+# installer (self_update.py, UpdateInstaller.java).
 android.permissions = INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK, REQUEST_INSTALL_PACKAGES, (name=android.permission.WRITE_EXTERNAL_STORAGE;maxSdkVersion=29), (name=android.permission.READ_EXTERNAL_STORAGE;maxSdkVersion=29)
 android.extra_manifest_application_arguments = manifest_application_arguments.xml
 # Offer the app in Android's Share menu for links (text); a link shared

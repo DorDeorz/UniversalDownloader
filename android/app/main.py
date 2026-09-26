@@ -48,8 +48,8 @@ import layout
 import logic
 import md_patches
 import media_tools
+import self_update
 import texts
-import updates
 import urls
 import version
 import worker
@@ -1169,7 +1169,7 @@ class UniversalDownloaderApp(MDApp):
 
     # --- Updates ------------------------------------------------------------------
 
-    def check_for_updates(self, quiet=False, url=updates.RELEASES_URL):
+    def check_for_updates(self, quiet=False, url=self_update.RELEASES_URL):
         """Look for a newer release on GitHub in the background, then offer it.
 
         ``quiet`` (the check at start-up) says nothing unless one is found.
@@ -1182,8 +1182,8 @@ class UniversalDownloaderApp(MDApp):
 
         def work():
             try:
-                found, error = updates.check(APP_VERSION, url), None
-            except updates.UpdateError as e:
+                found, error = self_update.check(APP_VERSION, url), None
+            except self_update.UpdateError as e:
                 found, error = None, str(e)
             self.events.post("update_checked", update=found, quiet=quiet, error=error)
 
@@ -1208,7 +1208,7 @@ class UniversalDownloaderApp(MDApp):
 
     def _offer_update(self, update):
         text = self.t("update.body", current=APP_VERSION)
-        notes = updates.short_notes(update.notes)
+        notes = self_update.short_notes(update.notes)
         label = MDLabel(text=f"{text}\n\n{notes}" if notes else text, adaptive_height=True)
         scroll = MDScrollView(label, size_hint_y=None, height=min(dp(320), Window.height * 0.45),
                               do_scroll_x=False)
@@ -1241,11 +1241,11 @@ class UniversalDownloaderApp(MDApp):
                     self.events.post("update_progress", percent=percent)
 
             try:
-                updates.remove_old(folder)
-                path, error = updates.download(update, folder, progress, lambda: self._update_cancelled), None
-            except updates.Cancelled:
+                self_update.remove_old(folder)
+                path, error = self_update.download(update, folder, progress, lambda: self._update_cancelled), None
+            except self_update.Cancelled:
                 path, error = None, None
-            except updates.UpdateError as e:
+            except self_update.UpdateError as e:
                 path, error = None, str(e)
             self.events.post("update_downloaded", path=path, error=error)
 

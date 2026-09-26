@@ -1,7 +1,8 @@
 """Finding and downloading new versions of the app on GitHub.
 
 Each Orbida version is one GitHub release tagged ``orbida-v<X.Y.Z>`` that
-holds the Windows installer and the Android APK. The app lists the
+holds the Windows installer and the Android APK (``Orbida-<X.Y.Z>.apk``,
+published by .github/workflows/release.yml). The app lists the
 repository's releases, keeps published (not draft, not pre-release) ones
 with such a tag and an APK asset, and offers the newest if it is newer than
 the running version. Releases without an APK (older UniversalDownloader
@@ -25,7 +26,7 @@ from dataclasses import dataclass
 
 RELEASES_URL = "https://api.github.com/repos/DorDeorz/UniversalDownloader/releases?per_page=30"
 TAG = re.compile(r"^orbida-v(\d+)\.(\d+)\.(\d+)$")
-APK_SUFFIX = "-android-arm64-v8a.apk"
+APK_NAME = re.compile(r"^Orbida-[\w.-]*\.apk$")  # Orbida-1.0.0.apk (the release) or Orbida-1.0.0-android-arm64-v8a.apk
 USER_AGENT = "Orbida-updater"
 CHUNK = 256 * 1024
 
@@ -72,7 +73,7 @@ def pick(releases, current):
         if version <= running or (best and version <= best[0]):
             continue
         apk = next((a for a in release.get("assets") or ()
-                    if isinstance(a, dict) and (a.get("name") or "").endswith(APK_SUFFIX)), None)
+                    if isinstance(a, dict) and APK_NAME.match(a.get("name") or "")), None)
         if apk is None or not apk.get("browser_download_url"):
             continue
         digest = apk.get("digest") or ""

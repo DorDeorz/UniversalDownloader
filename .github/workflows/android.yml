@@ -11,16 +11,21 @@ name: Android
 # carry (Android only installs an update signed like the installed app).
 # Without them it is a debug build, fine for CI but not for publishing.
 #
-# Publishing: pushing a tag orbida-v<X.Y.Z> (the one the Windows release
-# workflow publishes) builds, tests and then uploads
-# Orbida-<X.Y.Z>-android-arm64-v8a.apk to that GitHub release, where the
-# app's updater (android/app/updates.py) finds it. A manual run with
-# "publish" ticked puts a signed test build on a pre-release tagged
-# orbida-test-<run number>, which the updater ignores.
+# Publishing: .github/workflows/release.yml calls this workflow
+# (workflow_call, with the secrets), takes the apk-arm64-v8a artifact and
+# publishes it with the Windows installer on the release orbida-v<X.Y.Z>,
+# where the app's updater (android/app/self_update.py) finds it; it checks
+# the "signed" output first. A manual run with "publish" ticked puts a signed
+# test build on a pre-release tagged orbida-test-<run number>, which the
+# updater ignores.
 
 on:
+  workflow_call:
+    outputs:
+      signed:
+        description: "true when the APK was signed with the project key"
+        value: ${{ jobs.apk.outputs.signed }}
   push:
-    tags: ["orbida-v*"]
     branches: [main]
     paths:
       - ".github/workflows/android.yml"
@@ -212,11 +217,10 @@ jobs:
             bash android/emulator_test.sh apk/*.apk http://10.0.2.2:8000/sample.mp4
 
   publish:
-    name: Publish
+    name: Publish test build
     needs: [apk, emulator]
-    if: startsWith(github.ref, 'refs/tags/orbida-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
     runs-on: ubuntu-latest
-    timeout-minutes: 90
     permissions:
       contents: write
     steps:
@@ -230,22 +234,7 @@ jobs:
         run: |
           echo "::error::Add the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets; an APK without the project's key cannot update the app"
           exit 1
-      - name: Upload to the release
-        if: startsWith(github.ref, 'refs/tags/orbida-v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          version=$(sed -n 's/^version = //p' android/buildozer.spec)
-          [ "$tag" = "orbida-v$version" ] || { echo "::error::Tag $tag does not match version $version in android/buildozer.spec"; exit 1; }
-          # The Windows release workflow creates the release; wait for it.
-          for _ in $(seq 1 60); do
-            gh release view "$tag" >/dev/null 2>&1 && break
-            sleep 60
-          done
-          gh release upload "$tag" apk/*.apk --clobber
       - name: Test build on a pre-release
-        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

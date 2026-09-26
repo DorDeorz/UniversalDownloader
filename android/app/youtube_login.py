@@ -208,13 +208,13 @@ class LoginView:
     def _remove(self):
         if self._layout is None:
             return
-        from jnius import autoclass
+        from jnius import autoclass, cast
         manager = autoclass("android.webkit.CookieManager").getInstance()
         manager.flush()
         header = manager.getCookie("https://www.youtube.com") or ""
         layout, web = self._layout, self._web
         self._layout = self._web = None
-        layout.getParent().removeView(layout)
+        cast("android.view.ViewGroup", layout.getParent()).removeView(layout)  # getParent() is a ViewParent
         web.destroy()
         self.on_close(header)
 

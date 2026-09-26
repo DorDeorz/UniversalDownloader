@@ -26,7 +26,5 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
           python .github/probe/browser_cookies.py cookies.txt
-      - name: Browser player responses
-        run: python .github/probe/browser_player.py
-      - name: Pass rates
-        run: python .github/probe/yt_probe2.py
+      - name: Routed through the browser
+        run: python .github/probe/route_probe.py

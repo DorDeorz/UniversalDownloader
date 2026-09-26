@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.0.0",
+    "date": "2026-09-27",
+    "en": [
+      "Orbida 1.0, the first stable version. It is signed with the project's own key, so every later version installs over it.",
+      "Updates inside the app: Orbida looks for a new version on GitHub when it opens (can be turned off in Settings › About), downloads it and hands it to Android to install. Nothing has to be uninstalled.",
+      "Each version is one GitHub release with both the Windows and the Android app."
+    ],
+    "tr": [
+      "Orbida 1.0, ilk kararlı sürüm. Projenin kendi anahtarıyla imzalı; sonraki her sürüm bunun üstüne kurulur.",
+      "Uygulama içinden güncelleme: Orbida açılınca GitHub'da yeni sürüm arar (Ayarlar › Hakkında'dan kapatılabilir), indirir ve kurulum için Android'e verir. Hiçbir şeyi silmek gerekmez.",
+      "Her sürüm, Windows ve Android uygulamasını birlikte içeren tek bir GitHub sürümüdür."
+    ]
+  },
+  {
     "version": "0.2.7",
     "date": "2026-09-26",
     "en": [

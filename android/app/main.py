@@ -49,6 +49,7 @@ import logic
 import md_patches
 import media_tools
 import texts
+import updates
 import urls
 import version
 import worker
@@ -62,7 +63,7 @@ if android_env.on_android():
     md_patches.disable_hover()
 
 APP_NAME = "Orbida"    # the Android app's name; keep in step with title in android/buildozer.spec
-APP_VERSION = "0.2.7"  # keep in step with android/buildozer.spec
+APP_VERSION = "1.0.0"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
@@ -253,6 +254,10 @@ class UniversalDownloaderApp(MDApp):
         self._dark = None
         self._login = None           # youtube_login.LoginView while it is open
         self._browser = None         # browser_route.AndroidBridge, made on Android at start
+        self._update_checking = False
+        self._update_cancelled = False
+        self._update_dialog = None   # the download progress dialog while an update downloads
+        self._update_label = None
         self._wake_lock = None
         self._stderr = deque(maxlen=12)  # last lines FFmpeg printed, shown when an item fails
         self._apply_language()
@@ -285,6 +290,9 @@ class UniversalDownloaderApp(MDApp):
         self.events.register(events.JOB_DONE, self._on_job_done)
         self.events.register("shared_link", self._on_shared_text)
         self.events.register("youtube_login", self._on_youtube_login)
+        self.events.register("update_checked", self._on_update_checked)
+        self.events.register("update_progress", self._on_update_progress)
+        self.events.register("update_downloaded", self._on_update_downloaded)
 
     def on_start(self):
         self._show_mode()
@@ -503,7 +511,12 @@ class UniversalDownloaderApp(MDApp):
                 _log.warning("Browser route unavailable: %s", e)
         login_test = self._intent_extra("selftest_login")
         browser_test = self._intent_extra("selftest_browser")
-        if browser_test:
+        update_test = self._intent_extra("selftest_update")
+        if update_test:
+            # CI: find, download and install an "update" listed at this releases URL.
+            self._selftest = "update"
+            self.check_for_updates(quiet=True, url=update_test)
+        elif browser_test:
             # CI: analyse (and on success download) a YouTube video through the browser route.
             self._use_browser_route()
             self._selftest = browser_test
@@ -519,6 +532,8 @@ class UniversalDownloaderApp(MDApp):
             self.analyze()
         elif self.pending_link:
             self._use_link(self.pending_link, shared=True)
+        if not update_test and self.settings.check_updates and android_env.on_android():
+            self.check_for_updates(quiet=True)
 
     def _selftest_url(self):
         """The ``selftest_url`` extra of the launching intent (CI only)."""
@@ -1143,11 +1158,142 @@ class UniversalDownloaderApp(MDApp):
         section(t("settings.about"))
         info("information-outline", t("settings.version"), f"{APP_VERSION} · {t('settings.whats_new')}",
              on_release=self.show_release_notes)
+        info("update", t("update.check"), on_release=self.check_for_updates)
+        switch("cellphone-arrow-down", t("update.auto"), s.check_updates,
+               lambda v: self._save_settings(check_updates=v), t("update.auto_hint"))
         info("puzzle-outline", t("settings.components"), *self._components_text())
         if android_env.on_android():
             info("bug-outline", t("settings.diagnostics"), t("settings.diagnostics_hint"),
                  on_release=self.copy_diagnostics)
         info("restore", t("settings.reset"), on_release=self.confirm_reset)
+
+    # --- Updates ------------------------------------------------------------------
+
+    def check_for_updates(self, quiet=False, url=updates.RELEASES_URL):
+        """Look for a newer release on GitHub in the background, then offer it.
+
+        ``quiet`` (the check at start-up) says nothing unless one is found.
+        """
+        if self._update_checking:
+            return
+        self._update_checking = True
+        if not quiet:
+            self.snack(self.t("update.checking"))
+
+        def work():
+            try:
+                found, error = updates.check(APP_VERSION, url), None
+            except updates.UpdateError as e:
+                found, error = None, str(e)
+            self.events.post("update_checked", update=found, quiet=quiet, error=error)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_update_checked(self, update, quiet, error):
+        self._update_checking = False
+        if self._selftest == "update":
+            selftest(f"update found version={update.version if update else None} error={error}")
+            if update:
+                self.install_update(update)
+            return
+        if error:
+            _log.warning(error)
+            if not quiet:
+                self.snack(self.t("update.failed"))
+        elif update is None:
+            if not quiet:
+                self.snack(self.t("update.none"))
+        else:
+            self._offer_update(update)
+
+    def _offer_update(self, update):
+        text = self.t("update.body", current=APP_VERSION)
+        notes = updates.short_notes(update.notes)
+        label = MDLabel(text=f"{text}\n\n{notes}" if notes else text, adaptive_height=True)
+        scroll = MDScrollView(label, size_hint_y=None, height=min(dp(320), Window.height * 0.45),
+                              do_scroll_x=False)
+        self._dialog(self.t("update.title", version=update.version), content=scroll,
+                     buttons=[(self.t("update.later"), None),
+                              (self.t("update.install"), lambda: self.install_update(update))])
+
+    def install_update(self, update):
+        """Download the update's APK, then hand it to Android to install."""
+        if not android_env.on_android():
+            self.snack(self.t("update.not_android"))
+            return
+        if self.job is not None:
+            self.snack(self.t("update.busy"))
+            return
+        folder = os.path.join(android_env.cache_dir(), "updates")
+        self._update_cancelled = False
+        self._update_label = MDLabel(text=self.t("update.downloading", percent=0), adaptive_height=True)
+        self._update_dialog = self._dialog(
+            self.t("update.title", version=update.version), content=self._update_label,
+            buttons=[(self.t("common.cancel"), lambda: setattr(self, "_update_cancelled", True))])
+
+        def work():
+            shown = [-1]
+
+            def progress(done, total):
+                percent = int(done * 100 / total) if total else 0
+                if percent != shown[0]:
+                    shown[0] = percent
+                    self.events.post("update_progress", percent=percent)
+
+            try:
+                updates.remove_old(folder)
+                path, error = updates.download(update, folder, progress, lambda: self._update_cancelled), None
+            except updates.Cancelled:
+                path, error = None, None
+            except updates.UpdateError as e:
+                path, error = None, str(e)
+            self.events.post("update_downloaded", path=path, error=error)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_update_progress(self, percent):
+        if self._update_label is not None:
+            self._update_label.text = self.t("update.downloading", percent=percent)
+
+    def _on_update_downloaded(self, path, error):
+        if self._update_dialog is not None and not self._update_cancelled:
+            self._update_dialog.dismiss()
+        self._update_dialog = self._update_label = None
+        if self._selftest == "update":
+            size = os.path.getsize(path) if path else 0
+            selftest(f"update downloaded bytes={size} error={error}")
+        if error:
+            _log.warning(error)
+            self._dialog(self.t("update.download_failed"), error)
+            return
+        if path is None:  # cancelled
+            return
+        try:
+            from jnius import autoclass
+            installer = autoclass("io.github.dordeorz.universaldownloader.UpdateInstaller")
+            installer.install(android_env._activity(), path)
+        except Exception as e:
+            _log.warning("Cannot start the install: %s", e)
+            self._dialog(self.t("update.install_failed"), str(e))
+            return
+        self.snack(self.t("update.confirm"))
+        watch = {"seconds": 0.0, "last": ""}
+
+        def poll(dt):
+            status = installer.status() or ""
+            watch["seconds"] += dt
+            if status != watch["last"]:
+                watch["last"] = status
+                if self._selftest == "update":
+                    selftest(f"update status={status}")
+            if status.startswith("failed"):
+                _log.warning("Update: %s", status)
+                if not status.startswith("failed: 3"):  # 3: the user cancelled Android's screen
+                    self._dialog(self.t("update.install_failed"), status[len("failed: "):])
+                return False
+            return status != "success" and watch["seconds"] < 600
+
+        Clock.schedule_interval(poll, 0.5)
 
     def _add_fragments_row(self, box):
         row = BoxLayout(orientation="vertical", size_hint_y=None, padding=(dp(16), dp(10), dp(24), dp(4)))

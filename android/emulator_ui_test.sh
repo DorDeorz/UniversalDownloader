@@ -7,7 +7,7 @@
 set -uo pipefail
 
 APK=$1
-PKG=io.github.dordeorz.universaldownloader
+PKG=io.github.dordeorz.orbida
 ACTIVITY="$PKG/org.kivy.android.PythonActivity"
 
 adb uninstall "$PKG" >/dev/null 2>&1  # each CI job signs with its own debug key
@@ -112,6 +112,68 @@ if [ $status -eq 0 ]; then
     alive "browser route answered; YouTube bot-checks this runner's network"
   else
     echo "FAIL: the browser route did not work"
+    status=1
+  fi
+fi
+
+# Updates (updates.py, UpdateInstaller.java): with UD_UPDATE_RELEASES set to
+# a releases list that offers this same APK as a newer version, the app must
+# find it, download it and hand it to Android's installer; the test then taps
+# Update on Android's screen and checks that the package was replaced.
+if [ $status -eq 0 ] && [ -n "${UD_UPDATE_RELEASES:-}" ]; then
+  adb shell am force-stop "$PKG"
+  # What a person allows once on the phone: installing apps from Orbida.
+  adb shell appops set "$PKG" REQUEST_INSTALL_PACKAGES allow
+  before=$(adb shell dumpsys package "$PKG" | tr -d '\r' | grep -m1 lastUpdateTime)
+  adb logcat -c
+  adb shell am start -n "$ACTIVITY" --es selftest_update "$UD_UPDATE_RELEASES"
+  for _ in $(seq 1 36); do
+    adb logcat -d 2>/dev/null | grep -a -q -E "UDSELFTEST update status=(confirm|failed)|UDSELFTEST update (found|downloaded) .*error=[^N]|UDCRASH" && break
+    sleep 5
+  done
+  sleep 3
+  update=$(adb logcat -d 2>/dev/null | grep -a -E "UDSELFTEST update|UDCRASH")
+  echo "$update"
+  tapped=""
+  if grep -a -q "UDSELFTEST update status=confirm" <<<"$update"; then
+    # Android's "Do you want to update this app?" screen: tap its Update button.
+    for _ in $(seq 1 10); do
+      adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+      xy=$(adb shell cat /sdcard/ui.xml 2>/dev/null | python3 -c '
+import re, sys
+for node in re.findall(r"<node [^>]*>", sys.stdin.read()):
+    text = re.search(r"text=\"([^\"]*)\"", node).group(1).strip().lower()
+    if text in ("update", "install") and "clickable=\"true\"" in node:
+        x1, y1, x2, y2 = map(int, re.search(r"bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", node).groups())
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        break
+')
+      if [ -n "$xy" ]; then
+        adb shell input tap $xy
+        tapped=yes
+        break
+      fi
+      sleep 3
+    done
+  fi
+  after="$before"
+  if [ -n "$tapped" ]; then
+    for _ in $(seq 1 24); do
+      after=$(adb shell dumpsys package "$PKG" | tr -d '\r' | grep -m1 lastUpdateTime)
+      [ "$after" != "$before" ] && break
+      sleep 5
+    done
+  fi
+  echo "before: $before"
+  echo "after:  $after"
+  if grep -a -q UDCRASH <<<"$update"; then
+    echo "FAIL: Python reported an error while updating"
+    status=1
+  elif [ "$after" != "$before" ]; then
+    echo "ok: the app found, downloaded and installed an update"
+  else
+    adb logcat -d 2>/dev/null | grep -a -E " python |PackageInstaller|AndroidRuntime" | tail -n 80
+    echo "FAIL: the update was not installed"
     status=1
   fi
 fi

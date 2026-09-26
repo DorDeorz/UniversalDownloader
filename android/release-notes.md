@@ -1,6 +1,11 @@
-**Android preview. This is not a Windows release;** the Windows installer is in the `v<version>` releases.
+**Orbida for Android**, version 1.0.0 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
 
-Orbida, UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.7. It is debug-signed and not on Google Play.
+Coming from an Android preview (UniversalDownloader or Orbida 0.x)? Uninstall it once: 1.0 has a new app id and signing key. From 1.0 on, the app updates itself (Settings › About › Check for updates).
+
+**New in 1.0.0**
+- The first stable version, signed with the project's own key, so every later version installs over it.
+- Updates inside the app: Orbida looks for a new version on GitHub when it opens, downloads it and hands it to Android to install.
+- Each version is one GitHub release with both the Windows and the Android app.
 
 **New in 0.2.7**
 - The app is now called Orbida; the start screen shows the name under the icon. New downloads go to `Download/Orbida`; earlier ones stay where they are and remain in History.

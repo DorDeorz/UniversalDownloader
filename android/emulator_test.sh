@@ -9,7 +9,7 @@ set -uo pipefail
 
 APK=$1
 URL=$2
-PKG=io.github.dordeorz.universaldownloader
+PKG=io.github.dordeorz.orbida
 TIMEOUT=${TIMEOUT:-900}
 
 adb uninstall "$PKG" >/dev/null 2>&1  # each CI job signs with its own debug key

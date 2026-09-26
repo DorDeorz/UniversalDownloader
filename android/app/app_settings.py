@@ -42,6 +42,7 @@ class AppSettings:
     auto_analyze_shared: bool = True  # analyze links shared from other apps at once
     keep_screen_on: bool = True       # while a download runs
     save_history: bool = True
+    check_updates: bool = True        # look for a new version on GitHub at start-up
 
     def normalized(self):
         """A copy with every invalid value replaced by its default."""

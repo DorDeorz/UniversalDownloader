@@ -410,8 +410,8 @@ def test_app_name_is_the_same_everywhere():
     render = open(os.path.join(ROOT, "android", "icon", "render.py"), encoding="utf-8").read()
     assert f'APP_NAME = "{name}"' in render  # written on the start screen
     assert android_env.DOWNLOAD_SUBFOLDER == name
-    # The package stays, so the renamed app installs over earlier previews.
-    assert re.search(r"^package.name = universaldownloader$", spec, re.M)
+    # The app id Android updates by; it must not change after 1.0.
+    assert re.search(r"^package.name = orbida$", spec, re.M)
 
 
 # --- UI speed ---------------------------------------------------------------------------
@@ -969,3 +969,157 @@ def test_webview_minidump_does_not_push_the_crash_out_of_the_report():
     new, last = crash_report.new_log_lines(log, "")
     assert "FATAL EXCEPTION" in crash_report.tail(new, 150)
     assert len(new.splitlines()) == 3 and "END CRASHPAD" in last
+
+
+# --- updates: new versions from GitHub releases ------------------------------------
+
+
+def _release(tag, apk=True, draft=False, prerelease=False, digest=None, size=10):
+    assets = [{"name": "Orbida-setup.exe", "browser_download_url": "https://x/setup.exe", "size": 5}]
+    if apk:
+        version = tag.split("-v")[-1]
+        asset = {"name": f"Orbida-{version}-android-arm64-v8a.apk", "size": size,
+                 "browser_download_url": f"https://x/{version}.apk"}
+        if digest:
+            asset["digest"] = digest
+        assets.append(asset)
+    return {"tag_name": tag, "draft": draft, "prerelease": prerelease, "body": "## New\n- **Faster**",
+            "html_url": f"https://x/{tag}", "assets": assets}
+
+
+def test_update_versions_are_parsed_from_tags():
+    import updates
+    assert updates.parse_version("orbida-v1.2.10") == (1, 2, 10)
+    assert updates.parse_version("1.0.0") == (1, 0, 0)
+    assert updates.parse_version("v1.0.2") == (1, 0, 2)
+    assert updates.parse_version("android-preview-57") is None
+    assert updates.parse_version("") is None
+
+
+def test_update_picks_the_newest_published_release_with_an_apk():
+    import updates
+    releases = [
+        _release("orbida-v1.3.0", draft=True),
+        _release("orbida-v1.2.5", prerelease=True),
+        _release("orbida-v1.2.0", apk=False),       # APK still being built
+        _release("orbida-v1.1.0", digest="sha256:ABC"),
+        _release("orbida-v1.0.1"),
+        _release("v1.0.9"),                          # the old Windows app's tags
+        {"tag_name": "android-preview-57", "assets": []},
+        "not a release",
+    ]
+    update = updates.pick(releases, "1.0.0")
+    assert update.version == "1.1.0" and update.tag == "orbida-v1.1.0"
+    assert update.url == "https://x/1.1.0.apk" and update.name == "Orbida-1.1.0-android-arm64-v8a.apk"
+    assert update.sha256 == "abc" and update.size == 10
+    assert updates.pick(releases, "1.1.0") is None
+    assert updates.pick([], "1.0.0") is None
+
+
+def test_update_apk_name_matches_the_workflow():
+    import updates
+    workflow = open(os.path.join(ROOT, ".github", "workflows", "android.yml"), encoding="utf-8").read()
+    assert 'cp bin/*.apk "../apk/Orbida-$version-android-${{ matrix.arch }}.apk"' in workflow
+    assert updates.APK_SUFFIX == "-android-arm64-v8a.apk"
+    assert "tags: [\"orbida-v*\"]" in workflow and updates.TAG.match("orbida-v1.0.0")
+
+
+def test_update_install_pieces_are_in_the_build():
+    spec = open(os.path.join(ROOT, "android", "buildozer.spec"), encoding="utf-8").read()
+    assert "REQUEST_INSTALL_PACKAGES" in re.search(r"^android.permissions = (.+)$", spec, re.M).group(1)
+    assert re.search(r"^android.release_artifact = apk$", spec, re.M)
+    java = os.path.join(ROOT, "android", "java", "io", "github", "dordeorz", "universaldownloader",
+                        "UpdateInstaller.java")
+    source = open(java, encoding="utf-8").read()
+    assert "public static void install(final Activity activity, final String apkPath)" in source
+    assert "public static String status()" in source
+    main = open(os.path.join(ROOT, "android", "app", "main.py"), encoding="utf-8").read()
+    assert 'autoclass("io.github.dordeorz.universaldownloader.UpdateInstaller")' in main
+
+
+def test_update_notes_become_plain_text():
+    import updates
+    notes = "## What's new\r\n- **Faster** lists\n* `code` and [a link](https://x)\n\n\n\nEnd"
+    assert updates.short_notes(notes) == "What's new\n•  Faster lists\n•  code and a link\n\nEnd"
+    long = "\n".join(f"line {i}" for i in range(500))
+    cut = updates.short_notes(long, limit=100)
+    assert len(cut) <= 102 and cut.endswith("\n…")
+
+
+@pytest.fixture
+def served(tmp_path):
+    """A local web server for ``tmp_path/www``; yields (folder, base URL)."""
+    import functools
+    import http.server
+    www = tmp_path / "www"
+    www.mkdir()
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(www))
+    handler.log_message = lambda *a: None
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield www, f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+
+
+def _served_update(www, base, data, **changes):
+    import hashlib
+    import updates
+    (www / "o.apk").write_bytes(data)
+    fields = dict(version="1.1.0", tag="orbida-v1.1.0", notes="", page="", url=f"{base}/o.apk",
+                  size=len(data), sha256=hashlib.sha256(data).hexdigest(),
+                  name="Orbida-1.1.0-android-arm64-v8a.apk")
+    fields.update(changes)
+    return updates.Update(**fields)
+
+
+def test_update_downloads_and_checks_the_file(served, tmp_path):
+    import updates
+    www, base = served
+    data = os.urandom(600 * 1024)
+    seen = []
+    path = updates.download(_served_update(www, base, data), str(tmp_path / "dl"),
+                            progress=lambda done, total: seen.append((done, total)))
+    assert open(path, "rb").read() == data and path.endswith("Orbida-1.1.0-android-arm64-v8a.apk")
+    assert seen[-1] == (len(data), len(data))
+    assert os.listdir(tmp_path / "dl") == ["Orbida-1.1.0-android-arm64-v8a.apk"]  # no .part left
+
+
+def test_update_download_rejects_a_changed_file(served, tmp_path):
+    import updates
+    www, base = served
+    with pytest.raises(updates.UpdateError, match="SHA-256"):
+        updates.download(_served_update(www, base, b"x" * 1000, sha256="0" * 64), str(tmp_path / "dl"))
+    with pytest.raises(updates.UpdateError, match="stopped early"):
+        updates.download(_served_update(www, base, b"x" * 1000, size=2000, sha256=""), str(tmp_path / "dl"))
+    with pytest.raises(updates.UpdateError):
+        updates.download(_served_update(www, base, b"x", url=f"{base}/missing.apk"), str(tmp_path / "dl"))
+    assert os.listdir(tmp_path / "dl") == []
+
+
+def test_update_download_can_be_cancelled(served, tmp_path):
+    import updates
+    www, base = served
+    with pytest.raises(updates.Cancelled):
+        updates.download(_served_update(www, base, b"x" * 1000), str(tmp_path / "dl"), cancelled=lambda: True)
+    assert os.listdir(tmp_path / "dl") == []
+
+
+def test_update_check_reads_the_releases_list(served):
+    import json
+    import updates
+    www, base = served
+    (www / "releases.json").write_text(json.dumps([_release("orbida-v2.0.0"), _release("orbida-v1.5.0")]))
+    assert updates.check("1.0.0", url=f"{base}/releases.json").version == "2.0.0"
+    assert updates.check("2.0.0", url=f"{base}/releases.json") is None
+    with pytest.raises(updates.UpdateError):
+        updates.check("1.0.0", url=f"{base}/missing.json")
+
+
+def test_old_update_files_are_removed(tmp_path):
+    import updates
+    for name in ("Orbida-1.0.0.apk", "Orbida-1.1.0.apk.part", "keep.txt"):
+        (tmp_path / name).write_text("x")
+    updates.remove_old(str(tmp_path), keep=str(tmp_path / "Orbida-1.0.0.apk"))
+    assert sorted(os.listdir(tmp_path)) == ["Orbida-1.0.0.apk", "keep.txt"]
+    updates.remove_old(str(tmp_path / "missing"))  # no folder yet: nothing to do

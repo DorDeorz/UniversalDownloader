@@ -1,8 +1,10 @@
-# Orbida: UniversalDownloader for Android (preview)
+# Orbida for Android
 
-Orbida is a small Android version of the downloader, for trying the core flow on a
-phone. It is a preview: the Windows app in the repository root is the
-product, and its build and releases do not change.
+Orbida's Android app: the downloader's core flow on a phone, built with
+Kivy/KivyMD on the same download code as the Windows app in the repository
+root. App id `io.github.dordeorz.orbida`; each version is one GitHub
+release (tag `orbida-v<version>`) holding both the Windows installer and
+`Orbida-<version>-android-arm64-v8a.apk`.
 
 ## What it does
 
@@ -16,7 +18,7 @@ Android 12 and newer) with three tabs:
   available entry. Files are saved to `Download/Orbida/<site>/`
   and added to the media index, so they show up in gallery and music apps.
   When that folder cannot be written, the app uses its own folder under
-  `Android/data/io.github.dordeorz.universaldownloader/`.
+  `Android/data/io.github.dordeorz.orbida/`.
 - **History:** what was downloaded, with Open, Share and Remove.
 - **Settings:** theme (system, light, dark), wallpaper colours, accent
   colour, language, default mode, quality and formats, parallel
@@ -149,9 +151,9 @@ shared modules:
    trimmed to seconds 1 to 3, and logs `UDSELFTEST` lines the script
    checks. Setting `UD_SELFTEST_URL` runs the same passes on a desktop.
 
-Run the workflow by hand with **publish** ticked to attach the phone APK to
-a GitHub pre-release tagged `android-preview-<run number>`. It is never
-marked as the latest release.
+Run the workflow by hand with **publish** ticked to put a signed test build
+on a pre-release tagged `orbida-test-<run number>` (the updater ignores
+it). Releases come from `orbida-v<version>` tags; see Updates and signing.
 
 Locally on Linux, with an NDK and buildozer installed:
 
@@ -167,10 +169,36 @@ UD_NATIVE_TOOLS_DIR=/tmp/native-tools buildozer android debug
 The APK is not on Google Play (Play does not allow YouTube downloaders).
 Download the `.apk` on the phone and open it. Android asks to allow
 "Install unknown apps" for the browser or file manager you opened it from;
-allow it, go back and tap **Install**. Play Protect may warn about an
-unknown developer; choose **More details → Install anyway**. The APK is
-debug-signed, so a later preview installs over it only if it was built with
-the same debug key; otherwise uninstall the old one first.
+allow it, go back and tap **Install**. Play Protect may scan the app or warn
+about an unknown developer; choose **More details → Install anyway**.
+Previews before 1.0 had another app id and a throwaway debug key: uninstall
+them once.
+
+## Updates and signing
+
+From 1.0 the app updates itself (`android/app/updates.py`). When it opens
+(Settings › About can turn that off) and on **Check for updates**, it lists
+the repository's GitHub releases and takes the newest published one tagged
+`orbida-v<X.Y.Z>` that is newer than the running version and carries an
+`…-android-arm64-v8a.apk`. It shows that release's notes, downloads the APK
+into its cache (checking the size and GitHub's SHA-256 digest) and hands it
+to Android's `PackageInstaller` (`UpdateInstaller.java`). Android shows its
+own "update this app?" screen, the first time asks to allow installs from
+Orbida, and replaces the app.
+
+Android only does that when the APK is signed with the same key as the
+installed app. Every published APK is therefore a release build signed with
+the project key: a PKCS12 keystore (key alias `orbida`) kept in the
+repository secrets `ANDROID_KEYSTORE_BASE64` (the file, base64) and
+`ANDROID_KEYSTORE_PASSWORD`. The owner keeps a backup; a lost key means
+installed copies can never be updated again. Without the secrets the
+workflow makes a debug build, which it tests but never publishes.
+
+Pushing the tag `orbida-v<version>` (the Windows release workflow does)
+builds and tests the APK and uploads it to that release. The version in the
+tag must match `version` in `android/buildozer.spec`. The emulator test
+installs an update end to end: it serves the APK as a newer release and
+taps **Update** on Android's screen.
 
 ## When it goes wrong
 

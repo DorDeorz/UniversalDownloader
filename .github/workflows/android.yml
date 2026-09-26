@@ -1,15 +1,26 @@
-name: Android preview
+name: Android
 
-# Builds the Android preview APK (debug-signed) and tests it on an emulator:
-# the app downloads a local test video as Video + Audio, as MP3 and trimmed,
-# which runs the bundled FFmpeg, ffprobe and QuickJS on Android.
+# Builds Orbida's Android APK and tests it on an emulator: the app downloads
+# a local test video as Video + Audio, as MP3 and trimmed (which runs the
+# bundled FFmpeg, ffprobe and QuickJS on Android), goes through YouTube via
+# the browser route, and installs an update of itself.
 #
-# A manual run with "publish" ticked attaches the APK to a GitHub
-# pre-release tagged android-preview-<run number>. That is separate from
-# the Windows releases (tags v<version>) and never marked as latest.
+# Signing: with the repository secrets ANDROID_KEYSTORE_BASE64 (a PKCS12
+# keystore, key alias "orbida") and ANDROID_KEYSTORE_PASSWORD the APK is a
+# release build signed with that key, the one every published version must
+# carry (Android only installs an update signed like the installed app).
+# Without them it is a debug build, fine for CI but not for publishing.
+#
+# Publishing: pushing a tag orbida-v<X.Y.Z> (the one the Windows release
+# workflow publishes) builds, tests and then uploads
+# Orbida-<X.Y.Z>-android-arm64-v8a.apk to that GitHub release, where the
+# app's updater (android/app/updates.py) finds it. A manual run with
+# "publish" ticked puts a signed test build on a pre-release tagged
+# orbida-test-<run number>, which the updater ignores.
 
 on:
   push:
+    tags: ["orbida-v*"]
     branches: [main]
     paths:
       - ".github/workflows/android.yml"
@@ -45,7 +56,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish the APK as a GitHub pre-release (android-preview-<run number>)"
+        description: "Put a signed test build on a pre-release (orbida-test-<run number>)"
         type: boolean
         default: false
 
@@ -80,6 +91,8 @@ jobs:
     name: APK (${{ matrix.arch }})
     needs: native
     runs-on: ubuntu-latest
+    outputs:
+      signed: ${{ steps.build.outputs.signed }}
     strategy:
       fail-fast: false
       matrix:
@@ -113,16 +126,30 @@ jobs:
           key: buildozer-${{ matrix.arch }}-${{ env.BUILDOZER_VERSION }}-${{ env.P4A_VERSION }}-${{ hashFiles('android/buildozer.spec') }}
           restore-keys: buildozer-${{ matrix.arch }}-${{ env.BUILDOZER_VERSION }}-${{ env.P4A_VERSION }}-
       - name: Build APK
+        id: build
         working-directory: android
         env:
           UD_NATIVE_TOOLS_DIR: ${{ github.workspace }}/native-tools
           APP_P4A_SOURCE_DIR: ${{ runner.temp }}/p4a
           APP_ANDROID_ARCHS: ${{ matrix.arch }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           python stage.py
-          yes | buildozer android debug
+          version=$(sed -n 's/^version = //p' buildozer.spec)
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/orbida.p12"
+            export P4A_RELEASE_KEYSTORE="$RUNNER_TEMP/orbida.p12" P4A_RELEASE_KEYALIAS=orbida \
+              P4A_RELEASE_KEYSTORE_PASSWD="$KEYSTORE_PASSWORD" P4A_RELEASE_KEYALIAS_PASSWD="$KEYSTORE_PASSWORD"
+            yes | buildozer android release
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No signing key in the repository secrets: debug build, not for publishing"
+            yes | buildozer android debug
+          fi
+          rm -f "$RUNNER_TEMP/orbida.p12"
           mkdir -p ../apk
-          cp bin/*.apk "../apk/Orbida-android-preview-${{ matrix.arch }}.apk"
+          cp bin/*.apk "../apk/Orbida-$version-android-${{ matrix.arch }}.apk"
       - name: Check the APK carries the tools
         run: |
           unzip -l apk/*.apk | grep -E "lib/${{ matrix.arch }}/lib(ffmpeg|ffprobe|qjs|avcodec|avformat)\.so"
@@ -159,6 +186,18 @@ jobs:
           mkdir -p served
           ffmpeg -loglevel error -f lavfi -i testsrc=size=320x240:rate=25 -f lavfi -i sine=frequency=440 \
             -t 4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest served/sample.mp4
+          # An "update" for the app to find, download and install: the same APK
+          # listed as a newer release, like the GitHub API lists one.
+          cp apk/*.apk served/update.apk
+          python3 - <<'PY'
+          import json, os
+          size = os.path.getsize("served/update.apk")
+          release = {"tag_name": "orbida-v99.0.0", "draft": False, "prerelease": False, "body": "CI update test",
+                     "html_url": "http://10.0.2.2:8000/", "assets": [{
+                         "name": "Orbida-99.0.0-android-arm64-v8a.apk", "size": size,
+                         "browser_download_url": "http://10.0.2.2:8000/update.apk"}]}
+          json.dump([release], open("served/releases.json", "w"))
+          PY
           nohup python3 android/range_server.py served 8000 >/dev/null 2>&1 &
       - uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -168,15 +207,16 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
-            bash android/emulator_ui_test.sh apk/*.apk
+            UD_UPDATE_RELEASES=http://10.0.2.2:8000/releases.json bash android/emulator_ui_test.sh apk/*.apk
             bash android/emulator_ui_test.sh apk-arm64/*.apk || echo "::warning::The phone APK failed the UI test under ARM translation"
             bash android/emulator_test.sh apk/*.apk http://10.0.2.2:8000/sample.mp4
 
   publish:
-    name: Publish pre-release
+    name: Publish
     needs: [apk, emulator]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    if: startsWith(github.ref, 'refs/tags/orbida-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: write
     steps:
@@ -185,11 +225,30 @@ jobs:
         with:
           name: apk-arm64-v8a
           path: apk
-      - name: Create the pre-release
+      - name: Only a signed APK is published
+        if: needs.apk.outputs.signed != 'true'
+        run: |
+          echo "::error::Add the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets; an APK without the project's key cannot update the app"
+          exit 1
+      - name: Upload to the release
+        if: startsWith(github.ref, 'refs/tags/orbida-v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="android-preview-${{ github.run_number }}"
-          gh release create "$tag" apk/*.apk --prerelease --latest=false --target "$GITHUB_SHA" \
-            --title "Orbida (Android preview) ${{ github.run_number }} (not a Windows release)" \
+          tag="${GITHUB_REF#refs/tags/}"
+          version=$(sed -n 's/^version = //p' android/buildozer.spec)
+          [ "$tag" = "orbida-v$version" ] || { echo "::error::Tag $tag does not match version $version in android/buildozer.spec"; exit 1; }
+          # The Windows release workflow creates the release; wait for it.
+          for _ in $(seq 1 60); do
+            gh release view "$tag" >/dev/null 2>&1 && break
+            sleep 60
+          done
+          gh release upload "$tag" apk/*.apk --clobber
+      - name: Test build on a pre-release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "orbida-test-${{ github.run_number }}" apk/*.apk --prerelease --latest=false \
+            --target "$GITHUB_SHA" --title "Orbida Android test build ${{ github.run_number }} (not a release)" \
             --notes-file android/release-notes.md

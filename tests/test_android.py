@@ -396,11 +396,8 @@ def test_icon_files_match_the_build_settings():
     # The launcher draws the background; the foreground layer needs transparency.
     assert _png_header(os.path.join(ROOT, "android", "icon", "icon_fg.png"))[2] == 6  # RGBA
     colour = re.search(r"^android.presplash_color = (#\w+)$", spec, re.M).group(1)
-    import importlib.util
-    render = importlib.util.spec_from_file_location("render", os.path.join(ROOT, "android", "icon", "render.py"))
-    module = importlib.util.module_from_spec(render)
-    render.loader.exec_module(module)
-    assert module.SPLASH_COLOUR == colour
+    render = open(os.path.join(ROOT, "android", "icon", "render.py"), encoding="utf-8").read()
+    assert f'SPLASH_COLOUR = "{colour}"' in render
 
 
 # --- staging ------------------------------------------------------------------------

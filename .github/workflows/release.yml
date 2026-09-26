@@ -9,7 +9,8 @@ name: Release
 # - The Android job is .github/workflows/android.yml (build and emulator test).
 # - A pushed tag orbida-v<version> publishes; a manual run publishes only when
 #   "publish" is ticked (the tag is then created on the chosen commit).
-#   "delete_android_previews" also removes the old android-preview-* pre-releases.
+#   "delete_android_previews" also removes the old android-preview-* and
+#   orbida-test-* pre-releases.
 # Pull requests that change the Windows build are built and tested, never published.
 
 on:
@@ -29,7 +30,7 @@ on:
         type: boolean
         default: false
       delete_android_previews:
-        description: "Also delete every android-preview-* pre-release and its tag"
+        description: "Also delete every android-preview-* and orbida-test-* pre-release and its tag"
         type: boolean
         default: false
 
@@ -149,6 +150,11 @@ jobs:
     # when Android files change.
     if: github.event_name != 'pull_request'
     uses: ./.github/workflows/android.yml
+    # A called workflow gets at most the caller's permissions, and android.yml
+    # has a job (its own test pre-release, skipped here) that asks for
+    # contents: write; without this the run fails to start.
+    permissions:
+      contents: write
     # The APK is signed with the project key from the repository secrets
     # (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD).
     secrets: inherit
@@ -195,10 +201,10 @@ jobs:
             "release/Orbida-Setup-$VERSION.exe" "release/Orbida-$VERSION.apk" \
             release/SHA256SUMS.txt release/build-info.json \
             --target "$GITHUB_SHA" --latest --title "Orbida $VERSION" --notes-file RELEASE_NOTES.md
-      - name: Delete the Android preview pre-releases
+      - name: Delete the Android preview and test pre-releases
         if: inputs.delete_android_previews
         run: |
-          gh release list --limit 500 --json tagName --jq '.[].tagName' | grep '^android-preview-' | while read -r tag; do
+          gh release list --limit 500 --json tagName --jq '.[].tagName' | { grep -E '^(android-preview|orbida-test)-' || true; } | while read -r tag; do
             echo "Deleting $tag"
             gh release delete "$tag" --yes --cleanup-tag
           done

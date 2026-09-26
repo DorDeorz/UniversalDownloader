@@ -149,6 +149,9 @@ jobs:
     # when Android files change.
     if: github.event_name != 'pull_request'
     uses: ./.github/workflows/android.yml
+    # The APK is signed with the project key from the repository secrets
+    # (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD).
+    secrets: inherit
 
   publish:
     name: Publish the release
@@ -161,6 +164,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.windows.outputs.version }}
     steps:
+      # Android installs an update only when it is signed like the installed app.
+      - name: Only a signed APK is published
+        if: needs.android.outputs.signed != 'true'
+        run: |
+          echo "::error::The APK is not signed with the project key; add the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets"
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:

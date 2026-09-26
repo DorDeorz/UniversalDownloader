@@ -881,7 +881,8 @@ class UpdateDialog(ctk.CTkToplevel):
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.grid(row=4, column=0, sticky="e", padx=20, pady=(12, 18))
         self.btn_page = secondary_button(buttons, tr("update.page"), lambda: webbrowser.open(release.page))
-        self.btn_page.pack(side="left", padx=(0, 8))
+        if can_install:  # otherwise the main button opens the page
+            self.btn_page.pack(side="left", padx=(0, 8))
         self.btn_later = secondary_button(buttons, tr("update.later"), self.later)
         self.btn_later.pack(side="left", padx=(0, 8))
         self.btn_install = primary_button(buttons, tr("update.install") if can_install else tr("update.page"),

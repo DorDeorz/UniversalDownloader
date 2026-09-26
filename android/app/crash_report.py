@@ -91,7 +91,8 @@ def new_log_lines(log, seen):
     Returns (the new lines as text, the last line) so the caller can remember
     where it stopped.
     """
-    lines = [line for line in log.splitlines() if line.strip() and not line.startswith("--------- beginning of")]
+    lines = [line for line in log.splitlines()
+             if line.strip() and not line.startswith("--------- beginning of") and not _minidump(line)]
     if not lines:
         return "", seen
     if seen in lines:
@@ -99,6 +100,14 @@ def new_log_lines(log, seen):
     else:
         lines_after = lines
     return "\n".join(lines_after), lines[-1]
+
+
+def _minidump(line):
+    """A line of the encoded minidump the WebView's crashpad logs when the process dies.
+
+    It runs to hundreds of lines and would push the actual crash out of the report.
+    """
+    return " crashpad: " in line and "CRASHPAD MINIDUMP" not in line
 
 
 def tail(text, count):

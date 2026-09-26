@@ -860,3 +860,14 @@ def test_browser_route_texts_are_translated():
         for key in ("youtube.via_browser", "youtube.browser_count", "youtube.ok_button"):
             assert table[key]
         assert "{count}" in table["youtube.browser_count"]
+
+
+def test_webview_minidump_does_not_push_the_crash_out_of_the_report():
+    import crash_report
+    log = "\n".join(["09-26 17:54:06.100  6423  6423 E AndroidRuntime: FATAL EXCEPTION: main",
+                     "09-26 17:54:07.188  6423  6423 F crashpad: -----BEGIN CRASHPAD MINIDUMP-----"]
+                    + ["09-26 17:54:07.206  6423  6423 F crashpad: )iyJD'EEst-x1NwT~jeR&N7T$ut]4(O7"] * 500
+                    + ["09-26 17:54:07.300  6423  6423 F crashpad: -----END CRASHPAD MINIDUMP-----"])
+    new, last = crash_report.new_log_lines(log, "")
+    assert "FATAL EXCEPTION" in crash_report.tail(new, 150)
+    assert len(new.splitlines()) == 3 and "END CRASHPAD" in last

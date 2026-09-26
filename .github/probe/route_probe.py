@@ -84,8 +84,11 @@ with sync_playwright() as p:
         probe("plain", vid)
         browser_route.enable(bridge)
         probe("browser", vid)
+        original = browser_route.get_webpo_content_binding
+        browser_route.get_webpo_content_binding = lambda request: (request.visitor_data, None)
+        probe("visitor", vid)
+        browser_route.get_webpo_content_binding = original
         page.context.clear_cookies()
-        page.evaluate("minter = null")
         probe("nocookie", vid)
         time.sleep(1)
     browser.close()

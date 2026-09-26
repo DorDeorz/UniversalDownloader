@@ -219,7 +219,9 @@ jobs:
   publish:
     name: Publish test build
     needs: [apk, emulator]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+    # github.workflow is the caller's name when release.yml calls this one, so
+    # its own publish input never starts a test pre-release here.
+    if: github.event_name == 'workflow_dispatch' && github.workflow == 'Android' && inputs.publish == true
     runs-on: ubuntu-latest
     permissions:
       contents: write

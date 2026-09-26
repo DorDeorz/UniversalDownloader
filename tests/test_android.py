@@ -645,3 +645,14 @@ def test_system_crashes_are_reported_once(tmp_path):
         "E AndroidRuntime: FATAL EXCEPTION"
     assert "FATAL EXCEPTION" in report.take_previous(extra="E AndroidRuntime: FATAL EXCEPTION")
     assert crash_report.tail("a\nb\nc", 2) == "b\nc"
+
+
+def test_diagnostics_put_the_app_log_first_without_unpacking_noise():
+    import crash_report
+    android = "\n".join([f"09-26 16:26:26.914 1 2 V python  : extracting _python_bundle/x{i}.pyc"
+                          for i in range(5000)] + ["09-26 16:27:00.000 1 2 I python  : UDSELFTEST tools ok"])
+    text = crash_report.diagnostics("0.2.5", ["Fetching...", "Sign in to confirm you're not a bot"], android)
+    assert text.startswith("UniversalDownloader 0.2.5\n\nApp log:\nFetching...")
+    assert "extracting" not in text
+    assert text.rstrip().endswith("UDSELFTEST tools ok")
+

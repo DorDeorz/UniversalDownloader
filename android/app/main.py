@@ -337,8 +337,7 @@ class UniversalDownloaderApp(MDApp):
 
     def copy_diagnostics(self):
         from kivy.core.clipboard import Clipboard
-        text = f"UniversalDownloader {APP_VERSION}\n" + android_env.app_log(lines=1500)
-        Clipboard.copy(text)
+        Clipboard.copy(crash_report.diagnostics(APP_VERSION, self._log_lines, android_env.app_log(lines=3000)))
         self.snack(self.t("crash.copied"))
 
     def show_crash(self, text):

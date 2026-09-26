@@ -104,3 +104,19 @@ def new_log_lines(log, seen):
 def tail(text, count):
     """The last ``count`` lines of ``text``."""
     return "\n".join(text.splitlines()[-count:])
+
+
+# Log lines that only say the app unpacked a file on its first start.
+_NOISE = (" V python  : extracting ", " V python  : Checking pattern ", " V python  : Unpacking ")
+
+
+def diagnostics(version, app_log, android_log, lines=400):
+    """The text "Copy diagnostic log" puts on the clipboard.
+
+    The app's own log (what the Details panel shows) comes first, then the
+    end of Android's log without the thousands of unpacking lines of a first
+    start, so a paste into a chat still holds what matters.
+    """
+    useful = [line for line in android_log.splitlines() if not any(n in line for n in _NOISE)]
+    return (f"UniversalDownloader {version}\n\nApp log:\n" + "\n".join(app_log)
+            + "\n\nAndroid log:\n" + "\n".join(useful[-lines:]))

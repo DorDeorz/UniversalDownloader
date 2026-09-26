@@ -121,6 +121,16 @@ class LoginView:
         run_on_ui_thread(self._close)()
 
     def _open(self, url):
+        # Runs on Android's UI thread, where an error would only reach logcat.
+        try:
+            self._build(url)
+        except Exception:
+            import traceback
+            print("UDCRASH YouTube sign-in page:\n" + traceback.format_exc(), flush=True)
+            self._layout = None
+            self.on_close("")
+
+    def _build(self, url):
         from jnius import PythonJavaClass, autoclass, java_method
 
         activity = autoclass("org.kivy.android.PythonActivity").mActivity
@@ -170,7 +180,7 @@ class LoginView:
         web.setOnKeyListener(back)
 
         button = Button(activity)
-        button.setText(self.done_text)
+        button.setText(autoclass("java.lang.String")(self.done_text))  # a CharSequence parameter
         button.setOnClickListener(done)
         layout = LinearLayout(activity)
         layout.setOrientation(LinearLayout.VERTICAL)
@@ -187,6 +197,15 @@ class LoginView:
         web.requestFocus()
 
     def _close(self):
+        try:
+            self._remove()
+        except Exception:
+            import traceback
+            print("UDCRASH YouTube sign-in page:\n" + traceback.format_exc(), flush=True)
+            self._layout = None
+            self.on_close("")
+
+    def _remove(self):
         if self._layout is None:
             return
         from jnius import autoclass

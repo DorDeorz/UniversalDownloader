@@ -46,6 +46,7 @@ import history
 import i18n
 import layout
 import logic
+import md_patches
 import media_tools
 import texts
 import urls
@@ -54,7 +55,9 @@ import worker
 from app_settings import AppSettings
 from results import ItemStatus
 
-APP_VERSION = "0.2.2"  # keep in step with android/buildozer.spec
+md_patches.disable_gpu_ripple()  # before any KivyMD widget exists; see md_patches
+
+APP_VERSION = "0.2.3"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]

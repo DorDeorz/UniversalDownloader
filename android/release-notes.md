@@ -1,6 +1,9 @@
 **Android preview. This is not a Windows release;** the Windows installer is in the `v<version>` releases.
 
-UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.2. It is debug-signed and not on Google Play.
+UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.3. It is debug-signed and not on Google Play.
+
+**New in 0.2.3**
+- Fixed: the app closed at the first tap on phones with Qualcomm Adreno graphics (many Xiaomi and Samsung phones). The touch ripple that crashed their graphics driver is off; buttons still light up when pressed.
 
 **New in 0.2.2**
 - After an unexpected close, the report also includes what Android logged about it.

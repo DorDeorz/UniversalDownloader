@@ -121,6 +121,13 @@ the same debug key; otherwise uninstall the old one first.
 
 ## When it goes wrong
 
+KivyMD 2.0 draws its touch ripple through an `Fbo` whose shader is set
+after the `Fbo` is made, which crashes Qualcomm Adreno drivers on the first
+tap (kivymd/KivyMD#1900, #1508). The emulator's software GPU does not, so CI
+cannot see it. `android/app/md_patches.py` switches the ripple off before
+any widget is built.
+
+
 A Python error in the app no longer closes it: the app records it, shows
 it in a snackbar and keeps running. If the app does close (a crash in
 native code), `faulthandler` has written the stack of every Python thread

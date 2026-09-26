@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.2.3",
+    "date": "2026-09-26",
+    "en": [
+      "Fixed: the app closed at the first tap on phones with Qualcomm Adreno graphics (many Xiaomi and Samsung phones). The touch ripple that crashed their graphics driver is switched off; buttons still light up when pressed."
+    ],
+    "tr": [
+      "Düzeltildi: Qualcomm Adreno ekran kartlı telefonlarda (birçok Xiaomi ve Samsung) uygulama ilk dokunuşta kapanıyordu. Ekran kartı sürücüsünü çökerten dokunma dalgası efekti kapatıldı; tuşlar basınca yine renk değiştiriyor."
+    ]
+  },
+  {
     "version": "0.2.2",
     "date": "2026-09-26",
     "en": [

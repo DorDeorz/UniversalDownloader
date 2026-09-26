@@ -8,7 +8,7 @@ package.domain = io.github.dordeorz
 # Filled by android/stage.py: android/app plus the shared modules.
 source.dir = .build/src
 source.include_exts = py,json,png
-version = 0.2.2
+version = 0.2.3
 icon.filename = %(source.dir)s/icon.png
 orientation = portrait
 fullscreen = 0

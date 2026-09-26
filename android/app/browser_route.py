@@ -13,13 +13,16 @@ The module has two halves:
 
 * ``BrowserRequestHandler``, a yt-dlp request handler that only accepts
   requests while the route is enabled and only for ``ROUTED_HOSTS``.
-* A *bridge* that performs one request in the browser. On Android it is
-  the Java class ``BrowserFetch`` (android/java); tests and the CI probe use
-  their own.
+* ``BrowserPTP``, a yt-dlp PO token provider: a browser session's streams
+  need proof-of-origin tokens, which the page mints with YouTube's own
+  BotGuard, as YouTube's web player does.
 
-``FETCH_SCRIPT`` runs inside the browser page. ``__udFetch`` answers
-``[status, headers JSON, body base64, final URL]`` or ``[0, error]``, both
-as its promise's value and, on Android, through the ``UdBridge`` interface.
+Both go through a *bridge* to the page (``PAGE_HTML``). On Android it is
+the Java class ``BrowserFetch`` (android/java); tests and the CI probe use
+their own. A bridge has ``fetch(method, url, headers, body_base64, timeout)``
+answering ``[status, headers JSON, body base64, final URL]`` and
+``mint(binding, timeout)`` answering ``[1, token]``; both answer
+``[0, error]`` when they fail.
 """
 
 import base64
@@ -28,6 +31,16 @@ import json
 import threading
 import urllib.parse
 
+from yt_dlp.extractor.youtube.pot.provider import (
+    PoTokenContext,
+    PoTokenProvider,
+    PoTokenProviderError,
+    PoTokenProviderRejectedRequest,
+    PoTokenResponse,
+    register_preference as register_pot_preference,
+    register_provider,
+)
+from yt_dlp.extractor.youtube.pot.utils import WEBPO_CLIENTS, get_webpo_content_binding
 from yt_dlp.networking.common import RequestHandler, Response, register_preference, register_rh
 from yt_dlp.networking.exceptions import HTTPError, TransportError, UnsupportedRequest
 
@@ -40,34 +53,127 @@ BROWSER_HEADERS = ("user-agent", "cookie", "origin", "referer", "host", "connect
                    "accept-encoding", "keep-alive", "te", "trailer", "transfer-encoding", "upgrade")
 # Hop-by-hop or already undone by fetch(), which hands over a decoded body.
 DROPPED_RESPONSE_HEADERS = ("content-encoding", "content-length", "transfer-encoding")
+MINT_SECONDS = 40
 
-FETCH_SCRIPT = r"""
-window.__udFetch = function (id, method, url, headers, body) {
-  var answer = function (result) {
-    if (window.UdBridge) {
-      if (result[0]) UdBridge.done(id, String(result[0]), result[1], result[2], result[3]);
-      else UdBridge.fail(id, String(result[1]));
-    }
-    return result;
-  };
-  var options = {method: method, headers: headers, credentials: 'include', redirect: 'follow'};
-  if (body) {
-    var raw = atob(body), bytes = new Uint8Array(raw.length);
-    for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-    options.body = bytes;
+# The page runs as https://www.youtube.com/ (loadDataWithBaseURL), so its
+# fetch() calls to YouTube are same-origin and carry the browser's cookies.
+# It is the app's own page, not YouTube's, so no content policy stops it
+# from loading BotGuard.
+#
+# Every function takes a request id first and answers through
+# ``answer(id, [status, a, b, c])`` / ``[0, error]``: to UdBridge on Android,
+# and as the returned promise's value for the CI probe.
+#
+# __udMint makes proof-of-origin (PO) tokens the way YouTube's web player
+# does (after LuanRT/BgUtils, MIT): run YouTube's BotGuard challenge, trade
+# the result for an integrity token, then mint a token per content binding
+# (a video id or visitor id). Streams handed to a browser session need them.
+PAGE_SCRIPT = r"""
+function answer(id, result) {
+  if (window.UdBridge) {
+    if (result[0]) UdBridge.done(id, String(result[0]), result[1] || '', result[2] || '', result[3] || '');
+    else UdBridge.fail(id, String(result[1]));
   }
+  return result;
+}
+function toBase64(bytes, websafe) {
+  var text = '';
+  for (var i = 0; i < bytes.length; i += 0x8000)
+    text += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  var out = btoa(text);
+  return websafe ? out.replace(/\+/g, '-').replace(/\//g, '_') : out;
+}
+function fromBase64(text) {
+  var raw = atob(text.replace(/-/g, '+').replace(/_/g, '/')), bytes = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+window.__udFetch = function (id, method, url, headers, body) {
+  var options = {method: method, headers: headers, credentials: 'include', redirect: 'follow'};
+  if (body) options.body = fromBase64(body);
   return fetch(url, options).then(function (response) {
     var head = {};
     response.headers.forEach(function (value, name) { head[name] = value; });
     return response.arrayBuffer().then(function (buffer) {
-      var bytes = new Uint8Array(buffer), text = '';
-      for (var i = 0; i < bytes.length; i += 0x8000)
-        text += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-      return answer([response.status, JSON.stringify(head), btoa(text), response.url]);
+      return answer(id, [response.status, JSON.stringify(head), toBase64(new Uint8Array(buffer)), response.url]);
     });
-  }).catch(function (error) { return answer([0, String(error)]); });
+  }).catch(function (error) { return answer(id, [0, 'fetch: ' + error]); });
+};
+
+var GOOG_API_KEY = 'AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw';  // YouTube's public web key
+var REQUEST_KEY = 'O43z0dpjhgX20SCx4KAo';
+var minter = null, minterExpires = 0;
+
+function looseJson(text) {
+  text = text.replace(/\\x([0-9A-Fa-f]{2})/g, function (_, hex) { return String.fromCharCode(parseInt(hex, 16)); });
+  text = text.replace(/,\s*([\]}])/g, '$1');
+  text = text.replace(/'((?:[^'\\]|\\[\s\S])*)'/g, function (_, inner) { return JSON.stringify(inner.replace(/\\'/g, "'")); });
+  text = text.replace(/([{,]\s*)([a-zA-Z0-9_$]+)\s*:/g, '$1"$2":');
+  var data = JSON.parse(text);
+  for (var key in data) {
+    var value = data[key];
+    if (typeof value === 'string' && /^\s*[\[{]/.test(value)) { try { data[key] = JSON.parse(value); } catch (e) {} }
+  }
+  return data;
+}
+function loadScript(url) {
+  return new Promise(function (resolve, reject) {
+    var script = document.createElement('script');
+    script.src = url;
+    script.onload = resolve;
+    script.onerror = function () { reject(new Error('could not load ' + url)); };
+    document.head.appendChild(script);
+  });
+}
+async function newMinter() {
+  var html = await (await fetch('/', {credentials: 'include'})).text();
+  var config = html.match(/ytcfg\.set\(({.+?})\);/s);
+  if (config) window.yt = {config_: JSON.parse(config[1])};  // BotGuard reads EVENT_ID from it
+  var att = html.match(/window\.ytAtN\(\s*({[\s\S]*?})\s*\)/);
+  if (!att) throw new Error('no BotGuard challenge on the home page');
+  var challenge = looseJson(att[1]).R.bgChallenge;
+  await loadScript('https:' + challenge.interpreterUrl.privateDoNotAccessOrElseTrustedResourceUrlWrappedValue);
+  var vm = window[challenge.globalName];
+  if (!vm || !vm.a) throw new Error('BotGuard did not load');
+  var functions = new Promise(function (resolve) {
+    vm.a(challenge.program, function (snapshot) { resolve(snapshot); }, true, undefined, function () {},
+         [[], []], undefined, false, [function () {}, function () {}, function () {}, function () {}, function () {}]);
+  });
+  var snapshot = await Promise.race([functions, new Promise(function (_, reject) {
+    setTimeout(function () { reject(new Error('BotGuard did not start')); }, 10000); })]);
+  var signals = [];
+  var botguard = await new Promise(function (resolve) {
+    snapshot(resolve, [undefined, undefined, signals, undefined]);
+  });
+  var response = await fetch('https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/GenerateIT', {
+    method: 'POST',
+    headers: {'content-type': 'application/json+protobuf', 'x-goog-api-key': GOOG_API_KEY,
+              'x-user-agent': 'grpc-web-javascript/0.1'},
+    body: JSON.stringify([REQUEST_KEY, botguard])});
+  var token = await response.json();
+  if (!token[0]) throw new Error('no integrity token: ' + JSON.stringify(token).slice(0, 200));
+  if (!signals[0]) throw new Error('BotGuard gave no minter');
+  var mint = await signals[0](fromBase64(token[0]));
+  if (typeof mint !== 'function') throw new Error('BotGuard minter is not a function');
+  return {mint: mint, expires: Date.now() + Math.max(60, (token[1] || 3600) - 300) * 1000};
+}
+
+window.__udMint = function (id, binding) {
+  if (!minter || minterExpires < Date.now()) {
+    minterExpires = Infinity;  // until the new one says how long it lasts
+    minter = newMinter().then(function (m) { minterExpires = m.expires; return m; })
+                        .catch(function (error) { minter = null; throw error; });
+  }
+  return minter.then(function (m) {
+    return m.mint(new TextEncoder().encode(binding));
+  }).then(function (bytes) {
+    if (!(bytes instanceof Uint8Array)) throw new Error('BotGuard minted nothing');
+    return answer(id, [1, toBase64(bytes, true)]);
+  }).catch(function (error) { return answer(id, [0, 'mint: ' + (error && error.message || error)]); });
 };
 """
+PAGE_HTML = "<!doctype html><html><head><meta charset=utf-8><script>" + PAGE_SCRIPT + "</script></head><body></body></html>"
 
 _lock = threading.Lock()
 _state = {"bridge": None, "enabled": False, "requests": 0}
@@ -171,21 +277,49 @@ def _prefer_browser(handler, request):
     return 1000  # _validate turns down everything it should not take
 
 
+@register_provider
+class BrowserPTP(PoTokenProvider):
+    PROVIDER_VERSION = "1.0.0"
+    BUG_REPORT_LOCATION = "https://github.com/DorDeorz/UniversalDownloader/issues"
+    _SUPPORTED_CLIENTS = WEBPO_CLIENTS
+    _SUPPORTED_CONTEXTS = (PoTokenContext.GVS, PoTokenContext.PLAYER, PoTokenContext.SUBS)
+
+    def is_available(self):
+        return enabled()
+
+    def _real_request_pot(self, request):
+        binding, _ = get_webpo_content_binding(request)
+        if not binding:
+            raise PoTokenProviderRejectedRequest("nothing to bind the token to")
+        try:
+            result = _state["bridge"].mint(binding, MINT_SECONDS)
+        except Exception as e:
+            raise PoTokenProviderError(f"browser: {e}") from e
+        if not result or not result[0] or result[0] == "0":
+            raise PoTokenProviderError(f"browser: {result[1] if result and len(result) > 1 else 'no answer'}")
+        return PoTokenResponse(po_token=result[1])
+
+
+@register_pot_preference(BrowserPTP)
+def _prefer_browser_tokens(provider, request):
+    return 1000
+
+
 # --- Device-only (pyjnius) ---------------------------------------------------------
 
 
 class AndroidBridge:
-    """The Java ``BrowserFetch`` WebView, loaded once on first use.
+    """The Java ``BrowserFetch`` WebView, loaded on first use.
 
     ``prepare()`` must run on Kivy's main thread: app classes are only found
-    from there. ``fetch`` blocks the calling worker thread.
+    from there. ``fetch`` and ``mint`` block the calling worker thread.
     """
 
-    START_SECONDS = 25
+    START_SECONDS = 20
 
     def __init__(self):
         self._java = None
-        self._origin = None
+        self._ready = False
 
     def prepare(self):
         from jnius import autoclass
@@ -195,19 +329,19 @@ class AndroidBridge:
         self._agent = desktop_user_agent(agent)
         return self
 
-    def start(self):
-        """Load YouTube's home page in the hidden WebView; returns its origin or None."""
-        if self._origin is None:
-            origin = self._java.start(self._activity, self._agent, HOME_URL, FETCH_SCRIPT,
-                                      self.START_SECONDS * 1000)
-            error = self._java.error()
-            if error:
-                raise RuntimeError(error)
-            self._origin = origin
-        return self._origin
+    def _start(self):
+        if not self._ready:
+            self._ready = bool(self._java.start(self._activity, self._agent, HOME_URL, PAGE_HTML,
+                                                self.START_SECONDS * 1000))
+            if not self._ready:
+                raise RuntimeError(self._java.error() or "the browser page did not load")
+
+    def _run(self, function, args, timeout):
+        self._start()
+        return list(self._java.run(function, json.dumps(args), int(timeout * 1000)))
 
     def fetch(self, method, url, headers, body_base64, timeout):
-        origin = self.start()
-        if not origin or not url.startswith(origin + "/"):
-            return [0, f"the browser page is on {origin or 'nothing'}"]
-        return list(self._java.fetch(method, url, json.dumps(headers), body_base64, int(timeout * 1000)))
+        return self._run("__udFetch", [method, url, headers, body_base64], timeout)
+
+    def mint(self, binding, timeout):
+        return self._run("__udMint", [binding], timeout)

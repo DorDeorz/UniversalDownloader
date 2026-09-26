@@ -11,7 +11,7 @@ from yt_dlp.networking import Request  # noqa: E402
 
 import browser_route  # noqa: E402
 
-VIDEOS = ["dQw4w9WgXcQ"] * 4
+VIDEOS = ["dQw4w9WgXcQ"] * 3 + ["jNQXAC9IVRw", "9bZkp7q19f0"]
 BRIDGE = None
 
 
@@ -21,6 +21,12 @@ class PlaywrightBridge:
 
     def fetch(self, method, url, headers, body, timeout):
         return self.page.evaluate("(a) => __udFetch(...a)", ["1", method, url, headers, body])
+
+    def mint(self, binding, timeout):
+        started = time.time()
+        result = self.page.evaluate("(a) => __udMint(...a)", ["1", binding])
+        print("       mint %s in %.1fs: %s" % (binding[:20], time.time() - started, str(result)[:100]), flush=True)
+        return result
 
 
 def probe(mode, vid):
@@ -59,17 +65,19 @@ def probe(mode, vid):
     print("%-8s %s %s (browser requests: %d)" % (mode, vid, result, routed), flush=True)
     if mode == "browser":
         for line in lines:
-            if "UDBrowser" in line or "WARNING" in line or "ERROR" in line or "Downloading" in line or "player API" in line:
+            if "UDBrowser" in line or "WARNING" in line or "ERROR" in line or "pot" in line.lower():
                 print("       " + line[:200])
 
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_context(locale="en-US").new_page()
+    # As loadDataWithBaseURL does on Android: the app's page, served as www.youtube.com.
+    page.route(browser_route.HOME_URL, lambda route: route.fulfill(
+        status=200, content_type="text/html", body=browser_route.PAGE_HTML))
     page.goto(browser_route.HOME_URL, wait_until="load")
-    page.wait_for_timeout(5000)
-    print("page:", page.url, flush=True)
-    page.evaluate(browser_route.FETCH_SCRIPT)
+    print("page:", page.url, page.evaluate("typeof __udMint"), flush=True)
+    page.unroute(browser_route.HOME_URL)
     bridge = BRIDGE = PlaywrightBridge(page)
     for vid in VIDEOS:
         browser_route.disable()

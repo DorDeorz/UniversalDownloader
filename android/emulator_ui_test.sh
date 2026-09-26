@@ -117,7 +117,9 @@ fi
 # crash the app's main thread (am crash) and start it again.
 if [ $status -eq 0 ]; then
   adb logcat -c
-  adb shell am crash "$PKG"
+  # By process id: with the browser route's WebView running, the package
+  # also has a page process, and that one ending no longer closes the app.
+  adb shell am crash "$(adb shell pidof "$PKG" | tr -d '\r' | awk '{print $1}')"
   sleep 5
   adb shell pidof "$PKG" >/dev/null && echo "note: the app is still running after am crash"
   adb shell am start -n "$ACTIVITY"

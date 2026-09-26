@@ -17,3 +17,7 @@ htmlcov/
 Thumbs.db
 # Downloaded by the release workflow; not kept in the repository.
 bin/deno.exe
+# Android preview build output (android/stage.py, buildozer).
+android/.build/
+android/.buildozer/
+android/bin/

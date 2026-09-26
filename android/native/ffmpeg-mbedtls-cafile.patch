@@ -1,0 +1,30 @@
+Let FFmpeg's mbedTLS backend verify certificates against $SSL_CERT_FILE.
+
+mbedTLS has no system certificate store on Android. Without this, HTTPS
+in FFmpeg either skips certificate checks or needs -ca_file/-tls_verify on
+every command, and those options make plain http:// inputs fail. The app
+sets SSL_CERT_FILE to certifi's bundle.
+
+--- a/libavformat/tls_mbedtls.c
++++ b/libavformat/tls_mbedtls.c
+@@ -19,6 +19,8 @@
+  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
+ 
++#include <stdlib.h>
++
+ #include <mbedtls/version.h>
+ #include <mbedtls/ctr_drbg.h>
+ #include <mbedtls/entropy.h>
+@@ -222,6 +224,11 @@ static int tls_open(URLContext *h, const char *uri, int flags, AVDictionary **op
+     }
+ 
+     // load trusted CA
++    if (!shr->ca_file && !shr->listen && getenv("SSL_CERT_FILE")) {
++        shr->ca_file = av_strdup(getenv("SSL_CERT_FILE"));
++        shr->verify = 1;
++    }
++
+     if (shr->ca_file) {
+         if ((ret = mbedtls_x509_crt_parse_file(&tls_ctx->ca_cert, shr->ca_file)) != 0) {
+             av_log(h, AV_LOG_ERROR, "mbedtls_x509_crt_parse_file for CA cert returned %d\n", ret);

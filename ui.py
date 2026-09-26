@@ -961,6 +961,7 @@ class App(ctk.CTk):
         apply_accent(self.settings.accent)
         self.history = download_history.History(os.path.join(app_setup.data_dir(), "history.json"))
         self._job_mode = None
+        self._analysed = None  # (time, url, info) of the last single video analysed
         # Widgets whose text is translated: (widget, option) -> function giving
         # the text, re-run when the language changes (see _live).
         self._texts = {}
@@ -1670,7 +1671,11 @@ class App(ctk.CTk):
             elif 'error' in info:
                 self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {info['error']}")
             else:
-                self.events.post(events.ANALYSIS_DONE, analysis=playlist.analyze(info, url), url=url)
+                analysis = playlist.analyze(info, url)
+                if not analysis.is_playlist and analysis.items and info.get('formats'):
+                    # Its download starts from this information (see _known_info).
+                    self._analysed = (time.monotonic(), analysis.items[0].url, info)
+                self.events.post(events.ANALYSIS_DONE, analysis=analysis, url=url)
         except Exception as e:
             self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
     def _on_analysis_failed(self, message):
@@ -1786,17 +1791,42 @@ class App(ctk.CTk):
                 self.log(f"[{i+1}/{total}] {item['title']}")
                 self.events.post(events.ITEM_STARTED, position=i + 1, total=total, title=item['title'])
                 item_opts = dict(opts, playlist_index=item.get('index'), playlist_title=item.get('playlist'))
-                try:
-                    result = self.manager.download_video(
-                        item['url'], item_opts, self.progress_hook, log_callback=self.log, title=item['title'],
-                        cancel_event=cancel_event)
-                except Exception as e:
-                    result = ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
+                info = self._known_info(item['url'])
+                result = self._download_once(item, item_opts, cancel_event, info)
+                if info is not None and result.status is ItemStatus.FAILED and not (
+                        cancel_event is not None and cancel_event.is_set()):
+                    # The saved media links may have expired; ask the site again.
+                    self._analysed = None
+                    self.log(f"Retrying with fresh information ({result.error})")
+                    result = self._download_once(item, item_opts, cancel_event, None)
                 result.source = item
                 summary.add(result)
                 self.events.post(events.ITEM_DONE, result=result)
         finally:
             self.events.post(events.JOB_DONE, summary=summary)
+    # How long an analysed video's information is reused for its download (as
+    # on Android): the site is not asked twice, and for YouTube its JavaScript
+    # challenge is not solved twice. A stale link only costs a second attempt.
+    REUSE_SECONDS = 20 * 60
+
+    def _known_info(self, url):
+        """The analysed information for ``url`` while it is fresh, else None."""
+        if self._analysed is None:
+            return None
+        when, known_url, info = self._analysed
+        if known_url != url or time.monotonic() - when > self.REUSE_SECONDS:
+            return None
+        return info
+
+    def _download_once(self, item, options, cancel_event, info):
+        extra = {'info': info} if info is not None else {}
+        try:
+            return self.manager.download_video(
+                item['url'], options, self.progress_hook, log_callback=self.log, title=item['title'],
+                cancel_event=cancel_event, **extra)
+        except Exception as e:
+            return ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
+
     def _run_queue_with_cancel(self, items, opts):
         # Bound at start so a later job's event cannot leak into this one.
         self.run_queue(items, opts, self._cancel_event)

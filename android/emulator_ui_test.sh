@@ -58,7 +58,7 @@ alive "start" &&
 
 echo "----- app log -----"
 adb logcat -d 2>/dev/null | grep -a -E "python|UDCRASH|AndroidRuntime|libc|DEBUG|SDL" | tail -n 300
-if adb logcat -d 2>/dev/null | grep -a -q "UDCRASH"; then
+if grep -a -q "UDCRASH" <<<"$(adb logcat -d 2>/dev/null)"; then
   echo "FAIL: Python reported an error (UDCRASH above)"
   status=1
 fi
@@ -76,13 +76,15 @@ if [ $status -eq 0 ]; then
     sleep 5
   done
   sleep 3  # the report reaches the log a line at a time
-  if adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run" | grep -a -q -E "FATAL EXCEPTION|CrashedByAdb"; then
+  # Kept in a variable: with pipefail, grep -q ending a pipe early fails it.
+  report=$(adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run")
+  echo "$report" | head -n 60
+  if grep -a -q -E "FATAL EXCEPTION|CrashedByAdb" <<<"$report"; then
     echo "ok: crash report after a Java crash"
   else
     echo "FAIL: no crash report after a Java crash"
     status=1
   fi
-  adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run" | head -n 60
 fi
 
 adb shell am force-stop "$PKG"

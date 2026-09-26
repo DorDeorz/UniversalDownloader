@@ -38,6 +38,7 @@ from kivymd.uix.snackbar import MDSnackbar, MDSnackbarText
 
 import android_env
 import app_settings
+import browser_route
 import crash_report
 import events
 import filenames
@@ -57,7 +58,7 @@ from results import ItemStatus
 
 md_patches.disable_gpu_ripple()  # before any KivyMD widget exists; see md_patches
 
-APP_VERSION = "0.2.5"  # keep in step with android/buildozer.spec
+APP_VERSION = "0.2.6"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
@@ -250,7 +251,7 @@ class UniversalDownloaderApp(MDApp):
         self._stale = {"settings": True, "history": True}
         self._dark = None
         self._login = None           # youtube_login.LoginView while it is open
-        self._retry_after_login = False
+        self._browser = None         # browser_route.AndroidBridge, made on Android at start
         self._wake_lock = None
         self._stderr = deque(maxlen=12)  # last lines FFmpeg printed, shown when an item fails
         self._apply_language()
@@ -492,8 +493,21 @@ class UniversalDownloaderApp(MDApp):
         self.ids.btn_analyze.disabled = False
         self.ids.btn_download.disabled = not (self.analysis and self.analysis.items)
         self._refresh("settings")
+        if android_env.on_android():
+            try:
+                self._browser = browser_route.AndroidBridge().prepare()
+            except Exception as e:
+                _log.warning("Browser route unavailable: %s", e)
         login_test = self._intent_extra("selftest_login")
-        if login_test:
+        browser_test = self._intent_extra("selftest_browser")
+        if browser_test:
+            # CI: analyse (and on success download) a YouTube video through the browser route.
+            self._use_browser_route()
+            self._selftest = browser_test
+            self._selftest_passes = [("video", None)]
+            self.ids.url.text = browser_test
+            self.analyze()
+        elif login_test:
             self.sign_in_youtube(url=login_test)
             Clock.schedule_once(lambda *_: self._login and self._login.close(), 4)
         elif self._selftest:
@@ -818,7 +832,10 @@ class UniversalDownloaderApp(MDApp):
                     else self.tr("link.nothing"))
             self._show_media(text, "", "alert-circle-outline")
         self.ids.btn_download.disabled = not analysis.items
-        selftest(f"analysis items={len(analysis.items)} title={analysis.title!r}")
+        if browser_route.enabled():
+            self.log(self.t("youtube.browser_count", count=browser_route.request_count()))
+        selftest(f"analysis items={len(analysis.items)} title={analysis.title!r} "
+                 f"browser_requests={browser_route.request_count()}")
         if self._selftest and analysis.items:
             self._next_selftest_pass()
 
@@ -841,9 +858,17 @@ class UniversalDownloaderApp(MDApp):
         self.ids.btn_download.disabled = True
         self._show_media(self.tr("link.nothing_reason", reason=message), "", "alert-circle-outline")
         self.log(message)
-        selftest(f"analysis failed: {message}")
-        if logic.is_bot_check(message) and android_env.on_android():
-            self._offer_youtube_sign_in()
+        selftest(f"analysis failed: {message} browser_requests={browser_route.request_count()}")
+        if not logic.is_bot_check(message) or not android_env.on_android():
+            return
+        if self._browser is not None and not browser_route.enabled():
+            # Try again with YouTube's requests going through the phone's browser engine.
+            self._use_browser_route()
+            self.log(self.t("youtube.via_browser"))
+            self.analyze()
+        else:
+            self._dialog(self.t("youtube.bot_title"), self.t("youtube.bot_body"),
+                         buttons=[(self.t("youtube.ok_button"), None)])
 
     def _on_item_started(self, position, total, title):
         self._stderr.clear()
@@ -968,13 +993,10 @@ class UniversalDownloaderApp(MDApp):
 
     # --- YouTube sign-in ----------------------------------------------------------
 
-    def _offer_youtube_sign_in(self):
-        def sign_in():
-            self._retry_after_login = True
-            self.sign_in_youtube()
-
-        self._dialog(self.t("youtube.bot_title"), self.t("youtube.bot_body"),
-                     buttons=[(self.t("common.cancel"), None), (self.t("youtube.sign_in"), sign_in)])
+    def _use_browser_route(self):
+        """Send yt-dlp's YouTube requests through a hidden WebView for the rest of the session."""
+        if self._browser is not None:
+            browser_route.enable(self._browser)
 
     def sign_in_youtube(self, url=None):
         if not android_env.on_android() or self._login is not None:
@@ -994,9 +1016,6 @@ class UniversalDownloaderApp(MDApp):
         self._set_platform_options()
         self._refresh("settings")
         self.snack(self.t("youtube.ok" if ok else "youtube.failed"))
-        retry, self._retry_after_login = self._retry_after_login, False
-        if ok and retry and self.job is None and self.ids.url.text.strip():
-            self.analyze()
 
     def sign_out_youtube(self):
         def sign_out():

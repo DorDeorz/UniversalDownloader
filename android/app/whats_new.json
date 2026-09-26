@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.6",
+    "date": "2026-09-26",
+    "en": [
+      "YouTube without an account: when YouTube asks to \"confirm you're not a bot\", the app tries again through the phone's own browser engine, the way a browser would open the video. No sign-in needed.",
+      "If YouTube blocks even that, the app says so and suggests Wi-Fi or another network. Signing in (Settings › YouTube) stays available but optional."
+    ],
+    "tr": [
+      "Hesapsız YouTube: YouTube \"bot olmadığınızı doğrulayın\" dediğinde uygulama, videoyu bir tarayıcı gibi açarak telefonun kendi tarayıcı motoru üzerinden yeniden dener. Giriş gerekmez.",
+      "YouTube bunu da engellerse uygulama bunu söyler ve Wi-Fi ya da başka bir ağ önerir. Giriş yapma (Ayarlar › YouTube) isteğe bağlı olarak duruyor."
+    ]
+  },
+  {
     "version": "0.2.5",
     "date": "2026-09-26",
     "en": [

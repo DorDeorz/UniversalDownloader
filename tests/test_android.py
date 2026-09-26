@@ -699,3 +699,164 @@ def test_cookie_file_reaches_yt_dlp(tmp_path, fake_ydl, manager):
     logic.set_platform_options({"cookiefile": youtube_login.saved(str(tmp_path))})
     manager.fetch_info("https://youtu.be/abc")
     assert fake_ydl.instances[0].opts["cookiefile"].endswith(youtube_login.COOKIE_FILE)
+
+
+# --- browser_route: YouTube through the phone's browser engine -----------------------
+
+
+class FakeBridge:
+    """Answers like BrowserFetch.java would, without a WebView."""
+
+    def __init__(self, status=200, body=b"<html>ok</html>", headers=None, token="TOKEN"):
+        self.status, self.body, self.token = status, body, token
+        self.headers = headers or {"content-type": "text/html", "content-encoding": "gzip"}
+        self.requests, self.bindings = [], []
+
+    def fetch(self, method, url, headers, body_base64, timeout, credentials="include"):
+        import base64
+        import json
+        self.requests.append((method, url, headers, body_base64, credentials))
+        return [str(self.status), json.dumps(self.headers), base64.b64encode(self.body).decode(), url]
+
+    def mint(self, binding, timeout):
+        self.bindings.append(binding)
+        return ["1", self.token] if self.token else ["0", "mint: BotGuard did not load"]
+
+
+@pytest.fixture
+def route():
+    import browser_route
+    yield browser_route
+    browser_route.disable()
+
+
+def test_route_takes_only_youtube_pages_and_api(route):
+    assert route.wants("https://www.youtube.com/watch?v=abc")
+    assert route.wants("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
+    assert not route.wants("https://www.youtube.com/s/player/abc/player_ias.vflset/en_US/base.js")
+    assert not route.wants("https://rr3---sn-abc.googlevideo.com/videoplayback?id=1")
+    assert not route.wants("https://m.youtube.com/watch?v=abc")
+    assert not route.wants("http://www.youtube.com/watch?v=abc")
+
+
+def test_route_leaves_browser_headers_to_the_browser(route):
+    headers = route.browser_headers({"User-Agent": "yt-dlp", "Cookie": "a=b", "Origin": "https://www.youtube.com",
+                                     "Sec-Fetch-Mode": "navigate", "X-YouTube-Client-Name": "1",
+                                     "Content-Type": "application/json"})
+    assert headers == {"X-YouTube-Client-Name": "1", "Content-Type": "application/json"}
+    assert route.response_headers('{"content-encoding": "br", "content-length": "9", "x-a": "1"}') == {"x-a": "1"}
+
+
+def test_route_fetches_the_watch_page_without_old_cookies(route):
+    assert route.credentials("https://www.youtube.com/watch?v=abc&bpctr=1") == "omit"
+    assert route.credentials("https://www.youtube.com/youtubei/v1/player") == "include"
+
+
+def test_desktop_user_agent_keeps_the_webview_version(route):
+    agent = ("Mozilla/5.0 (Linux; Android 13; 22111317PG Build/TKQ1; wv) AppleWebKit/537.36 (KHTML, like Gecko) "
+             "Version/4.0 Chrome/129.0.6668.100 Mobile Safari/537.36")
+    desktop = route.desktop_user_agent(agent)
+    assert "Chrome/129.0.6668.100" in desktop and "Android" not in desktop and "Mobile" not in desktop
+    assert "Chrome/" in route.desktop_user_agent(None)
+
+
+def test_yt_dlp_sends_youtube_requests_through_the_route_only_when_enabled(route):
+    import yt_dlp
+    from yt_dlp.networking import Request
+    bridge = FakeBridge()
+    with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+        route.enable(bridge)
+        before = route.request_count()
+        with ydl.urlopen(Request("https://www.youtube.com/youtubei/v1/player", data=b'{"videoId": "abc"}',
+                                 headers={"User-Agent": "x", "X-YouTube-Client-Name": "1"})) as response:
+            assert response.read() == b"<html>ok</html>"
+            assert response.status == 200
+            assert "content-encoding" not in {k.lower() for k in response.headers.keys()}
+        method, url, headers, body, credentials = bridge.requests[0]
+        assert method == "POST" and url.endswith("/youtubei/v1/player")
+        assert headers.get("X-Youtube-Client-Name", headers.get("X-YouTube-Client-Name")) == "1"
+        assert not any(name.lower() == "user-agent" for name in headers)
+        assert body == "eyJ2aWRlb0lkIjogImFiYyJ9" and credentials == "include"
+        assert route.request_count() == before + 1
+        route.disable()
+        handler = ydl._request_director.handlers["UDBrowser"]
+        with pytest.raises(Exception):
+            handler.validate(Request("https://www.youtube.com/watch?v=abc"))
+    assert len(bridge.requests) == 1
+
+
+def test_route_reports_http_errors_like_yt_dlp_does(route):
+    import yt_dlp
+    from yt_dlp.networking.exceptions import HTTPError
+    route.enable(FakeBridge(status=429, body=b"slow down"))
+    with yt_dlp.YoutubeDL({"quiet": True}) as ydl, pytest.raises(HTTPError) as error:
+        ydl.urlopen("https://www.youtube.com/watch?v=abc")
+    assert error.value.status == 429
+
+
+def test_route_failure_is_a_transport_error(route):
+    import yt_dlp
+    from yt_dlp.networking.exceptions import TransportError
+
+    class Broken(FakeBridge):
+        def fetch(self, *args, **kwargs):
+            return ["0", "fetch: TypeError: Failed to fetch"]
+
+    route.enable(Broken())
+    with yt_dlp.YoutubeDL({"quiet": True}) as ydl, pytest.raises(TransportError, match="Failed to fetch"):
+        ydl.urlopen("https://www.youtube.com/watch?v=abc")
+
+
+def _pot_request(route, client="WEB", video_id="dQw4w9WgXcQ"):
+    from yt_dlp.extractor.youtube.pot.provider import PoTokenContext, PoTokenRequest
+    return PoTokenRequest(context=PoTokenContext.GVS, innertube_context={"client": {"clientName": client}},
+                          video_id=video_id, visitor_data="Cgt2aXNpdG9y", _gvs_bind_to_video_id=True)
+
+
+def _provider(route):
+    return route.BrowserPTP(ie=None, logger=None, settings={})
+
+
+def test_po_tokens_come_from_the_browser_page_uncached(route):
+    bridge = FakeBridge(token="MlTOKEN")
+    route.enable(bridge)
+    provider = _provider(route)
+    assert provider.is_available()
+    response = provider._real_request_pot(_pot_request(route))
+    assert response.po_token == "MlTOKEN" and response.expires_at == 0
+    assert bridge.bindings == ["dQw4w9WgXcQ"]
+
+
+def test_po_token_provider_is_off_without_the_route_and_reports_failures(route):
+    from yt_dlp.extractor.youtube.pot.provider import PoTokenProviderError
+    provider = _provider(route)
+    assert not provider.is_available()
+    route.enable(FakeBridge(token=None))
+    with pytest.raises(PoTokenProviderError, match="BotGuard"):
+        provider._real_request_pot(_pot_request(route))
+
+
+def test_browser_page_defines_what_the_bridges_call(route):
+    for name in ("window.__udFetch", "window.__udMint", "UdBridge.done", "UdBridge.fail", "GenerateIT"):
+        assert name in route.PAGE_HTML
+    assert route.PAGE_HTML.startswith("<!doctype html>")
+
+
+def test_browser_fetch_java_matches_the_python_side(route):
+    java = open(os.path.join(ROOT, "android", "java", "io", "github", "dordeorz", "universaldownloader",
+                             "BrowserFetch.java"), encoding="utf-8").read()
+    assert "package io.github.dordeorz.universaldownloader;" in java
+    assert '"UdBridge"' in java and "@JavascriptInterface" in java
+    assert "public static boolean start(" in java and "public static String[] run(" in java
+    spec = open(os.path.join(ROOT, "android", "buildozer.spec"), encoding="utf-8").read()
+    assert re.search(r"^android\.add_src = java$", spec, re.M)
+    assert "io.github.dordeorz.universaldownloader.BrowserFetch" in open(
+        os.path.join(ROOT, "android", "app", "browser_route.py"), encoding="utf-8").read()
+
+
+def test_browser_route_texts_are_translated():
+    for language in ("en", "tr"):
+        table = texts.TEXTS[language]
+        for key in ("youtube.via_browser", "youtube.browser_count", "youtube.ok_button"):
+            assert table[key]
+        assert "{count}" in table["youtube.browser_count"]

@@ -84,6 +84,35 @@ if [ $status -eq 0 ]; then
   fi
 fi
 
+# The browser route (browser_route.py, BrowserFetch.java): analyse a YouTube
+# video with yt-dlp's YouTube requests going through a hidden WebView, and
+# download it with the PO token the WebView mints. YouTube often answers
+# this runner's network with its bot check, even for a real browser; that
+# still shows the route worked, as long as requests went through it.
+if [ $status -eq 0 ]; then
+  adb shell am force-stop "$PKG"
+  adb logcat -c
+  adb shell am start -n "$ACTIVITY" --es selftest_browser "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  for _ in $(seq 1 60); do
+    adb logcat -d 2>/dev/null | grep -a -q -E "UDSELFTEST (job done|analysis failed)|UDCRASH" && break
+    sleep 5
+  done
+  route=$(adb logcat -d 2>/dev/null | grep -a -E "UDSELFTEST|UDCRASH")
+  adb logcat -d 2>/dev/null | grep -a -E " python |chromium|AndroidRuntime" | tail -n 150
+  echo "$route"
+  if grep -a -q UDCRASH <<<"$route"; then
+    echo "FAIL: Python reported an error in the browser route"
+    status=1
+  elif grep -a -q "UDSELFTEST job done all_ok=True" <<<"$route"; then
+    alive "YouTube video analysed and downloaded through the browser route"
+  elif grep -a -q -E "UDSELFTEST analysis failed: .*not a bot.* browser_requests=[1-9]" <<<"$route"; then
+    alive "browser route answered; YouTube bot-checks this runner's network"
+  else
+    echo "FAIL: the browser route did not work"
+    status=1
+  fi
+fi
+
 # A Java crash must come back as a report on the next start: have Android
 # crash the app's main thread (am crash) and start it again.
 if [ $status -eq 0 ]; then

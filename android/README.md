@@ -45,8 +45,24 @@ Speed and YouTube:
   `logic.BOT_CHECK_CLIENTS`, so it then retries with the `tv` and
   `web_embedded`/`tv_downgraded` player clients (none needs a PO token) and
   keeps the one that worked. The Windows app does not turn this on.
-  When that is not enough (it was not on the owner's phone), Settings ›
-  YouTube › **Sign in** (also offered with the error) opens YouTube's
+  When that is not enough (it was not on the owner's phone), the app
+  sends yt-dlp's requests to www.youtube.com through the phone's browser
+  engine for the rest of the session and analyses again
+  (`android/app/browser_route.py`, `android/java/.../BrowserFetch.java`):
+  a hidden WebView loads the app's own page as https://www.youtube.com/
+  and runs each request with `fetch()`, so it carries the browser's
+  network stack and session. Streams given to a browser session need
+  proof-of-origin tokens; the same page mints them with YouTube's BotGuard
+  (as YouTube's web player does, after LuanRT/BgUtils) and hands them to
+  yt-dlp as a PO token provider. The watch page is fetched without the
+  cookies of earlier visits, since YouTube refuses the streams of such a
+  page even with a token. Video data, the player script and other sites
+  still go through yt-dlp directly. No account is needed; the emulator
+  job checks the route on a YouTube video. If YouTube bot-checks even the
+  browser (as it does on GitHub's runners), the app says so and suggests
+  another network.
+  Signing in stays available but optional: Settings › YouTube ›
+  **Sign in** opens YouTube's
   sign-in page in an Android WebView (`android/app/youtube_login.py`). On
   **Done** the WebView's youtube.com cookies go to a Netscape cookie file in
   the app's private folder, which yt-dlp reads as `cookiefile`; yt-dlp then

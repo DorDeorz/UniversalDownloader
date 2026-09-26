@@ -1,6 +1,10 @@
 **Android preview. This is not a Windows release;** the Windows installer is in the `v<version>` releases.
 
-UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.5. It is debug-signed and not on Google Play.
+UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.6. It is debug-signed and not on Google Play.
+
+**New in 0.2.6**
+- YouTube without an account: when YouTube asks to "confirm you're not a bot", the app tries again through the phone's own browser engine, the way a browser would open the video. No sign-in needed.
+- If YouTube blocks even that, the app says so and suggests Wi-Fi or another network. Signing in (Settings › YouTube) stays available but optional.
 
 **New in 0.2.5**
 - YouTube: sign in to YouTube inside the app (Settings › YouTube, or the button shown with the "confirm you're not a bot" error). YouTube lets signed-in sessions through; the sign-in stays on the phone. A spare Google account is safest.

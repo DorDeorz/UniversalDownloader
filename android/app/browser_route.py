@@ -53,6 +53,7 @@ BROWSER_HEADERS = ("user-agent", "cookie", "origin", "referer", "host", "connect
                    "accept-encoding", "keep-alive", "te", "trailer", "transfer-encoding", "upgrade")
 # Hop-by-hop or already undone by fetch(), which hands over a decoded body.
 DROPPED_RESPONSE_HEADERS = ("content-encoding", "content-length", "transfer-encoding")
+PAGE_PATHS = ("/watch", "/shorts", "/embed")
 MINT_SECONDS = 40
 
 # The page runs as https://www.youtube.com/ (loadDataWithBaseURL), so its
@@ -176,7 +177,7 @@ window.__udMint = function (id, binding) {
 PAGE_HTML = "<!doctype html><html><head><meta charset=utf-8><script>" + PAGE_SCRIPT + "</script></head><body></body></html>"
 
 _lock = threading.Lock()
-_state = {"bridge": None, "enabled": False, "requests": 0, "credentials": "include"}
+_state = {"bridge": None, "enabled": False, "requests": 0}
 
 
 def enable(bridge):
@@ -200,11 +201,13 @@ def request_count():
 
 
 def credentials(url):
-    """fetch()'s credentials mode for ``url``."""
-    mode = _state["credentials"]
-    if mode == "omit-page":
-        return "omit" if urllib.parse.urlsplit(url).path == "/watch" else "include"
-    return mode
+    """fetch()'s credentials mode for ``url``.
+
+    The watch page goes without cookies: when it is fetched with the cookies
+    of an earlier visit, YouTube refuses its streams even with a PO token.
+    The API calls that follow keep the session.
+    """
+    return "omit" if urllib.parse.urlsplit(url).path.startswith(PAGE_PATHS) else "include"
 
 
 def wants(url):

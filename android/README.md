@@ -130,5 +130,5 @@ what Android's crash log holds for the app since the last report (Java
 exceptions, fatal signals), which apps may read for their own user id. The
 Android log carries the same text on lines starting with `UDCRASH`, and
 Settings › About › **Copy diagnostic log** copies the app's recent log at
-any time. The emulator UI test kills the app with SIGSEGV and checks that
-the next start reports it.
+any time. The emulator UI test crashes the app with `am crash` and checks
+that the next start reports it.

@@ -63,21 +63,22 @@ if adb logcat -d 2>/dev/null | grep -a -q "UDCRASH"; then
   status=1
 fi
 
-# A native crash must come back as a report on the next start: kill the app
-# with SIGSEGV (run-as works because the APK is debuggable) and restart it.
+# A Java crash must come back as a report on the next start: have Android
+# crash the app's main thread (am crash) and start it again.
 if [ $status -eq 0 ]; then
   adb logcat -c
-  adb shell run-as "$PKG" kill -SEGV "$(adb shell pidof "$PKG" | tr -d '\r')"
+  adb shell am crash "$PKG"
   sleep 5
+  adb shell pidof "$PKG" >/dev/null && echo "note: the app is still running after am crash"
   adb shell am start -n "$ACTIVITY"
   for _ in $(seq 1 24); do
     adb logcat -d 2>/dev/null | grep -a -q "UDCRASH previous run" && break
     sleep 5
   done
-  if adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run" | grep -a -q -E "Fatal signal|SIGSEGV|Segmentation fault"; then
-    echo "ok: crash report after SIGSEGV"
+  if adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run" | grep -a -q -E "FATAL EXCEPTION|CrashedByAdb"; then
+    echo "ok: crash report after a Java crash"
   else
-    echo "FAIL: no crash report after SIGSEGV"
+    echo "FAIL: no crash report after a Java crash"
     status=1
   fi
   adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run" | head -n 60

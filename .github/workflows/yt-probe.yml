@@ -1,0 +1,33 @@
+name: YouTube probe (temporary)
+
+on:
+  push:
+    branches: [claude/android-prototype-hea08y]
+    paths: [".github/workflows/yt-probe.yml", ".github/probe/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: pip install "yt-dlp[default,curl-cffi]==2026.8.19" yt-dlp-ejs==0.8.0
+      - name: Plain
+        run: python .github/probe/yt_probe.py plain
+      - name: Impersonate Chrome
+        run: python .github/probe/yt_probe.py impersonate
+      - name: PO token provider (bgutil)
+        run: |
+          docker run -d --name bgutil -p 4416:4416 brainicism/bgutil-ytdlp-pot-provider
+          pip install bgutil-ytdlp-pot-provider
+          sleep 5
+          python .github/probe/yt_probe.py bgutil

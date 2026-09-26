@@ -4,7 +4,9 @@ import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
 import android.webkit.CookieManager;
+import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -42,10 +44,12 @@ public class BrowserFetch {
         CountDownLatch latch;
         synchronized (BrowserFetch.class) {
             if (ready == null) {
-                ready = new CountDownLatch(1);
+                final CountDownLatch made = new CountDownLatch(1);
+                ready = made;
+                error = null;
                 ui.post(new Runnable() {
                     public void run() {
-                        create(activity, userAgent, baseUrl, html);
+                        create(activity, userAgent, baseUrl, html, made);
                     }
                 });
             }
@@ -60,7 +64,8 @@ public class BrowserFetch {
         return error;
     }
 
-    private static void create(Activity activity, String userAgent, String baseUrl, String html) {
+    private static void create(Activity activity, String userAgent, String baseUrl, String html,
+                               final CountDownLatch made) {
         try {
             web = new WebView(activity);
             WebSettings settings = web.getSettings();
@@ -77,7 +82,16 @@ public class BrowserFetch {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     loaded = true;
-                    ready.countDown();
+                    made.countDown();
+                }
+
+                @Override
+                public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                    // Android may end the page's process (for memory, or with the app's
+                    // other processes). Unhandled, that takes the whole app down; instead
+                    // drop the page, and the next request loads a new one.
+                    discard(view);
+                    return true;
                 }
             });
             // A browser page the user never sees: one transparent pixel behind the app.
@@ -86,8 +100,28 @@ public class BrowserFetch {
             web.loadDataWithBaseURL(baseUrl, html, "text/html", "utf-8", null);
         } catch (Throwable t) {
             error = t.toString();
-            ready.countDown();
+            synchronized (BrowserFetch.class) {
+                ready = null;  // try again on the next request
+            }
+            made.countDown();
         }
+    }
+
+    private static void discard(WebView view) {
+        synchronized (BrowserFetch.class) {
+            loaded = false;
+            ready = null;
+            if (web == view) {
+                web = null;
+            }
+        }
+        for (String id : waiting.keySet()) {
+            Bridge.finish(id, new String[]{"0", "the browser page stopped"});
+        }
+        if (view.getParent() instanceof ViewGroup) {
+            ((ViewGroup) view.getParent()).removeView(view);
+        }
+        view.destroy();
     }
 
     /**
@@ -96,7 +130,8 @@ public class BrowserFetch {
      * ``argsJson`` is a JSON array.
      */
     public static String[] run(String function, String argsJson, long timeoutMs) throws InterruptedException {
-        if (!loaded || web == null) {
+        final WebView page = web;
+        if (!loaded || page == null) {
             return new String[]{"0", "the browser page is not loaded"};
         }
         final String id = String.valueOf(ids.incrementAndGet());
@@ -106,7 +141,9 @@ public class BrowserFetch {
                 + JSONObject.quote(id) + "].concat(" + argsJson + "))";
         ui.post(new Runnable() {
             public void run() {
-                web.evaluateJavascript(call, null);
+                if (page == web) {
+                    page.evaluateJavascript(call, null);
+                }
             }
         });
         boolean answered = latch.await(timeoutMs, TimeUnit.MILLISECONDS);

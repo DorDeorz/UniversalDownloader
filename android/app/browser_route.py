@@ -332,7 +332,6 @@ class AndroidBridge:
 
     def __init__(self):
         self._java = None
-        self._ready = False
 
     def prepare(self):
         from jnius import autoclass
@@ -343,11 +342,9 @@ class AndroidBridge:
         return self
 
     def _start(self):
-        if not self._ready:
-            self._ready = bool(self._java.start(self._activity, self._agent, HOME_URL, PAGE_HTML,
-                                                self.START_SECONDS * 1000))
-            if not self._ready:
-                raise RuntimeError(self._java.error() or "the browser page did not load")
+        # Returns at once while the page is loaded; loads it again if Android ended it.
+        if not self._java.start(self._activity, self._agent, HOME_URL, PAGE_HTML, self.START_SECONDS * 1000):
+            raise RuntimeError(self._java.error() or "the browser page did not load")
 
     def _run(self, function, args, timeout):
         self._start()

@@ -848,6 +848,7 @@ def test_browser_fetch_java_matches_the_python_side(route):
     assert "package io.github.dordeorz.universaldownloader;" in java
     assert '"UdBridge"' in java and "@JavascriptInterface" in java
     assert "public static boolean start(" in java and "public static String[] run(" in java
+    assert "onRenderProcessGone" in java  # a lost page process must not take the app down
     spec = open(os.path.join(ROOT, "android", "buildozer.spec"), encoding="utf-8").read()
     assert re.search(r"^android\.add_src = java$", spec, re.M)
     assert "io.github.dordeorz.universaldownloader.BrowserFetch" in open(

@@ -360,6 +360,11 @@ class DownloadManager:
             'postprocessor_hooks': [on_postprocess],
         })
         ydl_opts.update(plan.options)
+        # Speed settings (settings.download_speed_options); nothing else from
+        # ``options`` reaches yt-dlp directly.
+        for key in SPEED_OPTIONS:
+            if options.get(key):
+                ydl_opts[key] = options[key]
 
         try:
             # Phase 1: metadata and format selection, no download.
@@ -421,6 +426,9 @@ class DownloadManager:
             return failed(problem)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
 
+
+# Download options a caller may pass through download_video's ``options``.
+SPEED_OPTIONS = ('concurrent_fragment_downloads', 'http_chunk_size')
 
 def _missing_folders(folder):
     """``folder`` and its parents that do not exist yet, outermost first."""

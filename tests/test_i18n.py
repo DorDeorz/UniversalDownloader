@@ -119,5 +119,5 @@ def test_summary_uses_translated_words():
 
 
 def test_translations_are_packaged():
-    with open(os.path.join(ROOT, "UniversalDownloader.spec"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "Orbida.spec"), encoding="utf-8") as f:
         assert "('locales', 'locales')" in f.read()

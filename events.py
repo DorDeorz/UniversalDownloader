@@ -22,6 +22,10 @@ ANALYSIS_FAILED = "analysis_failed"  # payload: message
 ITEM_DONE = "item_done"          # payload: result (results.ItemResult)
 TOOLS_CHECKED = "tools_checked"  # payload: status (media_tools.ToolStatus)
 JOB_DONE = "job_done"            # payload: summary (results.JobSummary)
+UPDATE_CHECKED = "update_checked"    # payload: release (updates.Release or None), error (str or None), manual
+UPDATE_PROGRESS = "update_progress"  # payload: done, total (bytes of the installer)
+UPDATE_READY = "update_ready"        # payload: path (verified installer)
+UPDATE_FAILED = "update_failed"      # payload: error
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 

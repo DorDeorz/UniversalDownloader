@@ -141,4 +141,4 @@ def test_title_with_percent_and_reserved_chars(manager, fake_ydl, tmp_path):
 
 def test_default_download_dir_is_under_downloads():
     from utils import default_download_dir
-    assert os.path.basename(default_download_dir()) == "UniversalVideos"
+    assert os.path.basename(default_download_dir()) == "Orbida"

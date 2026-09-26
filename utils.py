@@ -37,7 +37,7 @@ def _windows_downloads_dir():
 
 
 def default_download_dir():
-    """``<Downloads>/UniversalVideos``, using the Windows known folder when available."""
+    """``<Downloads>/Orbida``, using the Windows known folder when available."""
     downloads = None
     if sys.platform == "win32":
         try:
@@ -46,4 +46,4 @@ def default_download_dir():
             downloads = None
     if not downloads:
         downloads = os.path.join(os.path.expanduser("~"), "Downloads")
-    return os.path.join(downloads, "UniversalVideos")
+    return os.path.join(downloads, "Orbida")

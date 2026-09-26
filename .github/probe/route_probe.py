@@ -11,7 +11,7 @@ from yt_dlp.networking import Request  # noqa: E402
 
 import browser_route  # noqa: E402
 
-VIDEOS = ["dQw4w9WgXcQ"] * 3 + ["jNQXAC9IVRw", "9bZkp7q19f0"]
+VIDEOS = ["dQw4w9WgXcQ"] * 3
 BRIDGE = None
 
 
@@ -65,7 +65,7 @@ def probe(mode, vid):
     print("%-8s %s %s (browser requests: %d)" % (mode, vid, result, routed), flush=True)
     if mode != "plain":
         for line in lines:
-            if "UDBrowser" in line or "WARNING" in line or "ERROR" in line or "pot" in line.lower():
+            if "WARNING" in line or "ERROR" in line or "bind" in line.lower() or "visitor" in line.lower():
                 print("       " + line[:200])
 
 
@@ -84,7 +84,8 @@ with sync_playwright() as p:
         probe("plain", vid)
         browser_route.enable(bridge)
         probe("browser", vid)
+        page.context.clear_cookies()
         page.evaluate("minter = null")
-        probe("fresh", vid)
+        probe("nocookie", vid)
         time.sleep(1)
     browser.close()

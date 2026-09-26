@@ -75,6 +75,7 @@ if [ $status -eq 0 ]; then
     adb logcat -d 2>/dev/null | grep -a -q "UDCRASH previous run" && break
     sleep 5
   done
+  sleep 3  # the report reaches the log a line at a time
   if adb logcat -d 2>/dev/null | grep -a -A40 "UDCRASH previous run" | grep -a -q -E "FATAL EXCEPTION|CrashedByAdb"; then
     echo "ok: crash report after a Java crash"
   else

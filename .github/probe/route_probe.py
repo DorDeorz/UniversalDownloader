@@ -11,7 +11,7 @@ from yt_dlp.networking import Request  # noqa: E402
 
 import browser_route  # noqa: E402
 
-VIDEOS = ["dQw4w9WgXcQ"] * 3
+VIDEOS = ["dQw4w9WgXcQ"] * 4
 BRIDGE = None
 
 
@@ -19,8 +19,8 @@ class PlaywrightBridge:
     def __init__(self, page):
         self.page = page
 
-    def fetch(self, method, url, headers, body, timeout):
-        return self.page.evaluate("(a) => __udFetch(...a)", ["1", method, url, headers, body])
+    def fetch(self, method, url, headers, body, timeout, credentials="include"):
+        return self.page.evaluate("(a) => __udFetch(...a)", ["1", method, url, headers, body, credentials])
 
     def mint(self, binding, timeout):
         started = time.time()
@@ -84,11 +84,10 @@ with sync_playwright() as p:
         probe("plain", vid)
         browser_route.enable(bridge)
         probe("browser", vid)
-        original = browser_route.get_webpo_content_binding
-        browser_route.get_webpo_content_binding = lambda request: (request.visitor_data, None)
-        probe("visitor", vid)
-        browser_route.get_webpo_content_binding = original
-        page.context.clear_cookies()
-        probe("nocookie", vid)
+        browser_route._state["credentials"] = "omit-page"
+        probe("omitpage", vid)
+        browser_route._state["credentials"] = "omit"
+        probe("omitall", vid)
+        browser_route._state["credentials"] = "include"
         time.sleep(1)
     browser.close()

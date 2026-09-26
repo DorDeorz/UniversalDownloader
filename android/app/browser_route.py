@@ -89,8 +89,8 @@ function fromBase64(text) {
   return bytes;
 }
 
-window.__udFetch = function (id, method, url, headers, body) {
-  var options = {method: method, headers: headers, credentials: 'include', redirect: 'follow'};
+window.__udFetch = function (id, method, url, headers, body, credentials) {
+  var options = {method: method, headers: headers, credentials: credentials || 'include', redirect: 'follow'};
   if (body) options.body = fromBase64(body);
   return fetch(url, options).then(function (response) {
     var head = {};
@@ -176,7 +176,7 @@ window.__udMint = function (id, binding) {
 PAGE_HTML = "<!doctype html><html><head><meta charset=utf-8><script>" + PAGE_SCRIPT + "</script></head><body></body></html>"
 
 _lock = threading.Lock()
-_state = {"bridge": None, "enabled": False, "requests": 0}
+_state = {"bridge": None, "enabled": False, "requests": 0, "credentials": "include"}
 
 
 def enable(bridge):
@@ -197,6 +197,14 @@ def enabled():
 def request_count():
     """Requests answered through the browser so far (for the app log)."""
     return _state["requests"]
+
+
+def credentials(url):
+    """fetch()'s credentials mode for ``url``."""
+    mode = _state["credentials"]
+    if mode == "omit-page":
+        return "omit" if urllib.parse.urlsplit(url).path == "/watch" else "include"
+    return mode
 
 
 def wants(url):
@@ -258,7 +266,7 @@ class BrowserRequestHandler(RequestHandler):
         try:
             result = bridge.fetch(request.method, request.url, browser_headers(self._get_headers(request)),
                                   base64.b64encode(body).decode() if body else None,
-                                  self._calculate_timeout(request) + 10)
+                                  self._calculate_timeout(request) + 10, credentials(request.url))
         except Exception as e:
             raise TransportError(cause=e) from e
         status = int(result[0] or 0) if result else 0
@@ -342,8 +350,8 @@ class AndroidBridge:
         self._start()
         return list(self._java.run(function, json.dumps(args), int(timeout * 1000)))
 
-    def fetch(self, method, url, headers, body_base64, timeout):
-        return self._run("__udFetch", [method, url, headers, body_base64], timeout)
+    def fetch(self, method, url, headers, body_base64, timeout, credentials="include"):
+        return self._run("__udFetch", [method, url, headers, body_base64, credentials], timeout)
 
     def mint(self, binding, timeout):
         return self._run("__udMint", [binding], timeout)

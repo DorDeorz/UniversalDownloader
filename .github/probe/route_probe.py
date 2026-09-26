@@ -11,8 +11,8 @@ from yt_dlp.networking import Request  # noqa: E402
 
 import browser_route  # noqa: E402
 
-VIDEOS = ["jNQXAC9IVRw", "dQw4w9WgXcQ", "9bZkp7q19f0", "kJQP7kiw5Fk", "OPf0YbXqDm0",
-          "JGwWNGJdvx8", "RgKAFK5djSk", "fJ9rUzIMcZQ"]
+VIDEOS = ["dQw4w9WgXcQ"] * 4
+BRIDGE = None
 
 
 class PlaywrightBridge:
@@ -38,7 +38,14 @@ def probe(mode, vid):
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info("https://www.youtube.com/watch?v=" + vid, download=False)
             media = []
-            for f in info.get("requested_formats") or [info]:
+            fmts = info.get("requested_formats") or [info]
+            import urllib.parse as up
+            q = up.parse_qs(up.urlsplit(fmts[0]["url"]).query)
+            media.append("c=%s pot=%s" % (q.get("c"), "pot" in q))
+            if mode == "browser":
+                r = BRIDGE.fetch("GET", fmts[0]["url"], {"Range": "bytes=0-65535"}, None, 30)
+                media.append("viabrowser=%s" % r[0])
+            for f in fmts:
                 try:
                     with ydl.urlopen(Request(f["url"], headers={**(f.get("http_headers") or {}), "Range": "bytes=0-65535"})) as r:
                         media.append(str(r.status))
@@ -50,9 +57,9 @@ def probe(mode, vid):
         result = "BOT " if "not a bot" in msg else "FAIL " + msg.splitlines()[0][:150]
     routed = browser_route.request_count() - before
     print("%-8s %s %s (browser requests: %d)" % (mode, vid, result, routed), flush=True)
-    if mode == "browser" and not result.startswith("OK"):
+    if mode == "browser":
         for line in lines:
-            if "UDBrowser" in line or "WARNING" in line or "ERROR" in line:
+            if "UDBrowser" in line or "WARNING" in line or "ERROR" in line or "Downloading" in line or "player API" in line:
                 print("       " + line[:200])
 
 
@@ -63,7 +70,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(5000)
     print("page:", page.url, flush=True)
     page.evaluate(browser_route.FETCH_SCRIPT)
-    bridge = PlaywrightBridge(page)
+    bridge = BRIDGE = PlaywrightBridge(page)
     for vid in VIDEOS:
         browser_route.disable()
         probe("plain", vid)

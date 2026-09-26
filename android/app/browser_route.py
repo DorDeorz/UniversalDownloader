@@ -297,7 +297,9 @@ class BrowserPTP(PoTokenProvider):
             raise PoTokenProviderError(f"browser: {e}") from e
         if not result or not result[0] or result[0] == "0":
             raise PoTokenProviderError(f"browser: {result[1] if result and len(result) > 1 else 'no answer'}")
-        return PoTokenResponse(po_token=result[1])
+        # expires_at=0: not cached. A token from an earlier browser session
+        # gets later sessions' streams refused.
+        return PoTokenResponse(po_token=result[1], expires_at=0)
 
 
 @register_pot_preference(BrowserPTP)

@@ -1,6 +1,6 @@
-# UniversalDownloader for Android (preview)
+# Orbida: UniversalDownloader for Android (preview)
 
-A small Android version of the downloader, for trying the core flow on a
+Orbida is a small Android version of the downloader, for trying the core flow on a
 phone. It is a preview: the Windows app in the repository root is the
 product, and its build and releases do not change.
 
@@ -13,7 +13,7 @@ Android 12 and newer) with three tabs:
   or MKV, with a quality limit) or **Audio** (MP3, M4A, FLAC or WAV, with a
   bitrate), optionally **Only part of it** (start and end time), then
   **Download** with progress and **Cancel**. Playlists download every
-  available entry. Files are saved to `Download/UniversalDownloader/<site>/`
+  available entry. Files are saved to `Download/Orbida/<site>/`
   and added to the media index, so they show up in gallery and music apps.
   When that folder cannot be written, the app uses its own folder under
   `Android/data/io.github.dordeorz.universaldownloader/`.
@@ -34,6 +34,14 @@ the app is closed.
 
 Speed and YouTube:
 
+- Settings, History and the choice dialogs are drawn with light list rows
+  (`android/app/lite.py`, plain Kivy labels in the Material 3 list item's
+  sizes and theme colours) instead of KivyMD's `MDListItem`, which costs
+  8 to 10 widgets and dozens of bindings a row. Changing a setting updates
+  its row in place; Settings and History are filled in while the app is
+  idle after start-up. On Android, KivyMD's mouse hover tracking is off
+  (`md_patches.disable_hover`): a phone reports every finger movement as a
+  mouse movement, and every KivyMD widget made so far was checked on it.
 - Downloading a single video starts from the information Analyze already
   fetched (`info=` in `DownloadManager.download_video`) for up to 20
   minutes, so the site is not asked twice; if those links have expired,

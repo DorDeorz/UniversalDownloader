@@ -20,7 +20,7 @@ TOOLS = {
     "ffprobe": "libffprobe.so",
     "qjs": "libqjs.so",
 }
-DOWNLOAD_SUBFOLDER = "UniversalDownloader"
+DOWNLOAD_SUBFOLDER = "Orbida"
 
 
 def on_android():
@@ -140,7 +140,7 @@ def cache_dir():
 
 
 def public_downloads_dir():
-    """``Download/UniversalDownloader`` on the shared storage."""
+    """``Download/Orbida`` on the shared storage."""
     from jnius import autoclass
     env = autoclass("android.os.Environment")
     base = env.getExternalStoragePublicDirectory(env.DIRECTORY_DOWNLOADS).getAbsolutePath()
@@ -239,7 +239,7 @@ def night_mode():
 
 
 def shared_text(intent=None):
-    """Text another app shared with us (Share -> UniversalDownloader), or None."""
+    """Text another app shared with us (Share -> Orbida), or None."""
     from jnius import autoclass
     Intent = autoclass("android.content.Intent")
     intent = intent or _activity().getIntent()
@@ -292,7 +292,7 @@ class WakeLock:
             Context = autoclass("android.content.Context")
             PowerManager = autoclass("android.os.PowerManager")
             manager = _activity().getSystemService(Context.POWER_SERVICE)
-            self._lock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "UniversalDownloader:download")
+            self._lock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Orbida:download")
             self._lock.setReferenceCounted(False)
         # A timeout guards against a lock that is never released.
         self._lock.acquire(6 * 60 * 60 * 1000)

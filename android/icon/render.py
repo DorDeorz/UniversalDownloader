@@ -11,9 +11,12 @@ Files written next to this script:
 * icon_fg.png, icon_bg.png: foreground and background of the adaptive
   icon Android 8+ shows in the shape the launcher chooses;
 * icon.png: the same icon as a rounded square, for older Android versions;
-* presplash.png: the glyph on the background colour, shown while the app starts.
+* presplash.png: the glyph on the background colour with the app's name
+  under it, shown while the app starts. The name is drawn in Roboto Medium
+  from the installed KivyMD package.
 """
 
+import importlib.util
 import os
 import re
 import shutil
@@ -21,11 +24,12 @@ import subprocess
 import sys
 import tempfile
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SIZE = 512
 SPLASH_COLOUR = "#221B4F"  # keep in step with android.presplash_color in buildozer.spec
+APP_NAME = "Orbida"        # keep in step with title in buildozer.spec
 
 
 def _chrome():
@@ -55,6 +59,20 @@ def _scaled(svg, factor):
                        f'transform="translate(512 512) scale({factor}) translate(-512 -512)"')
 
 
+def _wordmark(image, text, centre_y, size, tracking):
+    """Write ``text`` centred at ``centre_y``, in the tray's white, letter-spaced."""
+    kivymd = os.path.dirname(importlib.util.find_spec("kivymd").origin)  # found, not imported (that opens a window)
+    font = ImageFont.truetype(os.path.join(kivymd, "fonts", "Roboto-Medium.ttf"), size)
+    widths = [font.getlength(char) for char in text]
+    x = (image.width - sum(widths) - tracking * (len(text) - 1)) / 2
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    for char, width in zip(text, widths):
+        draw.text((x, centre_y), char, font=font, fill=(255, 255, 255, 235), anchor="lm")
+        x += width + tracking
+    image.alpha_composite(layer)
+
+
 def main():
     chrome = _chrome()
     with open(os.path.join(HERE, "icon.svg"), encoding="utf-8") as f:
@@ -77,6 +95,7 @@ def main():
 
     presplash = Image.new("RGBA", (1024, 1024), SPLASH_COLOUR)
     presplash.alpha_composite(splash)
+    _wordmark(presplash, APP_NAME, centre_y=730, size=72, tracking=6)
     presplash.convert("RGB").resize((SIZE, SIZE), Image.LANCZOS).save(
         os.path.join(HERE, "presplash.png"), optimize=True)
 

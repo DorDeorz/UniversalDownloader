@@ -53,6 +53,9 @@ alive "start" &&
   tap "Settings tab" $(( W * 5 / 6 )) "$nav_y" &&
   tap "Theme row" $(( W / 2 )) $(dp 165) &&  # below the status bar and the Appearance heading
   { adb shell input keyevent KEYCODE_BACK; sleep 2; alive "Back closes the choice dialog"; } &&
+  tap "Theme row again" $(( W / 2 )) $(dp 165) &&
+  tap "Light (the middle choice)" $(( W / 2 )) $(( H / 2 )) &&  # picks it; the row updates in place
+  { adb shell input swipe $(( W / 2 )) $(( H * 3 / 4 )) $(( W / 2 )) $(( H / 4 )) 300; sleep 2; alive "scroll Settings"; } &&
   tap "Download tab" $(( W / 6 )) "$nav_y" &&
   tap "Link field" $(( W / 2 )) $(dp 140) &&
   { adb shell input keyevent KEYCODE_HOME; sleep 3; adb shell am start -n "$ACTIVITY"; sleep 5; alive "background and back"; }

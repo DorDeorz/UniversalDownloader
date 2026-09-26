@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.2.7",
+    "date": "2026-09-26",
+    "en": [
+      "The app is now called Orbida; the start screen shows the name under the icon. New downloads go to Download/Orbida; earlier ones stay where they are and remain in History.",
+      "Smoother: Settings, History and the choice dialogs open several times faster, and touches and scrolling do less work."
+    ],
+    "tr": [
+      "Uygulamanın adı artık Orbida; açılış ekranında ikonun altında yazıyor. Yeni indirmeler Download/Orbida klasörüne gider; eskiler yerinde kalır ve Geçmiş'te görünmeye devam eder.",
+      "Daha akıcı: Ayarlar, Geçmiş ve seçim pencereleri birkaç kat daha hızlı açılıyor; dokunma ve kaydırma daha az iş yapıyor."
+    ]
+  },
+  {
     "version": "0.2.6",
     "date": "2026-09-26",
     "en": [

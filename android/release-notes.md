@@ -1,6 +1,10 @@
 **Android preview. This is not a Windows release;** the Windows installer is in the `v<version>` releases.
 
-UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.6. It is debug-signed and not on Google Play.
+Orbida, UniversalDownloader for Android phones (64-bit ARM, Android 7 or newer), version 0.2.7. It is debug-signed and not on Google Play.
+
+**New in 0.2.7**
+- The app is now called Orbida; the start screen shows the name under the icon. New downloads go to `Download/Orbida`; earlier ones stay where they are and remain in History.
+- Smoother: Settings, History and the choice dialogs open several times faster, Settings and History are prepared in the background after start-up, and touches and scrolling no longer run hundreds of mouse-hover checks.
 
 **New in 0.2.6**
 - YouTube without an account: when YouTube asks to "confirm you're not a bot", the app tries again through the phone's own browser engine, the way a browser would open the video. No sign-in needed.

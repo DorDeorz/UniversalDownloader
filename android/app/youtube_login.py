@@ -42,7 +42,7 @@ def netscape_file(cookies, now=None):
     for the whole domain, HTTPS only, valid for a year.
     """
     expires = int((time.time() if now is None else now) + _YEAR)
-    lines = ["# Netscape HTTP Cookie File", "# Written by UniversalDownloader from its YouTube sign-in", ""]
+    lines = ["# Netscape HTTP Cookie File", "# Written by Orbida from its YouTube sign-in", ""]
     for name, value in cookies.items():
         lines.append("\t".join((".youtube.com", "TRUE", "/", "TRUE", str(expires), name, value)))
     return "\n".join(lines) + "\n"

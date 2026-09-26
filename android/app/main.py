@@ -1,4 +1,4 @@
-"""UniversalDownloader for Android.
+"""Orbida: UniversalDownloader for Android.
 
 A Material You app (KivyMD 2) on top of the shared download code, with
 three tabs: Download (link, Video/Audio, quality, trim, progress), History
@@ -20,8 +20,10 @@ from kivy.base import ExceptionHandler, ExceptionManager
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.lang import Builder
-from kivy.metrics import dp
+from kivy.metrics import dp, sp
 from kivy.properties import BooleanProperty, StringProperty
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -29,8 +31,6 @@ from kivymd.uix.button import MDButton, MDButtonText
 from kivymd.uix.dialog import (MDDialog, MDDialogButtonContainer, MDDialogContentContainer,
                                MDDialogHeadlineText, MDDialogSupportingText)
 from kivymd.uix.label import MDLabel
-from kivymd.uix.list import (MDList, MDListItem, MDListItemHeadlineText, MDListItemLeadingIcon,
-                             MDListItemSupportingText, MDListItemTertiaryText, MDListItemTrailingIcon)
 from kivymd.uix.navigationbar import MDNavigationItem
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.slider import MDSlider, MDSliderHandle
@@ -54,17 +54,22 @@ import version
 import worker
 import youtube_login
 from app_settings import AppSettings
+from lite import LiteHeadline, LiteRow, LiteSection, LiteWrappedText
 from results import ItemStatus
 
 md_patches.disable_gpu_ripple()  # before any KivyMD widget exists; see md_patches
+if android_env.on_android():
+    md_patches.disable_hover()
 
-APP_VERSION = "0.2.6"  # keep in step with android/buildozer.spec
+APP_NAME = "Orbida"    # the Android app's name; keep in step with title in android/buildozer.spec
+APP_VERSION = "0.2.7"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
 LOG_LINES = 150
 HISTORY_SHOWN = 100  # newest entries listed; each row is a handful of widgets
 TAB_SECONDS = 0.2    # tab switch animation
+PREBUILD_SECONDS = 0.5  # after start-up, fill in Settings and History in the background
 SELFTEST_TAG = "UDSELFTEST"
 MODES = {"video": worker.VIDEO_AUDIO, "audio": worker.AUDIO_ONLY}
 MIME = {"mp4": "video/mp4", "mkv": "video/x-matroska", "webm": "video/webm", "mp3": "audio/mpeg",
@@ -149,7 +154,7 @@ class Root(MDBoxLayout):
     pass
 
 
-class SwitchRow(MDBoxLayout):
+class SwitchRow(BoxLayout):
     """A settings row with a switch; ``callback(value)`` runs on change."""
 
     icon = StringProperty()
@@ -169,31 +174,27 @@ class SwitchRow(MDBoxLayout):
 
 Builder.load_string(r"""
 #:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
 <SwitchRow>:
-    adaptive_height: True
-    padding: dp(16), dp(10), dp(24), dp(10)
+    size_hint_y: None
+    height: max(dp(56), texts.height + dp(16))
+    padding: dp(16), 0, dp(24), 0
     spacing: dp(16)
-    MDIcon:
+    LiteIcon:
         icon: root.icon
         pos_hint: {"center_y": .5}
-        theme_text_color: "Custom"
-        text_color: app.theme_cls.onSurfaceVariantColor
-    MDBoxLayout:
+    BoxLayout:
+        id: texts
         orientation: "vertical"
-        adaptive_height: True
+        size_hint_y: None
+        height: self.minimum_height
+        spacing: dp(2)
         pos_hint: {"center_y": .5}
-        MDLabel:
+        LiteHeadline:
             text: root.headline
-            adaptive_height: True
-        MDLabel:
+        LiteWrappedText:
             text: root.supporting
-            font_style: "Body"
-            role: "small"
-            adaptive_height: True
-            theme_text_color: "Custom"
-            text_color: app.theme_cls.onSurfaceVariantColor
-            opacity: 1 if root.supporting else 0
-            height: self.texture_size[1] if root.supporting else 0
+            font_size: sp(12)
     MDSwitch:
         pos_hint: {"center_y": .5}
         active: root.active
@@ -202,7 +203,7 @@ Builder.load_string(r"""
 
 
 class UniversalDownloaderApp(MDApp):
-    title = "UniversalDownloader"
+    title = APP_NAME
     lang = StringProperty(i18n.FALLBACK)  # kv texts re-read when it changes
 
     # --- Texts --------------------------------------------------------------------
@@ -350,14 +351,15 @@ class UniversalDownloaderApp(MDApp):
 
     def copy_diagnostics(self):
         from kivy.core.clipboard import Clipboard
-        Clipboard.copy(crash_report.diagnostics(APP_VERSION, self._log_lines, android_env.app_log(lines=3000)))
+        Clipboard.copy(crash_report.diagnostics(APP_VERSION, self._log_lines, android_env.app_log(lines=3000),
+                                                  name=APP_NAME))
         self.snack(self.t("crash.copied"))
 
     def show_crash(self, text):
         from kivy.core.clipboard import Clipboard
 
         def copy():
-            Clipboard.copy(f"UniversalDownloader {APP_VERSION}\n{text}")
+            Clipboard.copy(f"{APP_NAME} {APP_VERSION}\n{text}")
             self.snack(self.t("crash.copied"))
 
         # A label this long would outgrow a texture; the copy keeps everything.
@@ -448,7 +450,7 @@ class UniversalDownloaderApp(MDApp):
                 status = media_tools.find_tools()
                 components["https"] = _ffmpeg_https(status.ffmpeg)
                 js = {}
-                candidates = [os.path.join(os.path.expanduser("~"), "Downloads", "UniversalDownloader")]
+                candidates = [os.path.join(os.path.expanduser("~"), "Downloads", android_env.DOWNLOAD_SUBFOLDER)]
             if android_env.on_android():
                 # yt-dlp keeps YouTube's player code and solved challenges
                 # here; without a writable cache it fetches them every time.
@@ -493,6 +495,7 @@ class UniversalDownloaderApp(MDApp):
         self.ids.btn_analyze.disabled = False
         self.ids.btn_download.disabled = not (self.analysis and self.analysis.items)
         self._refresh("settings")
+        Clock.schedule_once(self._prebuild, PREBUILD_SECONDS)
         if android_env.on_android():
             try:
                 self._browser = browser_route.AndroidBridge().prepare()
@@ -544,6 +547,18 @@ class UniversalDownloaderApp(MDApp):
     def _build(self, name):
         self._stale[name] = False
         (self.build_settings if name == "settings" else self.build_history)()
+
+    def _prebuild(self, *_):
+        """Fill in a tab that is not on screen while the app is idle, one per frame.
+
+        Then the first visit to Settings or History slides in at once instead
+        of waiting for its rows to be made.
+        """
+        for name in ("settings", "history"):
+            if self._stale[name] and self.ids.screens.current != name:
+                self._build(name)
+                Clock.schedule_once(self._prebuild, 0)
+                return
 
     def _refresh(self, *names):
         """Rebuild these tabs now if one is on screen, else when it is next shown."""
@@ -617,26 +632,24 @@ class UniversalDownloaderApp(MDApp):
             if value != current or current is None:
                 on_pick(value)
 
-        rows = MDList(padding=0, spacing=0)
+        rows = BoxLayout(orientation="vertical", size_hint_y=None)
+        rows.bind(minimum_height=rows.setter("height"))
         for value, label, *icon in options:
-            if icon:
-                lead = icon[0]
-            else:
-                lead = "radiobox-marked" if value == current else "radiobox-blank"
-            item = MDListItem(MDListItemLeadingIcon(icon=lead), MDListItemHeadlineText(text=label),
-                              theme_bg_color="Custom", md_bg_color=(0, 0, 0, 0),
-                              on_release=lambda _i, v=value: pick(v))
-            rows.add_widget(item)
+            chosen = value == current
+            lead = icon[0] if icon else ("radiobox-marked" if chosen else "radiobox-blank")
+            rows.add_widget(LiteRow(icon=lead, accent=chosen and not icon, headline=label,
+                                    on_release=lambda _i, v=value: pick(v)))
         visible = min(len(options) * dp(56), Window.height * 0.5)
-        scroll = MDScrollView(rows, size_hint_y=None, height=visible, do_scroll_x=False,
-                              bar_width=dp(4) if len(options) * dp(56) > visible else 0)
+        scroll = ScrollView(size_hint_y=None, height=visible, do_scroll_x=False,
+                            bar_width=dp(4) if len(options) * dp(56) > visible else 0)
+        scroll.add_widget(rows)
         dialog = self._dialog(title, content=scroll, buttons=[(self.t("common.cancel"), None)])
-        if current is not None:
-            for position, (value, *_rest) in enumerate(options):
-                if value == current and len(options) > 1:
-                    # Show the current choice without scrolling to it by hand.
-                    Clock.schedule_once(lambda *_, p=position: setattr(
-                        scroll, "scroll_y", max(0.0, min(1.0, 1 - p / (len(options) - 1)))), 0)
+        total = len(options) * dp(56)
+        values = [value for value, *_rest in options]
+        if current in values and total > visible:
+            # Open with the current choice in the middle, not scrolled away.
+            offset = values.index(current) * dp(56) + dp(28) - visible / 2
+            scroll.scroll_y = max(0.0, min(1.0, 1 - offset / (total - visible)))
         return dialog
 
     # --- Link ---------------------------------------------------------------------
@@ -942,11 +955,11 @@ class UniversalDownloaderApp(MDApp):
             sub = " · ".join(part for part in (ext, when) if part)
             if not exists:
                 sub += f" · {self.t('history.missing')}"
-            item = MDListItem(
-                MDListItemLeadingIcon(icon="music-note" if entry.kind == "audio" else "movie-outline"),
-                MDListItemHeadlineText(text=entry.title or os.path.basename(entry.path)),
-                MDListItemSupportingText(text=sub),
-                MDListItemTrailingIcon(icon="dots-vertical"),
+            item = LiteRow(
+                icon="music-note" if entry.kind == "audio" else "movie-outline",
+                headline=entry.title or os.path.basename(entry.path),
+                supporting=sub,
+                trailing="dots-vertical",
                 on_release=lambda _i, e=entry: self._history_menu(_i, e),
             )
             box.add_widget(item)
@@ -1049,61 +1062,61 @@ class UniversalDownloaderApp(MDApp):
         t = self.t
 
         def section(title):
-            box.add_widget(MDLabel(text=title, font_style="Title", role="small", adaptive_height=True,
-                                   theme_text_color="Custom", text_color=self.theme_cls.primaryColor,
-                                   padding=(dp(16), dp(20), dp(16), dp(4))))
+            box.add_widget(LiteSection(text=title))
 
-        def choice(icon, title, value_label, options, current, apply, supporting=None):
-            item = MDListItem(MDListItemLeadingIcon(icon=icon), MDListItemHeadlineText(text=title),
-                              MDListItemSupportingText(text=supporting or value_label))
-            if supporting:
-                item.add_widget(MDListItemSupportingText(text=value_label))
-            item.bind(on_release=lambda _i: self._choose(title, options, current, apply))
-            box.add_widget(item)
+        def choice(icon, title, options, current, apply):
+            """A row showing the current value; picking another updates it in place."""
+            labels = {value: label for value, label, *_ in options}
+            row = LiteRow(icon=icon, headline=title, supporting=labels.get(current, str(current)))
+            chosen = [current]
+
+            def picked(value):
+                chosen[0] = value
+                row.supporting = labels.get(value, str(value))
+                apply(value)
+
+            row.bind(on_release=lambda _r: self._choose(title, options, chosen[0], picked))
+            box.add_widget(row)
 
         def switch(icon, title, active, apply, supporting=""):
             box.add_widget(SwitchRow(apply, icon=icon, headline=title, supporting=supporting, active=active))
 
         def info(icon, title, *lines, on_release=None):
-            item = MDListItem(MDListItemLeadingIcon(icon=icon), MDListItemHeadlineText(text=title))
-            for line, cls in zip(lines, (MDListItemSupportingText, MDListItemTertiaryText)):
-                item.add_widget(cls(text=line))
+            row = LiteRow(icon=icon, headline=title, supporting=lines[0] if lines else "",
+                          tertiary=lines[1] if len(lines) > 1 else "")
             if on_release:
-                item.bind(on_release=lambda _i: on_release())
-            box.add_widget(item)
+                row.bind(on_release=lambda _r: on_release())
+            box.add_widget(row)
 
         # Appearance
         section(t("settings.appearance"))
         themes = [(v, t("theme." + v)) for v in app_settings.THEMES]
-        choice("theme-light-dark", t("settings.theme"), t("theme." + s.theme), themes, s.theme,
-               lambda v: self._change_look(theme=v))
+        choice("theme-light-dark", t("settings.theme"), themes, s.theme, lambda v: self._change_look(theme=v))
         switch("palette-outline", t("settings.dynamic"), s.dynamic_color,
                lambda v: self._change_look(dynamic_color=v), t("settings.dynamic_hint"))
         accents = [(v, t("accent." + v)) for v in app_settings.ACCENTS]
-        choice("format-color-fill", t("settings.accent"), t("accent." + s.accent), accents, s.accent,
-               lambda v: self._change_look(accent=v))
+        choice("format-color-fill", t("settings.accent"), accents, s.accent, lambda v: self._change_look(accent=v))
         languages = [(i18n.AUTO, i18n.tr("settings.language_auto"))] + [
             (code, i18n.LANGUAGES[code]) for code in FONT_LANGUAGES]
-        current = dict(languages).get(s.language, s.language)
-        choice("translate", t("settings.language"), current, languages, s.language, self._change_language)
+        choice("translate", t("settings.language"), languages, s.language, self._change_language)
 
         # Downloads
         section(t("settings.downloads"))
         modes = [("video", t("home.video")), ("audio", t("home.audio"))]
-        choice("tune-variant", t("settings.default_mode"), dict(modes)[s.default_mode], modes, s.default_mode,
+        choice("tune-variant", t("settings.default_mode"), modes, s.default_mode,
                lambda v: self._change_default(default_mode=v))
         qualities = [(v, self._quality_label(v)) for v in worker.VIDEO_QUALITIES]
-        choice("high-definition", t("settings.video_quality"), self._quality_label(s.video_quality), qualities,
-               s.video_quality, lambda v: self._change_default(video_quality=v))
+        choice("high-definition", t("settings.video_quality"), qualities, s.video_quality,
+               lambda v: self._change_default(video_quality=v))
         containers = [(v, v.upper()) for v in app_settings.VIDEO_CONTAINERS]
-        choice("filmstrip", t("settings.video_container"), s.video_container.upper(), containers,
-               s.video_container, lambda v: self._change_default(video_container=v))
+        choice("filmstrip", t("settings.video_container"), containers, s.video_container,
+               lambda v: self._change_default(video_container=v))
         audio_formats = [(v, v.upper()) for v in app_settings.AUDIO_FORMATS]
-        choice("music-box-outline", t("settings.audio_format"), s.audio_format.upper(), audio_formats,
-               s.audio_format, lambda v: self._change_default(audio_format=v))
+        choice("music-box-outline", t("settings.audio_format"), audio_formats, s.audio_format,
+               lambda v: self._change_default(audio_format=v))
         audio_q = [(v, self._quality_label(v)) for v in app_settings.AUDIO_QUALITIES]
-        choice("equalizer-outline", t("settings.audio_quality"), self._quality_label(s.audio_quality), audio_q,
-               s.audio_quality, lambda v: self._change_default(audio_quality=v))
+        choice("equalizer-outline", t("settings.audio_quality"), audio_q, s.audio_quality,
+               lambda v: self._change_default(audio_quality=v))
         self._add_fragments_row(box)
         info("folder-download-outline", t("settings.folder"), self.download_dir or "…")
 
@@ -1137,10 +1150,10 @@ class UniversalDownloaderApp(MDApp):
         info("restore", t("settings.reset"), on_release=self.confirm_reset)
 
     def _add_fragments_row(self, box):
-        row = MDBoxLayout(orientation="vertical", adaptive_height=True, padding=(dp(16), dp(10), dp(24), dp(4)))
-        title = MDLabel(adaptive_height=True)
-        hint = MDLabel(font_style="Body", role="small", adaptive_height=True,
-                       theme_text_color="Custom", text_color=self.theme_cls.onSurfaceVariantColor)
+        row = BoxLayout(orientation="vertical", size_hint_y=None, padding=(dp(16), dp(10), dp(24), dp(4)))
+        row.bind(minimum_height=row.setter("height"))
+        title = LiteHeadline()
+        hint = LiteWrappedText(font_size=sp(12))
 
         def show(count):
             title.text = f"{self.t('settings.fragments')}: {count}"
@@ -1167,9 +1180,9 @@ class UniversalDownloaderApp(MDApp):
                 f"{self.t('home.trim')}: {yes if c.get('https') else no}")
 
     def _change_look(self, **changes):
+        # The rows' colours follow the theme by themselves; nothing is rebuilt.
         self._save_settings(**changes)
         self._apply_theme()
-        Clock.schedule_once(lambda *_: self._refresh("settings"), 0.1)
 
     def _change_language(self, code):
         self._save_settings(language=code)
@@ -1205,7 +1218,6 @@ class UniversalDownloaderApp(MDApp):
             self.quality = {"video": s.video_quality, "audio": s.audio_quality}
             self.fmt = {"video": s.video_container, "audio": s.audio_format}
             self._show_mode()
-        self._refresh("settings")
 
     def confirm_reset(self):
         def reset():
@@ -1214,7 +1226,7 @@ class UniversalDownloaderApp(MDApp):
             self._apply_language()
             self._apply_theme()
             self._change_default()
-            self._refresh("history")
+            self._refresh("settings", "history")
             self.snack(self.t("settings.reset_done"))
 
         self._dialog(self.t("settings.reset"), self.t("settings.reset_body"),
@@ -1225,7 +1237,7 @@ class UniversalDownloaderApp(MDApp):
         label = MDLabel(text=notes, adaptive_height=True, markup=True)
         scroll = MDScrollView(label, size_hint_y=None, height=min(dp(420), Window.height * 0.55),
                               do_scroll_x=False)
-        self._dialog(f"UniversalDownloader {APP_VERSION}", content=scroll)
+        self._dialog(f"{APP_NAME} {APP_VERSION}", content=scroll)
 
 
 def release_notes(lang):

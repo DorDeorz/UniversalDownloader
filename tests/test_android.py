@@ -1,8 +1,9 @@
 """The Android app's UI-free parts: tool links, job worker, settings,
 history, texts and staging.
 
-The KivyMD screens themselves (android/app/main.py) only run on a device;
-the emulator job in .github/workflows/android.yml covers them.
+The KivyMD screens themselves (android/app/main.py) run on a device, where
+the emulator job in .github/workflows/android.yml covers them; one probe of
+the Settings tab also runs on a desktop that has KivyMD and a display.
 """
 
 import ast
@@ -400,6 +401,102 @@ def test_icon_files_match_the_build_settings():
     assert f'SPLASH_COLOUR = "{colour}"' in render
 
 
+def test_app_name_is_the_same_everywhere():
+    spec = open(os.path.join(ROOT, "android", "buildozer.spec"), encoding="utf-8").read()
+    name = re.search(r"^title = (.+)$", spec, re.M).group(1).strip()
+    assert name == "Orbida"
+    main = open(os.path.join(ROOT, "android", "app", "main.py"), encoding="utf-8").read()
+    assert f'APP_NAME = "{name}"' in main
+    render = open(os.path.join(ROOT, "android", "icon", "render.py"), encoding="utf-8").read()
+    assert f'APP_NAME = "{name}"' in render  # written on the start screen
+    assert android_env.DOWNLOAD_SUBFOLDER == name
+    # The package stays, so the renamed app installs over earlier previews.
+    assert re.search(r"^package.name = universaldownloader$", spec, re.M)
+
+
+# --- UI speed ---------------------------------------------------------------------------
+
+
+def test_lists_use_light_rows():
+    # KivyMD's MDListItem costs 8-10 widgets and dozens of bindings a row;
+    # Settings, History and the choice dialogs use lite.LiteRow instead.
+    main = open(os.path.join(ROOT, "android", "app", "main.py"), encoding="utf-8").read()
+    assert "MDListItem" not in main and "LiteRow(" in main
+    assert "md_patches.disable_hover()" in main
+
+
+_UI_PROBE = """
+import json, os, sys
+sys.path[:0] = [{app!r}, {root!r}]
+from kivy.config import Config
+Config.set("graphics", "width", "412")
+Config.set("graphics", "height", "892")
+import md_patches
+md_patches.disable_hover()  # as on Android
+import main
+from kivy.clock import Clock
+from kivy.core.window import Window
+from lite import LiteRow
+
+app = main.UniversalDownloaderApp()
+result = {{}}
+
+def probe(*_):
+    app.go_to("settings")
+    rows = [w for w in app.ids.settings_list.children if isinstance(w, LiteRow)]
+    theme = next(r for r in rows if r.headline == app.t("settings.theme"))
+    result["theme_before"] = theme.supporting
+    observers = len(Window.get_property_observers("mouse_pos"))
+    theme.dispatch("on_release")  # opens the choice dialog
+    dialog = [w for w in Window.children if type(w).__name__ == "MDDialog"][0]
+    choices = [w for w in dialog.walk() if isinstance(w, LiteRow)]
+    result["choices"] = [c.headline for c in choices]
+    result["widgets_per_choice"] = sum(1 for _ in choices[0].walk(restrict=True))
+    choices[2].dispatch("on_release")  # Dark
+    result["theme_after"] = theme.supporting
+    result["saved"] = app.settings.theme
+    result["same_row"] = theme in app.ids.settings_list.children  # updated in place, not rebuilt
+    result["new_hover_observers"] = len(Window.get_property_observers("mouse_pos")) - observers
+    app.go_to("history")
+    result["history_built"] = len(app.ids.history_list.children) > 0
+    print("UIPROBE " + json.dumps(result), flush=True)
+    app.stop()
+
+orig = app.on_start
+def on_start():
+    orig()
+    Clock.schedule_once(probe, 2)
+app.on_start = on_start
+app.run()
+"""
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not os.environ.get("DISPLAY"), reason="needs a Linux display")
+def test_settings_choice_updates_its_row_in_place(tmp_path):
+    import importlib.util
+    import json
+    import subprocess
+    if importlib.util.find_spec("kivymd") is None:  # found, not imported: that would open a window here
+        pytest.skip("KivyMD (the Android UI toolkit) is not installed")
+    script = tmp_path / "probe.py"
+    script.write_text(_UI_PROBE.format(app=os.path.join(ROOT, "android", "app"), root=ROOT))
+    (tmp_path / "config").mkdir()
+    env = dict(os.environ, KIVY_HOME=str(tmp_path / "kivy"), XDG_CONFIG_HOME=str(tmp_path / "config"),
+               HOME=str(tmp_path), KIVY_NO_ARGS="1")
+    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env)
+    line = next((x for x in out.stdout.splitlines() if x.startswith("UIPROBE ")), None)
+    assert line, out.stdout[-3000:] + out.stderr[-3000:]
+    result = json.loads(line[len("UIPROBE "):])
+    themes = [texts.t("theme." + v) for v in app_settings.THEMES]
+    assert result["choices"] == themes
+    assert result["theme_before"] == themes[0]
+    assert result["theme_after"] == themes[2] and result["saved"] == "dark"
+    assert result["same_row"]
+    assert result["widgets_per_choice"] <= 4  # row, icon, text box, one line (MDListItem: 10+)
+    assert result["new_hover_observers"] == 0
+    assert result["history_built"]
+
+
 # --- staging ------------------------------------------------------------------------
 
 
@@ -652,7 +749,7 @@ def test_diagnostics_put_the_app_log_first_without_unpacking_noise():
     android = "\n".join([f"09-26 16:26:26.914 1 2 V python  : extracting _python_bundle/x{i}.pyc"
                           for i in range(5000)] + ["09-26 16:27:00.000 1 2 I python  : UDSELFTEST tools ok"])
     text = crash_report.diagnostics("0.2.5", ["Fetching...", "Sign in to confirm you're not a bot"], android)
-    assert text.startswith("UniversalDownloader 0.2.5\n\nApp log:\nFetching...")
+    assert text.startswith("Orbida 0.2.5\n\nApp log:\nFetching...")
     assert "extracting" not in text
     assert text.rstrip().endswith("UDSELFTEST tools ok")
 

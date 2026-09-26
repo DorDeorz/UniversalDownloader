@@ -31,14 +31,14 @@ done
 echo "----- app log -----"
 log
 echo "----- files -----"
-adb shell ls -lR /sdcard/Download/UniversalDownloader 2>&1
+adb shell ls -lR /sdcard/Download/Orbida 2>&1
 
 status=0
 [ "$(adb logcat -d | grep -a -c 'UDSELFTEST job done all_ok=True')" -eq 3 ] || { echo "FAIL: not all three downloads succeeded"; status=1; }
 adb logcat -d | grep -a -q "UDSELFTEST tools ok=True https=True" || { echo "FAIL: FFmpeg missing or without HTTPS"; status=1; }
 adb logcat -d | grep -a -q "QuickJS ready" || { echo "FAIL: QuickJS did not run"; status=1; }
-[ "$(adb shell ls /sdcard/Download/UniversalDownloader/Other | grep -c '\.mp4')" -ge 2 ] || { echo "FAIL: MP4 and trimmed MP4 not saved"; status=1; }
-adb shell ls /sdcard/Download/UniversalDownloader/Other | grep -q '\.mp3$' || { echo "FAIL: no MP3 saved"; status=1; }
+[ "$(adb shell ls /sdcard/Download/Orbida/Other | grep -c '\.mp4')" -ge 2 ] || { echo "FAIL: MP4 and trimmed MP4 not saved"; status=1; }
+adb shell ls /sdcard/Download/Orbida/Other | grep -q '\.mp3$' || { echo "FAIL: no MP3 saved"; status=1; }
 if [ $status -ne 0 ]; then
   echo "----- full log (python) -----"
   adb logcat -d | grep -a -i python | tail -n 300

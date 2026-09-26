@@ -2,13 +2,15 @@
 # .github/workflows/android.yml, or locally on Linux (see android/README.md).
 
 [app]
-title = UniversalDownloader
+# The name under the icon. The package name stays, so updates install over
+# earlier previews.
+title = Orbida
 package.name = universaldownloader
 package.domain = io.github.dordeorz
 # Filled by android/stage.py: android/app plus the shared modules.
 source.dir = .build/src
 source.include_exts = py,json
-version = 0.2.6
+version = 0.2.7
 # The app icon and start screen, drawn from android/icon/icon.svg (see
 # android/icon/render.py). Android 8+ shows the adaptive layers in the
 # launcher's shape; older versions show icon.png.

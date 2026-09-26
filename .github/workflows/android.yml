@@ -122,7 +122,7 @@ jobs:
           python stage.py
           yes | buildozer android debug
           mkdir -p ../apk
-          cp bin/*.apk "../apk/UniversalDownloader-android-preview-${{ matrix.arch }}.apk"
+          cp bin/*.apk "../apk/Orbida-android-preview-${{ matrix.arch }}.apk"
       - name: Check the APK carries the tools
         run: |
           unzip -l apk/*.apk | grep -E "lib/${{ matrix.arch }}/lib(ffmpeg|ffprobe|qjs|avcodec|avformat)\.so"
@@ -191,5 +191,5 @@ jobs:
         run: |
           tag="android-preview-${{ github.run_number }}"
           gh release create "$tag" apk/*.apk --prerelease --latest=false --target "$GITHUB_SHA" \
-            --title "Android preview ${{ github.run_number }} (not a Windows release)" \
+            --title "Orbida (Android preview) ${{ github.run_number }} (not a Windows release)" \
             --notes-file android/release-notes.md

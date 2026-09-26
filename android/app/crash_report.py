@@ -119,7 +119,7 @@ def tail(text, count):
 _NOISE = (" V python  : extracting ", " V python  : Checking pattern ", " V python  : Unpacking ")
 
 
-def diagnostics(version, app_log, android_log, lines=400):
+def diagnostics(version, app_log, android_log, lines=400, name="Orbida"):
     """The text "Copy diagnostic log" puts on the clipboard.
 
     The app's own log (what the Details panel shows) comes first, then the
@@ -127,5 +127,5 @@ def diagnostics(version, app_log, android_log, lines=400):
     start, so a paste into a chat still holds what matters.
     """
     useful = [line for line in android_log.splitlines() if not any(n in line for n in _NOISE)]
-    return (f"UniversalDownloader {version}\n\nApp log:\n" + "\n".join(app_log)
+    return (f"{name} {version}\n\nApp log:\n" + "\n".join(app_log)
             + "\n\nAndroid log:\n" + "\n".join(useful[-lines:]))

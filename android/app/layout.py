@@ -45,7 +45,7 @@ KV = r"""
                 MDTopAppBar:
                     type: "small"
                     MDTopAppBarTitle:
-                        text: "UniversalDownloader"
+                        text: app.title
                     MDTopAppBarTrailingButtonContainer:
                         MDActionTopAppBarButton:
                             icon: "content-paste"

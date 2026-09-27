@@ -231,7 +231,7 @@ def test_mode_buttons_keep_their_size_when_the_language_changes(monkeypatch, dpi
     # last measured (rounded down) height, so they shrank and stayed small.
     monkeypatch.setattr(ctk.ScalingTracker, "get_window_dpi_scaling", classmethod(lambda cls, window: dpi))
     ui_helpers.isolate_settings(monkeypatch)
-    folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
+    folder = os.path.join(os.environ["LOCALAPPDATA"], "Orbida")
     os.makedirs(folder)
     with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
         json.dump({"text_size": text_size}, f)
@@ -266,7 +266,7 @@ def test_mode_buttons_have_their_full_size_when_the_app_is_reopened(monkeypatch,
     # every start (see ui._keep_size_on_state_change); a language change,
     # which rebuilds them, made them normal again. Rebuilding must change nothing.
     ui_helpers.isolate_settings(monkeypatch)
-    folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
+    folder = os.path.join(os.environ["LOCALAPPDATA"], "Orbida")
     os.makedirs(folder)
     with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
         json.dump(saved, f)
@@ -448,7 +448,7 @@ def test_settings_page_fits_without_scrolling(monkeypatch, screen, dpi, text_siz
     monkeypatch.setattr(ctk.ScalingTracker, "get_window_dpi_scaling", classmethod(lambda cls, window: dpi))
     monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, screen[0], screen[1] - 40))  # taskbar
     ui_helpers.isolate_settings(monkeypatch)
-    folder = os.path.join(os.environ["LOCALAPPDATA"], "UniversalDownloader")
+    folder = os.path.join(os.environ["LOCALAPPDATA"], "Orbida")
     os.makedirs(folder)
     with open(os.path.join(folder, "settings.json"), "w", encoding="utf-8") as f:
         json.dump({"text_size": text_size, "language": language}, f)

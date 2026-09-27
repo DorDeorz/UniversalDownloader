@@ -19,5 +19,5 @@
 - **Before a job starts** the folder is created and a temporary file is
   written to prove it is writable; otherwise the job does not start and the
   reason is shown. Less than 1 GB of free space logs a warning.
-- **Default folder**: `UniversalVideos` inside the user's real Downloads
+- **Default folder**: `Orbida` inside the user's real Downloads
   folder (Windows known folder, so OneDrive or moved folders are followed).

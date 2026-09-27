@@ -61,21 +61,21 @@ def test_manifest_records_version_and_checksums(tmp_path):
     root = make_root(tmp_path)
     dist = tmp_path / "dist"
     dist.mkdir()
-    exe = dist / "UniversalDownloader-1.0.0.exe"
+    exe = dist / "Orbida-1.0.0.exe"
     exe.write_bytes(b"exe")
 
     info = build_app.write_manifest(str(exe), dist=str(dist), root=str(root))
 
     assert info["version"] == version.__version__
     sums = (dist / "SHA256SUMS.txt").read_text().splitlines()
-    assert sums[0].endswith("  UniversalDownloader-1.0.0.exe")
+    assert sums[0].endswith("  Orbida-1.0.0.exe")
     assert len(sums) == 3
     assert json.loads((dist / "build-info.json").read_text())["sha256"] == info["sha256"]
 
 
 def test_only_one_spec_file():
     specs = [f for f in os.listdir(ROOT) if f.endswith(".spec")]
-    assert specs == ["UniversalDownloader.spec"]
+    assert specs == ["Orbida.spec"]
 
 
 def test_logging_writes_rotating_file(tmp_path):
@@ -133,11 +133,11 @@ def test_preflight_can_require_deno(tmp_path, monkeypatch):
 
 def test_folder_build_is_what_the_installer_packs():
     exe = build_app.output_exe(onedir=True, dist="dist")
-    assert exe == os.path.join("dist", "UniversalDownloader", "UniversalDownloader.exe")
-    with open(os.path.join(ROOT, "installer", "UniversalDownloader.iss"), encoding="utf-8") as f:
+    assert exe == os.path.join("dist", "Orbida", "Orbida.exe")
+    with open(os.path.join(ROOT, "installer", "Orbida.iss"), encoding="utf-8") as f:
         script = f.read()
-    assert '#define SourceDir "..\\dist\\UniversalDownloader"' in script
-    assert '#define AppExe "UniversalDownloader.exe"' in script
+    assert '#define SourceDir "..\\dist\\Orbida"' in script
+    assert '#define AppExe "Orbida.exe"' in script
     # Setup asks to close the running app by the mutex it holds.
     assert f"AppMutex=Local\\{version.APP_USER_MODEL_ID}" in script
     assert "PrivilegesRequired=lowest" in script
@@ -148,4 +148,8 @@ def test_release_workflow_builds_with_real_tools():
         workflow = f.read()
     assert "lfs: true" in workflow
     assert "build_app.py --onedir --require-deno" in workflow
-    assert "installer\\UniversalDownloader.iss" in workflow
+    assert "installer\\Orbida.iss" in workflow
+    # One release holds both apps; the updaters look for these names.
+    assert 'gh release create "orbida-v$VERSION"' in workflow
+    assert '"release/Orbida-Setup-$VERSION.exe" "release/Orbida-$VERSION.apk"' in workflow
+    assert "/RELAUNCH=1" in workflow

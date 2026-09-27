@@ -53,10 +53,14 @@ class WorkerSide:
     run_analysis = ui.App.run_analysis
     run_queue = ui.App.run_queue
     progress_hook = ui.App.progress_hook
+    _known_info = ui.App._known_info
+    _download_once = ui.App._download_once
+    REUSE_SECONDS = ui.App.REUSE_SECONDS
 
     def __init__(self, manager):
         self.events = events.EventQueue()
         self.manager = manager
+        self._analysed = None
 
     def drain(self):
         out = []
@@ -165,3 +169,42 @@ def test_real_window_applies_worker_events_on_main_thread(monkeypatch):
         assert "> Result: 1 completed" in console
     finally:
         app.destroy()
+
+
+class InfoManager(FakeManager):
+    """Records the ``info`` each download was given; fails the first one when asked."""
+
+    def __init__(self, fail_first=False):
+        super().__init__()
+        self.infos = []
+        self.fail_first = fail_first
+
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
+                       cancel_event=None, info=None):
+        self.infos.append(info)
+        if self.fail_first and len(self.infos) == 1:
+            return ItemResult(url, title, ItemStatus.FAILED, error="HTTP Error 403")
+        return ItemResult(url, title, ItemStatus.COMPLETED, path=f"/out/{url}.mp4")
+
+
+def test_download_reuses_what_analysis_fetched():
+    info = {"title": "clip", "webpage_url": "https://youtu.be/a", "formats": [{"format_id": "18"}]}
+    manager = InfoManager()
+    manager.fetch_info = lambda url: dict(info)
+    side = WorkerSide(manager)
+    run_in_thread(side.run_analysis, "https://youtu.be/a")
+    run_in_thread(side.run_queue, [{"url": "https://youtu.be/a", "title": "clip"}], {})
+    assert manager.infos == [info]
+    run_in_thread(side.run_queue, [{"url": "https://youtu.be/other", "title": "x"}], {})
+    assert manager.infos[-1] is None  # only for the analysed video
+
+
+def test_stale_information_is_retried_fresh():
+    manager = InfoManager(fail_first=True)
+    side = WorkerSide(manager)
+    side._analysed = (ui.time.monotonic(), "https://youtu.be/a", {"formats": [{}]})
+    run_in_thread(side.run_queue, [{"url": "https://youtu.be/a", "title": "clip"}], {})
+    assert manager.infos == [{"formats": [{}]}, None]
+    assert side._analysed is None
+    done = [e.payload["result"] for e in side.drain() if e.kind == events.ITEM_DONE]
+    assert [r.status for r in done] == [ItemStatus.COMPLETED]

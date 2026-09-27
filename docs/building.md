@@ -1,6 +1,6 @@
 # Building the Windows EXE
 
-There is one build definition, `UniversalDownloader.spec`; `build_app.py`
+There is one build definition, `Orbida.spec`; `build_app.py`
 checks the inputs, runs it and records what was built.
 
 ```
@@ -13,7 +13,7 @@ python build_app.py
 
 Output in `dist\`:
 
-- `UniversalDownloader-<version>.exe` (single file, windowed, no UPX)
+- `Orbida-<version>.exe` (single file, windowed, no UPX)
 - `SHA256SUMS.txt`: checksums of the EXE and the bundled FFmpeg/ffprobe
 - `build-info.json`: version, git commit (with `-dirty` when the tree has
   uncommitted changes), Python and package versions, checksums
@@ -34,10 +34,10 @@ unpacked on launch:
 
 ```
 python build_app.py --onedir --require-deno   # needs bin\deno.exe
-iscc /DAppVersion=1.0.0 installer\UniversalDownloader.iss
+iscc /DAppVersion=1.0.0 installer\Orbida.iss
 ```
 
-`--onedir` writes `dist\UniversalDownloader\` (the EXE plus `_internal\`).
+`--onedir` writes `dist\Orbida\` (the EXE plus `_internal\`).
 With it, `bin\deno.exe` is bundled next to FFmpeg when present;
 `--require-deno` makes it mandatory. The app puts that folder first on
 `PATH`, where yt-dlp looks for Deno, and logs at startup whether it found
@@ -49,36 +49,52 @@ TikTok needs it: without it TikTok answers with a page yt-dlp cannot read
 bundles it automatically, the preflight refuses to build without it, and the
 app logs at startup whether it is available.
 
-`installer\UniversalDownloader.iss` (Inno Setup 6) makes
-`dist\UniversalDownloader-Setup-<version>.exe`, which:
+`installer\Orbida.iss` (Inno Setup 6) makes
+`dist\Orbida-Setup-<version>.exe`, which:
 
 - installs for the current user without an administrator prompt, into
-  `%LOCALAPPDATA%\Programs\UniversalDownloader` (or for all users, if
-  chosen);
+  `%LOCALAPPDATA%\Programs\Orbida` (or for all users, if chosen). An
+  existing Universal Video Downloader 1.0.x install is upgraded in place (same
+  AppId, same folder); its old program file and shortcuts are removed;
 - adds a Start menu entry, an optional desktop shortcut and an uninstaller;
 - asks the user to close the app first if it is running;
 - replaces the whole program folder on upgrade, and keeps settings, logs
-  and downloads on uninstall.
+  and downloads on uninstall;
+- with `/SILENT /RELAUNCH=1` (what the in-app updater passes) shows only its
+  progress window and starts the new version when it is done.
 
 ## Release workflow
 
-`.github/workflows/release.yml` runs on `windows-latest`:
+One GitHub Release per version holds both apps: `Orbida-Setup-<version>.exe`
+(Windows), `Orbida-<version>.apk` (Android), `SHA256SUMS.txt` for both, and
+`build-info.json`. It is tagged `orbida-v<version>`, and the in-app updaters
+of both apps read the latest such release (see [updates.md](updates.md)).
 
-1. Checks out with Git LFS, so the real FFmpeg and ffprobe are used.
-2. Downloads the latest Deno and builds the folder and the installer.
-3. Installs the result silently on the runner, runs FFmpeg, ffprobe and
-   Deno from the installed folder, starts the app and checks it is still
-   running after 20 seconds, then uninstalls it.
-4. Uploads the installer, `SHA256SUMS.txt` and `build-info.json`, and
-   publishes a GitHub Release with them.
+`.github/workflows/release.yml`:
 
-Pushing a tag `v<version>` releases (the tag must match `version.py`). A
-manual run from the Actions tab builds and tests only, unless **publish**
+1. **Windows** (`windows-latest`): checks out with Git LFS, so the real FFmpeg
+   and ffprobe are used; downloads the latest Deno; builds the folder and the
+   installer; installs it silently, runs FFmpeg, ffprobe and Deno from the
+   installed folder, starts the app and checks it is still running after 20
+   seconds, then uninstalls it. It then installs again and lets the running
+   app update itself with the new installer, the way the updater does, and
+   checks that the app closed and started again.
+2. **Android**: runs `.github/workflows/android.yml` (APK build and emulator
+   test).
+3. **Publish**: puts both files in one release with one checksum list. With
+   **delete_android_previews** ticked it also deletes every
+   `android-preview-*` pre-release and its tag.
+
+Pushing a tag `orbida-v<version>` releases (the tag must match `version.py`).
+A manual run from the Actions tab builds and tests only, unless **publish**
 is ticked; then it also creates the tag on the chosen commit. The release
-text is `installer\release-notes.md`.
+text is `RELEASE_NOTES.md`. Pull requests that change the Windows build run
+the Windows job only.
 
-The version lives only in `version.py`; the window title, the EXE name and
-`build-info.json` all read it. Bump it there for a release.
+The version lives only in `version.py`; the window title, the EXE name,
+`build-info.json`, the release tag and the updater all read it. Bump it
+there for a release. Releases up to 1.0.2 were called Universal Video
+Downloader and tagged `v<version>`; the updater ignores those tags.
 
 ## Known limits
 

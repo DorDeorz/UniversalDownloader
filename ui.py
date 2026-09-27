@@ -3,12 +3,15 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import tkinter
+import webbrowser
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
 import app_setup
+import download_history
 import events
 import filenames
 import formats
@@ -16,12 +19,13 @@ import i18n
 import media_tools
 import playlist
 import settings as settings_store
+import updates
 import urls
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
 from utils import default_download_dir, resource_path
 from i18n import tr
-from version import DISPLAY_NAME, __version__
+from version import DISPLAY_NAME, GITHUB_REPO, __version__
 
 _log = logging.getLogger(__name__)
 
@@ -46,6 +50,28 @@ SECONDARY_HOVER = ("#d6d8e6", "#363a52")
 DANGER = ("#c53b3b", "#ef5b5b")
 SUCCESS = ("#1d7a50", "#3dd68c")
 WARNING = ("#946214", "#f0b429")
+
+# Accent colours offered in Settings (the names match the Android app's).
+# Every accent keeps white text readable (4.5:1) in both themes.
+ACCENTS = {
+    "Indigo": {"accent": ACCENT, "hover": ACCENT_HOVER, "disabled": ACCENT_DISABLED,
+               "on_disabled": ON_ACCENT_DISABLED},
+    "Blue": {"accent": ("#256fe7", "#256fe7"), "hover": ("#175ed1", "#175ed1"),
+             "disabled": ("#b7cbeb", "#293a57"), "on_disabled": ("#f3f6fc", "#9cadc9")},
+    "Teal": {"accent": ("#128176", "#128176"), "hover": ("#0e625a", "#0e625a"),
+             "disabled": ("#b9e9e4", "#2a5551"), "on_disabled": ("#f3fcfb", "#9cc9c5")},
+    "Green": {"accent": ("#1c8542", "#1c8542"), "hover": ("#166734", "#166734"),
+              "disabled": ("#bce6cc", "#2d523b"), "on_disabled": ("#f3fcf6", "#9cc9ac")},
+    "Purple": {"accent": ("#9a50da", "#9a50da"), "hover": ("#8933d4", "#8933d4"),
+               "disabled": ("#d2bce6", "#412d52"), "on_disabled": ("#f8f3fc", "#b49cc9")},
+    "Pink": {"accent": ("#d9267f", "#d9267f"), "hover": ("#ba216e", "#ba216e"),
+             "disabled": ("#e8bbd1", "#542c40"), "on_disabled": ("#fcf3f7", "#c99cb2")},
+    "Red": {"accent": ("#d93636", "#d93636"), "hover": ("#c52626", "#c52626"),
+            "disabled": ("#e7bbbb", "#532c2c"), "on_disabled": ("#fcf3f3", "#c99c9c")},
+    "Orange": {"accent": ("#c45210", "#c45210"), "hover": ("#a3440d", "#a3440d"),
+               "disabled": ("#eccab6", "#583927"), "on_disabled": ("#fcf6f3", "#c9ac9c")},
+}
+assert tuple(ACCENTS) == settings_store.ACCENTS
 
 
 def _keep_size_on_state_change(set_cursor):
@@ -169,6 +195,53 @@ def section_label(parent, text):
 # the accent in dark mode (light text on it).
 SEGMENT_SELECTED = ("#ffffff", ACCENT[1])
 SEGMENT_SELECTED_HOVER = ("#f4f4fb", ACCENT_HOVER[1])
+
+# Widget options that can carry an accent colour (see recolor).
+_COLOUR_OPTIONS = ("fg_color", "hover_color", "progress_color", "selected_color", "selected_hover_color",
+                   "button_color", "button_hover_color", "border_color", "text_color_disabled")
+
+
+def apply_accent(name):
+    """Make ``name`` the accent for widgets built from now on.
+
+    Returns {old colour: new colour} for :func:`recolor`, which repaints
+    the widgets that already exist.
+    """
+    global ACCENT, ACCENT_HOVER, ACCENT_DISABLED, ON_ACCENT_DISABLED, SEGMENT_SELECTED, SEGMENT_SELECTED_HOVER
+    tokens = ACCENTS.get(name, ACCENTS["Indigo"])
+    old = (ACCENT, ACCENT_HOVER, ACCENT_DISABLED, ON_ACCENT_DISABLED, SEGMENT_SELECTED, SEGMENT_SELECTED_HOVER)
+    ACCENT, ACCENT_HOVER = tokens["accent"], tokens["hover"]
+    ACCENT_DISABLED, ON_ACCENT_DISABLED = tokens["disabled"], tokens["on_disabled"]
+    SEGMENT_SELECTED = ("#ffffff", ACCENT[1])
+    SEGMENT_SELECTED_HOVER = ("#f4f4fb", ACCENT_HOVER[1])
+    new = (ACCENT, ACCENT_HOVER, ACCENT_DISABLED, ON_ACCENT_DISABLED, SEGMENT_SELECTED, SEGMENT_SELECTED_HOVER)
+    return {o: n for o, n in zip(old, new) if o != n}
+
+
+def recolor(root, mapping):
+    """Repaint every widget under ``root`` that uses a colour in ``mapping``."""
+    if not mapping:
+        return 0
+    changed = 0
+    stack = [root]
+    while stack:
+        widget = stack.pop()
+        try:
+            stack.extend(widget.winfo_children())
+        except tkinter.TclError:
+            continue
+        if not isinstance(widget, ctk.CTkBaseClass):
+            continue
+        for option in _COLOUR_OPTIONS:
+            try:
+                value = widget.cget(option)
+            except (ValueError, AttributeError, tkinter.TclError):
+                continue
+            key = tuple(value) if isinstance(value, list) else value
+            if key in mapping:
+                widget.configure(**{option: mapping[key]})
+                changed += 1
+    return changed
 
 
 class ChoiceSegment(ctk.CTkSegmentedButton):
@@ -417,13 +490,14 @@ class PlaylistSelector(ctk.CTkToplevel):
 
 class SettingsView(ctk.CTkFrame):
     """The settings page, shown inside the main window in place of the
-    download page: appearance and language, what happens after a download,
-    and the keyboard shortcuts.
+    download page: appearance and language, downloads and what happens
+    after them, updates, and the keyboard shortcuts.
 
-    The page never scrolls: its cards sit in two columns, and the hints
-    under each appearance setting are hidden when the window is too short
-    for them (large text on a small screen). Below ``TWO_COLUMNS`` units of
-    width the cards stack in one column.
+    The page never scrolls: its cards sit in two columns, each setting on
+    one line with a hint under its name. When the window is too short
+    (large text on a small screen) the page first hides the hints, then
+    tightens the spacing, then leaves out the keyboard shortcuts card.
+    Below ``TWO_COLUMNS`` units of width the cards stack in one column.
 
     Every change applies at once and is saved; ``on_change(name, value)``
     tells the app which setting changed. ``on_back`` returns to the
@@ -438,8 +512,9 @@ class SettingsView(ctk.CTkFrame):
         ("Ctrl+,", "shortcut.settings"),
     )
     TWO_COLUMNS = 680  # narrowest width (in unscaled units) for two columns
+    FRAGMENT_CHOICES = (1, 2, 4, 8, 16)
 
-    def __init__(self, parent, settings, on_change, on_back):
+    def __init__(self, parent, settings, on_change, on_back, on_check_updates=None, update_status=None):
         super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.on_change = on_change
         self.grid_columnconfigure(0, weight=1)
@@ -447,15 +522,17 @@ class SettingsView(ctk.CTkFrame):
         self._hints = []
         self._columns = None
         self.hints_shown = True
+        self.shortcuts_shown = True
         self.content_fits = True
         self._spacing = []  # (widget, normal pady, tight pady) for short windows
         self.tight = False
+        self._fit_pending = False
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=32, pady=(14, 10))
         self._spacing.append((header, (14, 10), (8, 8)))
         header.grid_columnconfigure(2, weight=1)
-        self.btn_back = secondary_button(header, "\u2190  " + tr("settings.back"), on_back, width=100, height=34)
+        self.btn_back = secondary_button(header, "←  " + tr("settings.back"), on_back, width=100, height=34)
         self.btn_back.grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(header, text=tr("settings.title"), font=font(20, "bold"), text_color=TEXT).grid(
             row=0, column=1, sticky="w", padx=16)
@@ -466,36 +543,62 @@ class SettingsView(ctk.CTkFrame):
 
         self.body = body = ctk.CTkFrame(self, fg_color="transparent")
         body.grid(row=1, column=0, sticky="new", padx=32, pady=(0, 16))
+        # Each column stacks its cards (see _layout).
+        self.columns = [ctk.CTkFrame(body, fg_color="transparent") for _ in range(2)]
+        for column in self.columns:
+            column.grid_columnconfigure(0, weight=1)
 
         # Appearance
         self.card_look = look = self._section(body, tr("settings.appearance"))
-        self._row_label(look, 1, tr("settings.language"), tr("settings.language_hint"))
         languages = [i18n.AUTO, *i18n.LANGUAGES]
         self.cmb_language = option_menu(
-            look, languages, lambda v: self.on_change("language", v), width=240,
+            look, languages, lambda v: self.on_change("language", v), width=200,
             label=lambda c: tr("settings.language_auto") if c == i18n.AUTO else i18n.LANGUAGES[c])
         self.cmb_language.set(settings.language)
-        self.cmb_language.grid(row=3, column=0, sticky="w", padx=16)
-        self._spacing.append((self.cmb_language, (0, 12), (0, 8)))
-        self._row_label(look, 4, tr("settings.theme"), tr("settings.theme_hint"))
+        self._setting_row(look, 1, tr("settings.language"), tr("settings.language_hint"), self.cmb_language)
         self.seg_theme = segmented(look, list(settings_store.THEMES), lambda v: self.on_change("theme", v),
                                    label=lambda v: tr(f"theme.{v}"))
         self.seg_theme.set(settings.theme)
-        self.seg_theme.grid(row=6, column=0, sticky="w", padx=16)
-        self._spacing.append((self.seg_theme, (0, 12), (0, 8)))
-        self._row_label(look, 7, tr("settings.text_size"), tr("settings.text_size_hint"))
+        self._setting_row(look, 3, tr("settings.theme"), tr("settings.theme_hint"), self.seg_theme)
         self.seg_text = segmented(look, list(settings_store.TEXT_SIZES), lambda v: self.on_change("text_size", v),
                                   label=lambda v: tr(f"size.{v}"))
         self.seg_text.set(settings.text_size)
-        self.seg_text.grid(row=9, column=0, sticky="w", padx=16)
-        self._spacing.append((self.seg_text, (0, 14), (0, 10)))
+        self._setting_row(look, 5, tr("settings.text_size"), tr("settings.text_size_hint"), self.seg_text)
+        self.cmb_accent = option_menu(look, list(settings_store.ACCENTS), lambda v: self.on_change("accent", v),
+                                      width=200, label=lambda a: tr(f"accent.{a}"))
+        self.cmb_accent.set(settings.accent)
+        self._setting_row(look, 7, tr("settings.accent"), tr("settings.accent_hint"), self.cmb_accent, last=True)
 
-        # After downloading
-        self.card_finish = after = self._section(body, tr("settings.finish"))
-        self.sw_summary = self._switch(after, 1, tr("settings.summary"), settings.show_summary, "show_summary")
-        self.sw_open = self._switch(after, 2, tr("settings.open_folder"), settings.open_folder_when_done,
+        # Downloads, and what happens after them
+        self.card_finish = after = self._section(body, tr("settings.downloads"))
+        self.cmb_fragments = option_menu(after, list(self.FRAGMENT_CHOICES),
+                                         lambda v: self.on_change("fragments", v), width=80, label=str)
+        self.cmb_fragments.set(settings.fragments if settings.fragments in self.FRAGMENT_CHOICES else 4)
+        self._setting_row(after, 1, tr("settings.fragments"), tr("settings.fragments_hint"), self.cmb_fragments)
+        self.sw_auto_paste = self._switch(after, 3, tr("settings.auto_paste"), settings.auto_paste, "auto_paste")
+        self.sw_awake = self._switch(after, 4, tr("settings.keep_awake"), settings.keep_awake, "keep_awake")
+        self.sw_history = self._switch(after, 5, tr("settings.save_history"), settings.save_history,
+                                       "save_history")
+        self.sw_summary = self._switch(after, 6, tr("settings.summary"), settings.show_summary, "show_summary")
+        self.sw_open = self._switch(after, 7, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
         self._spacing[-1] = (self.sw_open, (0, 14), (0, 10))
+
+        # Updates
+        self.card_updates = upd = self._section(body, tr("settings.updates"))
+        self.sw_updates = self._switch(upd, 1, tr("settings.check_updates"), settings.check_updates,
+                                       "check_updates")
+        row = ctk.CTkFrame(upd, fg_color="transparent")
+        row.grid(row=2, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 10), (0, 8)))
+        self.btn_check = secondary_button(row, tr("settings.check_now"), on_check_updates or (lambda: None),
+                                          height=32)
+        self.btn_check.pack(side="left", padx=(0, 8))
+        self.btn_whats_new = secondary_button(row, tr("settings.whats_new"), self.open_whats_new, height=32)
+        self.btn_whats_new.pack(side="left")
+        self.lbl_update = ctk.CTkLabel(upd, text="", font=font(12), text_color=MUTED, anchor="w", justify="left")
+        self.lbl_update.grid(row=3, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 12))
+        self.show_update_status(update_status)
 
         # Keyboard
         self.card_keys = keys = self._section(body, tr("settings.shortcuts"))
@@ -513,7 +616,6 @@ class SettingsView(ctk.CTkFrame):
         self.card_keys.grid_columnconfigure(0, weight=0)
 
         self._set_tight(False)
-        self._fit_pending = False
         # The frame's own resize event (CTkFrame.bind would bind its canvas).
         tkinter.Misc.bind(self, "<Configure>", self._schedule_fit, "+")
 
@@ -525,18 +627,38 @@ class SettingsView(ctk.CTkFrame):
         self._spacing.append((label, (12, 8), (8, 4)))
         return frame
 
-    def _row_label(self, parent, row, title, hint):
-        ctk.CTkLabel(parent, text=title, font=font(13, "bold"), text_color=TEXT, anchor="w").grid(
-            row=row, column=0, sticky="ew", padx=16, pady=(0, 4))
-        label = ctk.CTkLabel(parent, text=hint, font=font(12), text_color=MUTED, anchor="w", justify="left")
-        label.grid(row=row + 1, column=0, sticky="ew", padx=16, pady=(0, 6))
+    def _setting_row(self, parent, row, title, hint, widget, last=False):
+        """A setting on one line, its name left and ``widget`` right, with a hint under both."""
+        name = ctk.CTkLabel(parent, text=title, font=font(13, "bold"), text_color=TEXT, anchor="w",
+                            justify="left")
+        name.grid(row=row, column=0, sticky="ew", padx=(16, 8))
+        widget.grid(row=row, column=1, sticky="e", padx=(0, 16))
+        label = ctk.CTkLabel(parent, text=hint, font=font(12), text_color=MUTED, anchor="w", justify="left",
+                             wraplength=300)
+        # Hints are not in _spacing: grid_configure would show a hidden hint again.
+        label.grid(row=row + 1, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 12 if last else 8))
         self._hints.append(label)
+        for w in (name, widget):
+            self._spacing.append((w, (0, 4), (0, 10 if last else 6)))
+        if not getattr(parent, "_wraps_hints", False):
+            parent._wraps_hints = True
+            tkinter.Misc.bind(parent, "<Configure>", lambda _e: self._wrap_hints(parent), "+")
+
+    def _wrap_hints(self, parent):
+        """Long hints wrap at the card's width."""
+        try:
+            width = parent.winfo_width() / ctk.ScalingTracker.get_widget_scaling(self) - 36
+            for label in self._hints:
+                if label.master is parent and abs(label.cget("wraplength") - width) > 2:
+                    label.configure(wraplength=max(120, width))
+        except tkinter.TclError:
+            pass
 
     def _switch(self, parent, row, text, value, name):
         widget = switch(parent, text, lambda: self.on_change(name, bool(widget.get())))
         if value:
             widget.select()
-        widget.grid(row=row, column=0, sticky="w", padx=16)
+        widget.grid(row=row, column=0, columnspan=2, sticky="w", padx=16)
         self._spacing.append((widget, (0, 10), (0, 6)))
         return widget
 
@@ -544,19 +666,26 @@ class SettingsView(ctk.CTkFrame):
         """Place the cards in one column or two."""
         self._columns = columns
         body = self.body
-        for c in range(2):
-            body.grid_columnconfigure(c, weight=1 if c < columns else 0, uniform="col" if columns == 2 else "")
-        for r in range(3):
-            body.grid_rowconfigure(r, weight=1 if (columns == 2 and r == 2) else 0)
+        body.grid_columnconfigure(0, weight=1, uniform="col")
+        body.grid_columnconfigure(1, weight=1 if columns == 2 else 0, uniform="col" if columns == 2 else "")
+        left, right = self.columns
         if columns == 2:
-            # An empty last row takes the spare height, so the right cards stay together.
-            self.card_look.grid(row=0, column=0, rowspan=3, sticky="nsew", padx=(0, 8))
-            self.card_finish.grid(row=0, column=1, sticky="new", padx=(8, 0), pady=(0, 12))
-            self.card_keys.grid(row=1, column=1, sticky="new", padx=(8, 0))
+            left.grid(row=0, column=0, columnspan=1, sticky="new", padx=(0, 8))
+            right.grid(row=0, column=1, sticky="new", padx=(8, 0))
+            order = ((self.card_look, left), (self.card_updates, left), (self.card_finish, right),
+                     (self.card_keys, right))
         else:
-            self.card_look.grid(row=0, column=0, rowspan=1, sticky="ew", padx=0, pady=(0, 12))
-            self.card_finish.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 12))
-            self.card_keys.grid(row=2, column=0, sticky="ew", padx=0)
+            left.grid(row=0, column=0, columnspan=2, sticky="new", padx=0)
+            right.grid_remove()
+            order = ((self.card_look, left), (self.card_finish, left), (self.card_updates, left),
+                     (self.card_keys, left))
+        rows = {}
+        for widget, column in order:
+            row = rows.get(column, 0)
+            rows[column] = row + 1
+            widget.grid(in_=column, row=row, column=0, sticky="ew", pady=(0 if row == 0 else 12, 0))
+        if not self.shortcuts_shown:
+            self.card_keys.grid_remove()
 
     def _set_tight(self, tight):
         self.tight = tight
@@ -568,14 +697,20 @@ class SettingsView(ctk.CTkFrame):
         for label in self._hints:
             label.grid() if show else label.grid_remove()
 
+    def _show_shortcuts(self, show):
+        self.shortcuts_shown = show
+        self.card_keys.grid() if show else self.card_keys.grid_remove()
+
     def _schedule_fit(self, _event=None):
         if not self._fit_pending:
             self._fit_pending = True
             self.after_idle(self._fit)
 
+    FIT_STEPS = ((True, False, True), (False, False, True), (False, True, True), (False, True, False))
+
     def _fit(self):
-        """Choose the columns for the width, then the roomiest spacing that fits:
-        hints and normal spacing, no hints, or no hints and tight spacing."""
+        """Choose the columns for the width, then the roomiest layout that fits:
+        hints and normal spacing, no hints, tight spacing, then no shortcuts card."""
         self._fit_pending = False
         try:
             scale = ctk.ScalingTracker.get_widget_scaling(self)
@@ -584,10 +719,11 @@ class SettingsView(ctk.CTkFrame):
                 self._layout(columns)
             self.update_idletasks()
             available = self.winfo_height()
-            for hints, tight in ((True, False), (False, False), (False, True)):
-                if (hints, tight) != (self.hints_shown, self.tight):
+            for hints, tight, shortcuts in self.FIT_STEPS:
+                if (hints, tight, shortcuts) != (self.hints_shown, self.tight, self.shortcuts_shown):
                     self._show_hints(hints)
                     self._set_tight(tight)
+                    self._show_shortcuts(shortcuts)
                     self.update_idletasks()
                 need = self.winfo_reqheight()
                 if need <= available + 1:
@@ -598,6 +734,196 @@ class SettingsView(ctk.CTkFrame):
 
     def open_logs(self):
         open_path(app_setup.data_dir())
+
+    def show_update_status(self, text):
+        """``text`` is a function giving the (translated) result of the last check, or None."""
+        try:
+            self.lbl_update.configure(text=text() if text else "")
+            self.lbl_update.grid() if text else self.lbl_update.grid_remove()
+        except tkinter.TclError:
+            return
+        self._schedule_fit()
+
+    @staticmethod
+    def open_whats_new():
+        webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases/tag/{updates.TAG_PREFIX}{__version__}")
+
+
+def open_file(path):
+    """Open ``path`` with its default app."""
+    if sys.platform == "win32":
+        os.startfile(path)
+    else:
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", path])
+
+
+def show_in_folder(path):
+    """Show the folder of ``path`` with the file selected (Explorer), or just the folder."""
+    if sys.platform == "win32" and os.path.exists(path):
+        subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+    else:
+        open_path(os.path.dirname(path) or ".")
+
+
+class HistoryView(ctk.CTkFrame):
+    """The History page: recent downloads with Open, Folder and Remove.
+
+    Shown inside the main window in place of the download page, like the
+    settings page. At most ``SHOWN`` entries are drawn, newest first.
+    """
+
+    SHOWN = 100
+
+    def __init__(self, parent, history, on_back):
+        super().__init__(parent, fg_color="transparent", corner_radius=0)
+        self.history = history
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=32, pady=(14, 10))
+        header.grid_columnconfigure(2, weight=1)
+        self.btn_back = secondary_button(header, "\u2190  " + tr("settings.back"), on_back, width=100, height=34)
+        self.btn_back.grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(header, text=tr("history.title"), font=font(20, "bold"), text_color=TEXT).grid(
+            row=0, column=1, sticky="w", padx=16)
+        self.btn_clear = secondary_button(header, tr("history.clear"), self.clear, height=34)
+        self.btn_clear.grid(row=0, column=3, sticky="e")
+        self.list = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
+        self.list.grid(row=1, column=0, sticky="nsew", padx=(32, 16), pady=(0, 16))
+        self.list.grid_columnconfigure(0, weight=1)
+        self.rows = []
+        self.refresh()
+
+    def refresh(self):
+        for row in self.rows:
+            row.destroy()
+        self.rows = []
+        entries = self.history.entries[:self.SHOWN]
+        self.btn_clear.configure(state="normal" if entries else "disabled")
+        if not entries:
+            empty = ctk.CTkLabel(self.list, text=tr("history.empty"), font=font(13), text_color=MUTED)
+            empty.grid(row=0, column=0, pady=40)
+            self.rows.append(empty)
+            return
+        for i, entry in enumerate(entries):
+            self.rows.append(self._row(i, entry))
+
+    def _row(self, index, entry):
+        row = card(self.list)
+        row.grid(row=index, column=0, sticky="ew", pady=(0, 8), padx=(0, 16))
+        row.grid_columnconfigure(0, weight=1)
+        exists = os.path.exists(entry.path)
+        ctk.CTkLabel(row, text=entry.title or os.path.basename(entry.path), font=font(13, "bold"),
+                     text_color=TEXT if exists else MUTED, anchor="w", justify="left").grid(
+            row=0, column=0, sticky="ew", padx=14, pady=(10, 0))
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(entry.time)) if entry.time else ""
+        parts = [p for p in (when, tr(MODE_KEYS[entry.mode]) if entry.mode in MODE_KEYS else "") if p]
+        parts.append(shorten_path(entry.path, 70) if exists else tr("history.missing"))
+        ctk.CTkLabel(row, text="  \u00b7  ".join(parts), font=font(12), text_color=MUTED, anchor="w",
+                     justify="left").grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
+        buttons = ctk.CTkFrame(row, fg_color="transparent")
+        buttons.grid(row=0, column=1, rowspan=2, sticky="e", padx=(8, 12))
+        state = "normal" if exists else "disabled"
+        secondary_button(buttons, tr("history.open"), lambda: self._run(open_file, entry.path), height=30,
+                         width=70, state=state).pack(side="left", padx=(0, 6))
+        secondary_button(buttons, tr("history.folder"), lambda: self._run(show_in_folder, entry.path), height=30,
+                         width=70, state=state).pack(side="left", padx=(0, 6))
+        secondary_button(buttons, tr("history.remove"), lambda: self.remove(entry.path), height=30,
+                         width=70).pack(side="left")
+        return row
+
+    def _run(self, action, path):
+        try:
+            action(path)
+        except OSError as e:
+            messagebox.showerror(tr("history.title"), str(e), parent=self)
+
+    def remove(self, path):
+        self.history.remove(path)
+        self.refresh()
+
+    def clear(self):
+        if messagebox.askyesno(tr("history.title"), tr("history.clear_confirm"), parent=self):
+            self.history.clear()
+            self.refresh()
+
+
+class UpdateDialog(ctk.CTkToplevel):
+    """Offers a newer release: its notes, then download, verify and install.
+
+    The download runs on a worker thread that posts UPDATE_* events; the
+    app forwards them to :meth:`show_progress`, :meth:`show_error`. Where
+    the app cannot install (not the installed Windows app), the button
+    opens the release page instead.
+    """
+
+    def __init__(self, app, release, can_install):
+        super().__init__(app)
+        self.app, self.release, self.can_install = app, release, can_install
+        self.title(tr("update.title"))
+        self.configure(fg_color=BG)
+        self.transient(app)
+        self.protocol("WM_DELETE_WINDOW", self.later)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        ctk.CTkLabel(self, text=tr("update.available", version=release.version), font=font(17, "bold"),
+                     text_color=TEXT, anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 8))
+        notes = ctk.CTkTextbox(self, font=font(12), fg_color=CARD, text_color=TEXT, wrap="word", height=200,
+                               border_width=1, border_color=CARD_BORDER)
+        notes.insert("1.0", updates.notes_summary(release.notes) or release.page)
+        notes.configure(state="disabled")
+        notes.grid(row=1, column=0, sticky="nsew", padx=20)
+        self.lbl_note = ctk.CTkLabel(self, text=tr("update.restart_note") if can_install else "", font=font(12),
+                                     text_color=MUTED, anchor="w", justify="left")
+        self.lbl_note.grid(row=2, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.progress = ctk.CTkProgressBar(self, height=8, progress_color=ACCENT, fg_color=SECONDARY)
+        self.progress.set(0)
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.grid(row=4, column=0, sticky="e", padx=20, pady=(12, 18))
+        self.btn_page = secondary_button(buttons, tr("update.page"), lambda: webbrowser.open(release.page))
+        if can_install:  # otherwise the main button opens the page
+            self.btn_page.pack(side="left", padx=(0, 8))
+        self.btn_later = secondary_button(buttons, tr("update.later"), self.later)
+        self.btn_later.pack(side="left", padx=(0, 8))
+        self.btn_install = primary_button(buttons, tr("update.install") if can_install else tr("update.page"),
+                                          self.install)
+        self.btn_install.pack(side="left")
+        set_window_icon(self)
+        self.after(200, lambda: set_window_icon(self))
+        fit_dialog(self, (560, 440), (420, 320))
+        self.lift()
+        self.btn_install.focus_set()
+
+    def install(self):
+        if not self.can_install:
+            webbrowser.open(self.release.page)
+            self.later()
+            return
+        if not self.app.start_update(self.release):
+            return
+        set_primary_state(self.btn_install, "disabled")
+        self.btn_page.configure(state="disabled")
+        self.progress.grid(row=3, column=0, sticky="ew", padx=20, pady=(10, 0))
+        self.show_progress(0, 0)
+
+    def show_progress(self, done, total):
+        if total:
+            self.progress.set(done / total)
+            text = tr("update.downloading", percent=int(done * 100 / total))
+        else:
+            text = tr("update.downloading", percent=0)
+        self.lbl_note.configure(text=text, text_color=MUTED)
+
+    def show_error(self, error):
+        self.lbl_note.configure(text=tr("update.error", error=error), text_color=DANGER)
+        self.progress.grid_remove()
+        set_primary_state(self.btn_install, "normal")
+        self.btn_page.configure(state="normal")
+
+    def later(self):
+        self.app.cancel_update()
+        self.app.update_dialog = None
+        self.destroy()
 
 
 def open_path(folder):
@@ -612,8 +938,10 @@ def open_path(folder):
 class App(ctk.CTk):
     MIN_SIZE = (900, 700)
 
-    def __init__(self):
+    def __init__(self, instance=None):
         super().__init__()
+        # app_setup.SingleInstance held by main(); released before an update installs.
+        self.instance = instance
         self.title(f"{DISPLAY_NAME} {__version__}")
         self.geometry("1040x800")
         # Resizable with a sensible minimum (ISSUES.md #44).
@@ -630,6 +958,10 @@ class App(ctk.CTk):
         ctk.set_appearance_mode(self.settings.theme)
         ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
         i18n.set_language(self.settings.language)
+        apply_accent(self.settings.accent)
+        self.history = download_history.History(os.path.join(app_setup.data_dir(), "history.json"))
+        self._job_mode = None
+        self._analysed = None  # (time, url, info) of the last single video analysed
         # Widgets whose text is translated: (widget, option) -> function giving
         # the text, re-run when the language changes (see _live).
         self._texts = {}
@@ -657,6 +989,15 @@ class App(ctk.CTk):
         self.events.register(events.ITEM_DONE, self._on_item_done)
         self.events.register(events.JOB_DONE, self._on_job_done)
         self.events.register(events.TOOLS_CHECKED, self._on_tools_checked)
+        self.events.register(events.UPDATE_CHECKED, self._on_update_checked)
+        self.events.register(events.UPDATE_PROGRESS, self._on_update_progress)
+        self.events.register(events.UPDATE_READY, self._on_update_ready)
+        self.events.register(events.UPDATE_FAILED, self._on_update_failed)
+        self.available_update = None   # updates.Release newer than this version
+        self.update_dialog = None
+        self._update_status = None     # function giving the last check's result text
+        self._update_cancel = threading.Event()
+        self._update_thread = None
         self.last_summary = None
         self.playlist_dialog = None
         self._pending_skipped = []
@@ -665,6 +1006,7 @@ class App(ctk.CTk):
         self.tools = None
 
         self.settings_view = None
+        self.history_view = None
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self.create_top_bar()
@@ -675,6 +1017,12 @@ class App(ctk.CTk):
         self._poll_events()
         # Check FFmpeg off the main thread; downloads stay disabled until then.
         self._start_job("setup", self.run_tool_check)
+        self._note_version_change()
+        self._startup_calls = []  # cancelled if the window closes first
+        if self.settings.auto_paste:
+            self._startup_calls.append(self.after(350, self.auto_paste))
+        if self.settings.check_updates:
+            self._startup_calls.append(self.after(1500, self.check_for_updates))
 
     POLL_INTERVAL_MS = 50
 
@@ -686,6 +1034,11 @@ class App(ctk.CTk):
             self._poll_id = self.after(self.POLL_INTERVAL_MS, self._poll_events)
 
     def destroy(self):
+        for call in getattr(self, "_startup_calls", ()):
+            try:
+                self.after_cancel(call)
+            except Exception:
+                pass
         if self._poll_id is not None:
             try:
                 self.after_cancel(self._poll_id)
@@ -716,7 +1069,7 @@ class App(ctk.CTk):
             self.logo.pack(side="left", padx=(0, 12))
         except tkinter.TclError:
             self.logo = None
-        ctk.CTkLabel(brand, text="Universal Downloader", font=font(17, "bold"), text_color=TEXT).pack(side="left")
+        ctk.CTkLabel(brand, text=DISPLAY_NAME, font=font(17, "bold"), text_color=TEXT).pack(side="left")
         ctk.CTkLabel(brand, text=f"v{__version__}", font=font(12), text_color=MUTED).pack(side="left", padx=(8, 0))
 
         right = ctk.CTkFrame(bar, fg_color="transparent")
@@ -728,6 +1081,11 @@ class App(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(status, text="", font=font(12), text_color=MUTED)
         self._live(self.lbl_status, lambda: tr("top.ffmpeg_checking"))
         self.lbl_status.pack(side="left", padx=(0, 14), pady=4)
+        # Shown once a newer version is found.
+        self.btn_update = primary_button(right, "", self.show_update_dialog, height=36)
+        self.btn_history = secondary_button(right, "", self.toggle_history, width=110, height=36)
+        self._live(self.btn_history, lambda: "\u23f2  " + tr("top.history"))
+        self.btn_history.pack(side="left", padx=(0, 8))
         self.btn_settings = secondary_button(right, "", self.toggle_settings, width=120, height=36)
         self._live(self.btn_settings, lambda: "\u2699  " + tr("top.settings"))
         self.btn_settings.pack(side="left")
@@ -896,6 +1254,8 @@ class App(ctk.CTk):
         if self.settings_view is not None:
             # Rebuilt after the language menu's own callback has returned.
             self.after_idle(self._rebuild_settings_view)
+        if self.available_update is not None:
+            self._show_update_button()
 
     def log(self, message):
         """Queue a console line; safe to call from any thread."""
@@ -934,7 +1294,9 @@ class App(ctk.CTk):
             self._on_theme_changed(value)
             return
         setattr(self.settings, name, value)
-        if name == "text_size":
+        if name == "accent":
+            recolor(self, apply_accent(value))
+        elif name == "text_size":
             ctk.set_widget_scaling(settings_store.TEXT_SIZES[value])
             self.after(50, self._fit_to_content)
         elif name == "language":
@@ -988,6 +1350,7 @@ class App(ctk.CTk):
         """Show the settings page in place of the download page."""
         if self.settings_view is not None:
             return
+        self.close_history()
         self._build_settings_view()
         self.main_frame.grid_remove()
         self.settings_view.btn_back.focus_set()
@@ -1003,7 +1366,9 @@ class App(ctk.CTk):
     def _build_settings_view(self):
         if self.settings_view is not None:
             self.settings_view.destroy()
-        self.settings_view = SettingsView(self, self.settings, self._on_setting_changed, self.close_settings)
+        self.settings_view = SettingsView(self, self.settings, self._on_setting_changed, self.close_settings,
+                                          on_check_updates=lambda: self.check_for_updates(manual=True),
+                                          update_status=self._update_status)
         self.settings_view.grid(row=1, column=0, sticky="nsew")
     def close_settings(self):
         """Back to the download page."""
@@ -1013,9 +1378,35 @@ class App(ctk.CTk):
         self.settings_view = None
         self.main_frame.grid()
         self.after_idle(self._fill_height)
+    def open_history(self):
+        """Show the History page in place of the download page."""
+        if self.history_view is not None:
+            return
+        self.close_settings()
+        self.history_view = HistoryView(self, self.history, self.close_history)
+        self.history_view.grid(row=1, column=0, sticky="nsew")
+        self.main_frame.grid_remove()
+        self.history_view.btn_back.focus_set()
+
+    def toggle_history(self):
+        if self.history_view is None:
+            self.open_history()
+        else:
+            self.close_history()
+
+    def close_history(self):
+        if self.history_view is None:
+            return
+        self.history_view.destroy()
+        self.history_view = None
+        self.main_frame.grid()
+        self.after_idle(self._fill_height)
+
     def _on_escape(self):
         if self.settings_view is not None:
             self.close_settings()
+        elif self.history_view is not None:
+            self.close_history()
         else:
             self.cancel_job()
     def _bind_shortcuts(self):
@@ -1030,7 +1421,7 @@ class App(ctk.CTk):
     def _shortcut(self, action, button):
         # A shortcut does what its button does, and only when it is enabled
         # and on screen.
-        if self.settings_view is None and button.cget("state") == "normal":
+        if self.settings_view is None and self.history_view is None and button.cget("state") == "normal":
             action()
         return "break"
     def _save_settings(self):
@@ -1075,6 +1466,28 @@ class App(ctk.CTk):
             open_path(folder)
         except OSError as e:
             self._append_log(f"Could not open {folder}: {e}")
+    def auto_paste(self):
+        """Put a link from the clipboard into the empty link field (Settings: auto-paste)."""
+        if self._job_kind == "setup":
+            # The field is disabled until the FFmpeg check at start is done.
+            self._startup_calls.append(self.after(200, self.auto_paste))
+            return
+        if self.is_busy() or self.url_entry.get().strip():
+            return
+        try:
+            text = self.clipboard_get().strip()
+        except tkinter.TclError:
+            return
+        if not text.lower().startswith(("http://", "https://")) or len(text) > 2000:
+            return
+        try:
+            url = urls.normalize_url(text)
+        except urls.UrlError:
+            return
+        self.url_entry.delete(0, "end")
+        self.url_entry.insert(0, url)
+        self._append_log(tr("log.auto_paste"))
+
     def paste_url(self):
         try:
             text = self.clipboard_get().strip()
@@ -1103,11 +1516,15 @@ class App(ctk.CTk):
         self._job_kind = kind
         self._cancel_event = threading.Event()
         self._set_controls_busy(True)
+        if kind == "download" and self.settings.keep_awake:
+            app_setup.keep_awake(True)
         self._job_thread = threading.Thread(target=target, args=args, name=f"uvd-{kind}", daemon=True)
         self._job_thread.start()
         return True
 
     def _end_job(self):
+        if self._job_kind == "download":
+            app_setup.keep_awake(False)
         self._job_kind = None
         self._job_thread = None
         self._set_controls_busy(False)
@@ -1254,7 +1671,11 @@ class App(ctk.CTk):
             elif 'error' in info:
                 self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {info['error']}")
             else:
-                self.events.post(events.ANALYSIS_DONE, analysis=playlist.analyze(info, url), url=url)
+                analysis = playlist.analyze(info, url)
+                if not analysis.is_playlist and analysis.items and info.get('formats'):
+                    # Its download starts from this information (see _known_info).
+                    self._analysed = (time.monotonic(), analysis.items[0].url, info)
+                self.events.post(events.ANALYSIS_DONE, analysis=analysis, url=url)
         except Exception as e:
             self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
     def _on_analysis_failed(self, message):
@@ -1344,8 +1765,10 @@ class App(ctk.CTk):
             'save_path': self.download_folder, 'mode': self.cmb_mode.get(),
             'format': self.cmb_format.get(), 'quality': self.cmb_quality.get(),
             'trim_start': self.ent_start.get() if self.chk_trim.get() else None,
-            'trim_end': self.ent_end.get() if self.chk_trim.get() else None
+            'trim_end': self.ent_end.get() if self.chk_trim.get() else None,
+            **settings_store.download_speed_options(self.settings),
         }
+        self._job_mode = opts['mode']
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
             self._live(self.btn_download, lambda: tr("action.downloading"))
     def run_queue(self, items, opts, cancel_event=None):
@@ -1368,22 +1791,49 @@ class App(ctk.CTk):
                 self.log(f"[{i+1}/{total}] {item['title']}")
                 self.events.post(events.ITEM_STARTED, position=i + 1, total=total, title=item['title'])
                 item_opts = dict(opts, playlist_index=item.get('index'), playlist_title=item.get('playlist'))
-                try:
-                    result = self.manager.download_video(
-                        item['url'], item_opts, self.progress_hook, log_callback=self.log, title=item['title'],
-                        cancel_event=cancel_event)
-                except Exception as e:
-                    result = ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
+                info = self._known_info(item['url'])
+                result = self._download_once(item, item_opts, cancel_event, info)
+                if info is not None and result.status is ItemStatus.FAILED and not (
+                        cancel_event is not None and cancel_event.is_set()):
+                    # The saved media links may have expired; ask the site again.
+                    self._analysed = None
+                    self.log(f"Retrying with fresh information ({result.error})")
+                    result = self._download_once(item, item_opts, cancel_event, None)
                 result.source = item
                 summary.add(result)
                 self.events.post(events.ITEM_DONE, result=result)
         finally:
             self.events.post(events.JOB_DONE, summary=summary)
+    # How long an analysed video's information is reused for its download (as
+    # on Android): the site is not asked twice, and for YouTube its JavaScript
+    # challenge is not solved twice. A stale link only costs a second attempt.
+    REUSE_SECONDS = 20 * 60
+
+    def _known_info(self, url):
+        """The analysed information for ``url`` while it is fresh, else None."""
+        if self._analysed is None:
+            return None
+        when, known_url, info = self._analysed
+        if known_url != url or time.monotonic() - when > self.REUSE_SECONDS:
+            return None
+        return info
+
+    def _download_once(self, item, options, cancel_event, info):
+        extra = {'info': info} if info is not None else {}
+        try:
+            return self.manager.download_video(
+                item['url'], options, self.progress_hook, log_callback=self.log, title=item['title'],
+                cancel_event=cancel_event, **extra)
+        except Exception as e:
+            return ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
+
     def _run_queue_with_cancel(self, items, opts):
         # Bound at start so a later job's event cannot leak into this one.
         self.run_queue(items, opts, self._cancel_event)
     def _on_item_done(self, result):
         self._append_log(describe_result(result))
+        if result.status is ItemStatus.COMPLETED and result.path and self.settings.save_history:
+            self.history.add(result.title, result.path, result.url, self._job_mode or "")
     def _on_job_done(self, summary):
         self._append_log(tr("log.result", summary=summary.headline(
             label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))))
@@ -1417,6 +1867,141 @@ class App(ctk.CTk):
         if progress is not None:
             fraction, text = progress
             self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=events.detail_from_hook(d, left=tr("progress.left", time="{time}")))
+
+
+    # --- updates ------------------------------------------------------------
+
+    def _note_version_change(self):
+        """Log once after an update, and remember the version that ran."""
+        previous = self.settings.last_version
+        if previous != __version__:
+            if previous:
+                self._append_log(tr("log.updated", version=__version__))
+            self.settings.last_version = __version__
+            self._save_settings()
+
+    def check_for_updates(self, manual=False):
+        """Look for a newer release on a worker thread (UPDATE_CHECKED event)."""
+        if self._update_thread is not None and self._update_thread.is_alive():
+            return
+        if manual:
+            self._set_update_status(lambda: tr("update.checking"))
+
+        def work():
+            try:
+                release, error = updates.check(), None
+            except updates.UpdateError as e:
+                release, error = None, str(e)
+            except Exception as e:  # never let a check break the app
+                release, error = None, f"{type(e).__name__}: {e}"
+            self.events.post(events.UPDATE_CHECKED, release=release, error=error, manual=manual)
+
+        self._update_thread = threading.Thread(target=work, name="orbida-update-check", daemon=True)
+        self._update_thread.start()
+
+    def _set_update_status(self, text):
+        self._update_status = text
+        if self.settings_view is not None:
+            self.settings_view.show_update_status(text)
+
+    def _on_update_checked(self, release, error, manual):
+        if error:
+            _log.info("Update check failed: %s", error)
+            if manual:
+                self._set_update_status(lambda: tr("update.failed"))
+                self._append_log(f"{tr('update.failed')} ({error})")
+            return
+        if release is None:
+            self._set_update_status(lambda: tr("update.latest", version=__version__))
+            return
+        self.available_update = release
+        version = release.version
+        self._set_update_status(lambda: tr("update.available", version=version))
+        self._show_update_button()
+        self._append_log(tr("log.update_available", version=version))
+        if manual:
+            self.show_update_dialog()
+
+    def _show_update_button(self):
+        version = self.available_update.version
+        self._live(self.btn_update, lambda: "\u2b07  " + tr("top.update", version=version))
+        if not self.btn_update.winfo_ismapped():
+            self.btn_update.pack(side="left", padx=(0, 8), before=self.btn_history)
+
+    @staticmethod
+    def can_install_updates():
+        """Only the installed Windows app can replace itself; a source run opens the release page."""
+        return sys.platform == "win32" and getattr(sys, "frozen", False)
+
+    def show_update_dialog(self):
+        if self.available_update is None:
+            return
+        if self.update_dialog is not None:
+            try:
+                self.update_dialog.lift()
+                return
+            except tkinter.TclError:
+                self.update_dialog = None
+        self.update_dialog = UpdateDialog(self, self.available_update, self.can_install_updates())
+
+    def start_update(self, release):
+        """Download the installer on a worker thread; False while a media download runs."""
+        if self._job_kind == "download":
+            messagebox.showinfo(tr("update.title"), tr("update.busy"), parent=self.update_dialog or self)
+            return False
+        if self._update_thread is not None and self._update_thread.is_alive():
+            return False
+        self._update_cancel = cancel = threading.Event()
+        folder = os.path.join(app_setup.data_dir(), "updates")
+
+        def progress(done, total):
+            self.events.post(events.UPDATE_PROGRESS, done=done, total=total)
+
+        def work():
+            try:
+                path = updates.download_installer(release, folder, progress, cancel)
+            except updates.UpdateError as e:
+                if not cancel.is_set():
+                    self.events.post(events.UPDATE_FAILED, error=str(e))
+                return
+            if not cancel.is_set():
+                self.events.post(events.UPDATE_READY, path=path)
+
+        self._update_thread = threading.Thread(target=work, name="orbida-update", daemon=True)
+        self._update_thread.start()
+        return True
+
+    def cancel_update(self):
+        self._update_cancel.set()
+
+    def _on_update_progress(self, done, total):
+        if self.update_dialog is not None:
+            self.update_dialog.show_progress(done, total)
+
+    def _on_update_failed(self, error):
+        _log.warning("Update failed: %s", error)
+        self._append_log(tr("update.error", error=error))
+        if self.update_dialog is not None:
+            self.update_dialog.show_error(error)
+
+    def _on_update_ready(self, path):
+        """Start the verified installer and close, so it can replace the app."""
+        if self._job_kind == "download":
+            self._on_update_failed(tr("update.busy"))
+            return
+        _log.info("Starting the installer %s", path)
+        # Setup refuses to run while the app holds its single-instance lock,
+        # so free it first; the window closes right after.
+        if self.instance is not None:
+            self.instance.release()
+        try:
+            flags = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0  # detached, own process group
+            subprocess.Popen(updates.installer_command(path), creationflags=flags, close_fds=True)
+        except OSError as e:
+            self._on_update_failed(str(e))
+            return
+        self._closing = True
+        self.destroy()
 
 
 def describe_result(result):

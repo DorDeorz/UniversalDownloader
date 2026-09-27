@@ -1,21 +1,28 @@
-; Windows installer for Universal Video Downloader (Inno Setup 6).
+; Windows installer for Orbida (Inno Setup 6).
 ;
 ; Packs the folder build (python build_app.py --onedir) into one setup EXE:
-;   iscc /DAppVersion=1.0.0 installer\UniversalDownloader.iss
-; Output: dist\UniversalDownloader-Setup-<version>.exe
+;   iscc /DAppVersion=1.0.0 installer\Orbida.iss
+; Output: dist\Orbida-Setup-<version>.exe
 ;
 ; Installs for the current user (no administrator prompt) into
-; %LOCALAPPDATA%\Programs\UniversalDownloader. Everything the app needs is in
-; the folder: Python, the libraries, FFmpeg, ffprobe and Deno.
-; See docs/building.md.
+; %LOCALAPPDATA%\Programs\Orbida. Everything the app needs is in the folder:
+; Python, the libraries, FFmpeg, ffprobe and Deno. See docs/building.md.
+;
+; Orbida was called Universal Video Downloader before 1.0.0. The AppId is
+; unchanged, so this setup upgrades an existing install in place (in its
+; old folder) and removes the old program file and shortcuts.
+;
+; The in-app updater runs this setup with /SILENT /RELAUNCH=1: setup shows
+; only its progress window and starts the new version when it is done.
 
 #ifndef AppVersion
-  #error Pass the version: iscc /DAppVersion=1.0.0 installer\UniversalDownloader.iss
+  #error Pass the version: iscc /DAppVersion=1.0.0 installer\Orbida.iss
 #endif
 
-#define AppName "Universal Video Downloader"
-#define AppExe "UniversalDownloader.exe"
-#define SourceDir "..\dist\UniversalDownloader"
+#define AppName "Orbida"
+#define AppExe "Orbida.exe"
+#define SourceDir "..\dist\Orbida"
+#define OldAppName "Universal Video Downloader"
 
 [Setup]
 ; Keep AppId stable: upgrades and the uninstaller find the install by it.
@@ -26,7 +33,8 @@ AppVerName={#AppName} {#AppVersion}
 AppPublisher=DorDeorz
 AppPublisherURL=https://github.com/DorDeorz/UniversalDownloader
 AppSupportURL=https://github.com/DorDeorz/UniversalDownloader/issues
-DefaultDirName={autopf}\UniversalDownloader
+AppUpdatesURL=https://github.com/DorDeorz/UniversalDownloader/releases/latest
+DefaultDirName={autopf}\Orbida
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -35,7 +43,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir=..\dist
-OutputBaseFilename=UniversalDownloader-Setup-{#AppVersion}
+OutputBaseFilename=Orbida-Setup-{#AppVersion}
 SetupIconFile=..\app.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
@@ -61,6 +69,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [InstallDelete]
 ; An upgrade replaces the whole program folder, so no stale files survive.
 Type: filesandordirs; Name: "{app}\_internal"
+; Left over from Universal Video Downloader 1.0.x.
+Type: files; Name: "{app}\UniversalDownloader.exe"
+Type: files; Name: "{autoprograms}\{#OldAppName}.lnk"
+Type: files; Name: "{autodesktop}\{#OldAppName}.lnk"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -71,6 +83,14 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; After an in-app update (/SILENT /RELAUNCH=1) start the new version.
+Filename: "{app}\{#AppExe}"; Flags: nowait; Check: RelaunchRequested
 
-; Settings and logs in %LOCALAPPDATA%\UniversalDownloader are kept on
+; Settings, history and logs in %LOCALAPPDATA%\Orbida are kept on
 ; uninstall, like downloaded videos, so a reinstall keeps the user's choices.
+
+[Code]
+function RelaunchRequested: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:RELAUNCH|0}') = '1');
+end;

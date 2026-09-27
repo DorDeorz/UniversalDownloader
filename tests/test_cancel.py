@@ -117,10 +117,13 @@ class Worker:
     run_queue = ui.App.run_queue
     progress_hook = ui.App.progress_hook
     log = ui.App.log
+    _known_info = ui.App._known_info
+    _download_once = ui.App._download_once
 
     def __init__(self, manager):
         self.manager = manager
         self.events = events.EventQueue()
+        self._analysed = None
 
 
 def test_run_queue_marks_remaining_items_cancelled():

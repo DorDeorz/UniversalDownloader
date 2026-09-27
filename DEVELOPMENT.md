@@ -40,5 +40,5 @@ remove the marker.
 
 See [docs/building.md](docs/building.md). `python build_app.py` checks the
 inputs (real FFmpeg, real `.ico`, virtual environment) before building from
-the single `UniversalDownloader.spec`, and writes checksums and
+the single `Orbida.spec`, and writes checksums and
 `build-info.json` next to the EXE.

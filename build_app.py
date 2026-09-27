@@ -1,4 +1,4 @@
-"""Build the Windows EXE from UniversalDownloader.spec (ISSUES.md #48, #61-#66, #72, #77).
+"""Build the Windows EXE from Orbida.spec (ISSUES.md #48, #61-#66, #72, #77).
 
 Refuses to build when an input is missing or broken, so a bad EXE is never
 produced: FFmpeg/ffprobe must be real programs (not Git LFS pointers) that
@@ -28,7 +28,7 @@ import media_tools
 from version import APP_NAME, __version__
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SPEC = os.path.join(ROOT, "UniversalDownloader.spec")
+SPEC = os.path.join(ROOT, "Orbida.spec")
 DIST = os.path.join(ROOT, "dist")
 ICO_MAGIC = b"\x00\x00\x01\x00"
 

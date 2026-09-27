@@ -113,11 +113,45 @@ under the field.
 ## Saved settings
 
 `settings.py` stores the folder, mode, format, quality, theme, text size,
-language and the two "when downloads finish" choices in
-`%LOCALAPPDATA%\UniversalDownloader\settings.json`, written atomically
-each time one of them changes. Unknown or invalid values in the file fall
-back to the defaults, so a damaged file never stops the app from starting.
-Trim times and the queue are not saved on purpose: they belong to one link.
+language, accent colour, parallel connections, auto-paste, keeping the PC
+awake, history, update checks and the two "when downloads finish" choices in
+`%LOCALAPPDATA%\Orbida\settings.json`, written atomically each time one of
+them changes. Unknown or invalid values in the file fall back to the
+defaults, so a damaged file never stops the app from starting. Trim times
+and the queue are not saved on purpose: they belong to one link.
+
+Before 1.0.0 the app was called UniversalDownloader and kept its data in
+`%LOCALAPPDATA%\UniversalDownloader`. On the first start as Orbida,
+`app_setup.migrate_legacy_data` copies `settings.json` (and a history, if
+any) from there; the old folder is left alone.
+
+The settings page never scrolls. When the window is too short it hides the
+hints first, then tightens the spacing, then leaves out the keyboard
+shortcuts card (`SettingsView._fit`).
+
+- **Accent colour**: the eight colours of the Android app. A change repaints
+  the open window at once (`ui.recolor`); every accent keeps white text at
+  4.5:1 or better.
+- **Parallel connections**: yt-dlp's `concurrent_fragment_downloads` for
+  segmented streams (HLS/DASH), plus 10 MB `http_chunk_size` ranges for
+  plain files (`settings.download_speed_options`).
+- **Paste a copied link when the app opens**: an `http(s)` link on the
+  clipboard is put into the empty link field once the FFmpeg check is done.
+  It is not analysed until the user asks.
+- **Keep the computer awake**: `SetThreadExecutionState` keeps Windows from
+  sleeping while a download runs (the screen may still turn off).
+
+## History
+
+Finished files are listed on the History page (top bar), newest first, with
+Open, Folder (Explorer with the file selected) and Remove. The list lives in
+`%LOCALAPPDATA%\Orbida\history.json` (`download_history.py`), keeps at most
+300 entries, and can be switched off in Settings. Removing an entry or
+clearing the list never deletes files.
+
+## Updates
+
+See [updates.md](updates.md).
 
 ## Playlist dialog
 

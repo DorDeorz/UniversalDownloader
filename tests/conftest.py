@@ -133,3 +133,10 @@ def english_ui(monkeypatch):
     i18n.set_language("en")
     yield
     i18n.set_language("en")
+
+
+@pytest.fixture(autouse=True)
+def no_update_check(monkeypatch):
+    """The app looks for updates at start; tests never reach GitHub."""
+    import updates
+    monkeypatch.setattr(updates, "check", lambda *args, **kwargs: None)

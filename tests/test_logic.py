@@ -327,3 +327,16 @@ def test_real_yt_dlp_selects_again_from_reused_info():
         again = ydl.process_ie_result(logic.reusable_info(analysed), download=False)
     assert again["format_id"] == "a"
     assert "requested_formats" not in again
+
+# --- speed options ------------------------------------------------------
+
+def test_speed_options_reach_yt_dlp(manager, fake_ydl, tmp_path):
+    options = {'save_path': str(tmp_path), 'concurrent_fragment_downloads': 8,
+               'http_chunk_size': 10 * 1024 * 1024, 'nocheckcertificate': True}
+    result = manager.download_video("https://youtu.be/abc", options)
+    assert result.status is ItemStatus.COMPLETED
+    for ydl in fake_ydl.instances:
+        assert ydl.opts['concurrent_fragment_downloads'] == 8
+        assert ydl.opts['http_chunk_size'] == 10 * 1024 * 1024
+        # Only the speed options pass through; certificate checks stay on.
+        assert not ydl.opts.get('nocheckcertificate')

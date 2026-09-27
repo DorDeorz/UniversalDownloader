@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import re
@@ -47,6 +48,26 @@ class YtDlpLogger:
         self._emit(logging.ERROR, "", msg)
 
 
+# Options a platform adds to every YoutubeDL instance (see
+# set_platform_options). The Windows app adds none; the Android app points
+# yt-dlp at its bundled QuickJS because Deno is not available there.
+_platform_options = {}
+
+
+def set_platform_options(options):
+    """Add ``options`` to every YoutubeDL instance built from now on.
+
+    Replaces what an earlier call set. Keys that affect certificate checks
+    are refused, so a platform cannot switch HTTPS verification off.
+    """
+    global _platform_options
+    options = dict(options or {})
+    for key in ('nocheckcertificate', 'legacyserverconnect'):
+        if key in options:
+            raise ValueError(f"'{key}' cannot be set as a platform option")
+    _platform_options = options
+
+
 def base_ydl_options(log_callback=None):
     """Options shared by every YoutubeDL instance.
 
@@ -55,6 +76,8 @@ def base_ydl_options(log_callback=None):
     ``quiet``/``no_warnings``.
     """
     return {
+        # A copy, because yt-dlp may normalise nested option dicts in place.
+        **copy.deepcopy(_platform_options),
         'logger': YtDlpLogger(log_callback),
         'noprogress': True,
         # yt-dlp colours messages when stderr is a console (as on Windows),
@@ -84,6 +107,44 @@ def impersonation_available():
 
 SOCKET_TIMEOUT = 30
 RETRIES = 5
+
+# YouTube answers "Sign in to confirm you're not a bot" to networks it
+# distrusts (often mobile data and shared addresses) for yt-dlp's default
+# player clients. These clients need no PO token and are often let through;
+# a DownloadManager built with ``bot_check_clients`` tries them in order.
+BOT_CHECK_CLIENTS = (('tv',), ('web_embedded', 'tv_downgraded'))
+# Keys yt-dlp adds when it selects formats. They are dropped before an info
+# dict is processed again with another format choice (as --load-info-json does).
+_SELECTION_KEYS = ('requested_downloads', 'requested_formats', 'requested_subtitles',
+                   'requested_entries', 'filepath', '_filename', 'filename', 'infojson_filename')
+
+
+def is_bot_check(message):
+    """True for YouTube's "Sign in to confirm you're not a bot" refusal."""
+    return 'not a bot' in str(message or '').lower()
+
+
+def with_player_clients(options, clients):
+    """``options`` with YouTube's player clients set to ``clients`` (None: unchanged)."""
+    if not clients:
+        return options
+    options = dict(options)
+    extractor_args = copy.deepcopy(options.get('extractor_args') or {})
+    extractor_args.setdefault('youtube', {})['player_client'] = list(clients)
+    options['extractor_args'] = extractor_args
+    return options
+
+
+def reusable_info(info):
+    """A copy of an analysed video's info that can be processed again.
+
+    The copy leaves out what the earlier format selection added, so a
+    different format choice starts from the full format list.
+    """
+    info = copy.deepcopy(info)
+    for key in _SELECTION_KEYS:
+        info.pop(key, None)
+    return info
 
 
 class PartialFiles:
@@ -234,9 +295,47 @@ def parse_trim_range(start_text, end_text, duration=None):
 
 
 class DownloadManager:
-    def __init__(self, tools=None):
+    def __init__(self, tools=None, bot_check_clients=()):
         # media_tools.ToolStatus; None means "detect on first download".
         self.tools = tools
+        # Player clients to retry YouTube with when it asks to confirm this
+        # is not a bot (see BOT_CHECK_CLIENTS); empty keeps yt-dlp's choice.
+        self.bot_check_clients = tuple(bot_check_clients)
+        # The clients that last got past the check, tried first from then on.
+        self._working_clients = None
+
+    def _client_attempts(self):
+        """YouTube player clients to try in order; None means yt-dlp's default."""
+        attempts = [None, *self.bot_check_clients]
+        if self._working_clients in attempts:
+            attempts.remove(self._working_clients)
+            attempts.insert(0, self._working_clients)
+        return attempts
+
+    def _retry_bot_check(self, message, clients, attempts, log_callback):
+        """Whether to try the next player clients after ``message``."""
+        position = attempts.index(clients)
+        if not is_bot_check(message) or position + 1 >= len(attempts):
+            return False
+        following = attempts[position + 1]
+        if log_callback:
+            log_callback("YouTube asked to confirm this is not a bot; trying its "
+                         f"{'/'.join(following) if following else 'default'} player")
+        return True
+
+    def _extract(self, url, ydl_opts, log_callback):
+        """``extract_info`` with the bot-check retries; returns (info, clients)."""
+        attempts = self._client_attempts()
+        for clients in attempts:
+            try:
+                with yt_dlp.YoutubeDL(with_player_clients(ydl_opts, clients)) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            except Exception as e:
+                if self._retry_bot_check(describe_error(e), clients, attempts, log_callback):
+                    continue
+                raise
+            self._working_clients = clients
+            return info, clients
 
     def ensure_tools(self):
         """FFmpeg/ffprobe status, detected (and put on PATH) on first use."""
@@ -264,23 +363,30 @@ class DownloadManager:
         # Playlist analysis tolerates individual unavailable entries; yt-dlp
         # still reports them through the logger, so they are not silent.
         ydl_opts['ignoreerrors'] = True
-        
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                
-                if info is None:
-                    # ignoreerrors turned the failure into None; keep yt-dlp's reason.
-                    errors = ydl_opts['logger'].errors
-                    reason = errors[-1] if errors else 'Content is private or unavailable'
-                    return {'error': reason, 'error_type': 'DownloadError'}
-                
-                return info
 
-        except Exception as e:
-            return {'error': describe_error(e), 'error_type': type(e).__name__}
+        attempts = self._client_attempts()
+        for clients in attempts:
+            logger = YtDlpLogger(log_callback)
+            ydl_opts['logger'] = logger
+            try:
+                with yt_dlp.YoutubeDL(with_player_clients(ydl_opts, clients)) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            except Exception as e:
+                if self._retry_bot_check(describe_error(e), clients, attempts, log_callback):
+                    continue
+                return {'error': describe_error(e), 'error_type': type(e).__name__}
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None):
+            if info is None:
+                # ignoreerrors turned the failure into None; keep yt-dlp's reason.
+                reason = logger.errors[-1] if logger.errors else 'Content is private or unavailable'
+                if self._retry_bot_check(reason, clients, attempts, log_callback):
+                    continue
+                return {'error': reason, 'error_type': 'DownloadError'}
+            self._working_clients = clients
+            return info
+
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None,
+                       info=None):
         """Download one item and return its :class:`results.ItemResult`.
 
         Never raises for download problems: yt-dlp, trim and postprocessor
@@ -295,6 +401,11 @@ class DownloadManager:
 
         Setting ``cancel_event`` stops the download at the next progress
         update; the item is then ``cancelled`` and its partial files removed.
+
+        ``info`` is what :meth:`fetch_info` returned for this very video. The
+        metadata pass then selects formats from it instead of asking the site
+        again, which saves a round of requests (and, for YouTube, solving
+        its JavaScript challenge once more).
         """
         title = title or url
         partial = PartialFiles()
@@ -363,8 +474,11 @@ class DownloadManager:
 
         try:
             # Phase 1: metadata and format selection, no download.
-            with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
-                info = ydl.extract_info(url, download=False)
+            if info is not None:
+                with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
+                    info = ydl.process_ie_result(reusable_info(info), download=False)
+            else:
+                info, _clients = self._extract(url, dict(ydl_opts), log_callback)
             if info is None:
                 return failed('No media information returned')
             title = info.get('title') or title

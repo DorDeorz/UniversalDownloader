@@ -63,7 +63,7 @@ if android_env.on_android():
     md_patches.disable_hover()
 
 APP_NAME = "Orbida"    # the Android app's name; keep in step with title in android/buildozer.spec
-APP_VERSION = "1.0.0"  # keep in step with android/buildozer.spec
+APP_VERSION = "1.0.1"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]

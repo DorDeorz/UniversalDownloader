@@ -1,7 +1,17 @@
-**Orbida 1.0.0** is the first stable version. This release holds both apps:
+**Orbida 1.0.1** fixes Reddit downloads. This release holds both apps:
 
-- **Windows:** `Orbida-Setup-1.0.0.exe`, for Windows 10 or 11 (64-bit).
-- **Android:** `Orbida-1.0.0.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Windows:** `Orbida-Setup-1.0.1.exe`, for Windows 10 or 11 (64-bit).
+- **Android:** `Orbida-1.0.1.apk`, for 64-bit ARM phones with Android 7 or newer.
+
+Orbida 1.0 updates itself to this version: on Windows click **Update to
+1.0.1** in the top bar; on Android open Settings › About › Check for
+updates.
+
+## New in 1.0.1 (both apps)
+
+- Fixed: Reddit videos failed with "The downloaded file is empty" after
+  many "Conflicting range" errors. They download normally now. The same
+  fix helps any site that streams a video as byte ranges of one file.
 
 Before this version, the Windows app was called Universal Video Downloader.
 
@@ -31,7 +41,7 @@ Before this version, the Windows app was called Universal Video Downloader.
 - New downloads go to `Downloads\Orbida` by default. A folder you chose
   before stays the same.
 
-**Install:** run `Orbida-Setup-1.0.0.exe`. It installs for your user only,
+**Install:** run `Orbida-Setup-1.0.1.exe`. It installs for your user only,
 with no administrator password. FFmpeg, ffprobe and Deno are included.
 The setup is not code-signed, so SmartScreen may say "Windows protected
 your PC". Click **More info**, then **Run anyway**.

@@ -1,6 +1,9 @@
-**Orbida for Android**, version 1.0.0 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
+**Orbida for Android**, version 1.0.1 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
 
 Coming from an Android preview (UniversalDownloader or Orbida 0.x)? Uninstall it once: 1.0 has a new app id and signing key. From 1.0 on, the app updates itself (Settings › About › Check for updates).
+
+**New in 1.0.1**
+- Fixed: Reddit videos failed with "The downloaded file is empty". They download normally now.
 
 **New in 1.0.0**
 - The first stable version, signed with the project's own key, so every later version installs over it.

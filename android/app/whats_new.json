@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.0.1",
+    "date": "2026-10-03",
+    "en": [
+      "Fixed: Reddit videos failed with \"The downloaded file is empty\". They download normally now."
+    ],
+    "tr": [
+      "Düzeltildi: Reddit videoları \"The downloaded file is empty\" hatasıyla başarısız oluyordu. Artık normal iniyorlar."
+    ]
+  },
+  {
     "version": "1.0.0",
     "date": "2026-09-27",
     "en": [

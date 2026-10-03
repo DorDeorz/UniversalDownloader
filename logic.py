@@ -512,6 +512,13 @@ class DownloadManager:
                 log_callback(f"File exists; saving as {os.path.basename(base)}.{plan.ext}")
             ydl_opts['outtmpl'] = filenames.escape_template(base) + '.%(ext)s'
             ydl_opts['postprocessors'] = formats.postprocessors_for(plan, info)
+            if ydl_opts.get('http_chunk_size') and not plain_http_download(info):
+                # yt-dlp applies the chunk size to the byte-range segments
+                # of HLS/DASH streams too, takes each finished segment for
+                # an unfinished chunk of the whole file and gives up with
+                # "Conflicting range" (Reddit's videos). Chunks only help
+                # plain HTTP files anyway.
+                del ydl_opts['http_chunk_size']
             if trim_requested:
                 if not info.get('duration') and log_callback:
                     log_callback("Warning: this source does not report its length; "
@@ -539,6 +546,12 @@ class DownloadManager:
         if problem:
             return failed(problem)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
+
+
+def plain_http_download(info):
+    """True when every selected format of ``info`` is a single HTTP(S) file."""
+    selected = info.get('requested_formats') or [info]
+    return all(f.get('protocol') in ('http', 'https') for f in selected)
 
 
 # Download options a caller may pass through download_video's ``options``.

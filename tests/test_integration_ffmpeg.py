@@ -94,6 +94,10 @@ def media(tmp_path_factory):
     make("clip.mp4", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=25", "-f", "lavfi", "-i", "sine=frequency=440",
          "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac")
     (folder / "big.bin").write_bytes(os.urandom(4 * 1024 * 1024))
+    # HLS whose segments are byte ranges of one file, as Reddit serves video.
+    subprocess.run([ff, "-loglevel", "error", "-y", "-i", str(folder / "clip.mp4"), "-c:a", "copy", "-c:v", "libx264", "-g", "25", "-f", "hls",
+                    "-hls_time", "1", "-hls_playlist_type", "vod", "-hls_flags", "single_file",
+                    str(folder / "ranges.m3u8")], check=True)
     return folder
 
 
@@ -179,6 +183,17 @@ def test_trim_with_unknown_length_warns_and_stops_at_the_end(manager, server, tm
     assert result.status is ItemStatus.COMPLETED, result.error
     assert probe(result.path)[1] == pytest.approx(4, abs=0.5)
     assert any("does not report its length" in line for line in lines)
+
+
+def test_byte_range_segments_with_speed_settings(manager, server, media, tmp_path):
+    # The app's speed settings set http_chunk_size; yt-dlp then mistook each
+    # byte-range segment for an unfinished chunk of the whole file and gave up
+    # with "Conflicting range" (Reddit videos failed this way).
+    assert (media / "ranges.m3u8").read_text().count("#EXT-X-BYTERANGE") > 1
+    result = download(manager, server, tmp_path, src="ranges.m3u8", mode="Video + Audio", format="mp4",
+                      quality="Best", concurrent_fragment_downloads=4, http_chunk_size=10 * 1024 * 1024)
+    assert result.status is ItemStatus.COMPLETED, result.error
+    assert probe(result.path)[1] == pytest.approx(6, abs=0.5)
 
 
 def test_second_download_gets_suffix(manager, server, tmp_path):

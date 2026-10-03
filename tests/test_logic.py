@@ -331,6 +331,7 @@ def test_real_yt_dlp_selects_again_from_reused_info():
 # --- speed options ------------------------------------------------------
 
 def test_speed_options_reach_yt_dlp(manager, fake_ydl, tmp_path):
+    fake_ydl.info = {**fake_ydl.info, 'protocol': 'https'}
     options = {'save_path': str(tmp_path), 'concurrent_fragment_downloads': 8,
                'http_chunk_size': 10 * 1024 * 1024, 'nocheckcertificate': True}
     result = manager.download_video("https://youtu.be/abc", options)
@@ -340,3 +341,21 @@ def test_speed_options_reach_yt_dlp(manager, fake_ydl, tmp_path):
         assert ydl.opts['http_chunk_size'] == 10 * 1024 * 1024
         # Only the speed options pass through; certificate checks stay on.
         assert not ydl.opts.get('nocheckcertificate')
+
+
+@pytest.mark.parametrize("selected, keeps_chunks", [
+    ({'protocol': 'https'}, True),
+    ({'requested_formats': [{'protocol': 'https'}, {'protocol': 'http'}]}, True),
+    ({'protocol': 'm3u8_native'}, False),
+    ({'requested_formats': [{'protocol': 'https'}, {'protocol': 'http_dash_segments'}]}, False),
+    ({}, False),
+])
+def test_chunk_size_only_for_plain_http(manager, fake_ydl, tmp_path, selected, keeps_chunks):
+    # Byte-range segments of HLS/DASH streams fail with a chunk size set.
+    fake_ydl.info = {**fake_ydl.info, **selected}
+    options = {'save_path': str(tmp_path), 'concurrent_fragment_downloads': 8, 'http_chunk_size': 1024}
+    result = manager.download_video("https://example.com/v", options)
+    assert result.status is ItemStatus.COMPLETED
+    download_pass = fake_ydl.instances[-1].opts
+    assert ('http_chunk_size' in download_pass) is keeps_chunks
+    assert download_pass['concurrent_fragment_downloads'] == 8

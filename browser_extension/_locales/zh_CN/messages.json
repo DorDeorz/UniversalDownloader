@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "把你正在观看的视频或任何链接发送到 Orbida 应用。"
+  },
+  "menuPage": {
+    "message": "用 Orbida 下载"
+  },
+  "menuLink": {
+    "message": "用 Orbida 下载链接"
+  }
+}

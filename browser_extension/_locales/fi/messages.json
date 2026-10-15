@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Lähettää katsomasi videon tai minkä tahansa linkin Orbida-sovellukseen."
+  },
+  "menuPage": {
+    "message": "Lataa Orbidalla"
+  },
+  "menuLink": {
+    "message": "Lataa linkki Orbidalla"
+  }
+}

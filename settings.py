@@ -11,6 +11,7 @@ from dataclasses import MISSING, asdict, dataclass, fields, replace
 
 import formats
 import i18n
+import urls
 
 _log = logging.getLogger(__name__)
 
@@ -19,6 +20,10 @@ THEMES = ("System", "Dark", "Light", "Black")  # Black: the dark theme on black 
 ACCENTS = ("Indigo", "Blue", "Teal", "Green", "Purple", "Pink", "Red", "Orange")
 # Parallel fragment downloads for segmented (HLS/DASH) streams.
 FRAGMENTS_MIN, FRAGMENTS_MAX = 1, 16
+# Download speed limits in MB/s (0: no limit).
+SPEED_LIMITS = (0, 1, 2, 5, 10, 20)
+# What the app does with links copied to the clipboard.
+CLIPBOARD_CHOICES = ("off", "start", "watch")
 # Text size choice -> CustomTkinter widget scaling.
 TEXT_SIZES = {"Normal": 1.0, "Large": 1.15, "Larger": 1.3}
 
@@ -37,6 +42,10 @@ class Settings:
     accent: str = "Indigo"
     fragments: int = 4           # parallel connections for streamed videos
     auto_paste: bool = True      # take a link from the clipboard when the app opens
+    watch_clipboard: bool = False  # offer every link copied while the app runs
+    subtitles: bool = False      # save a video's subtitles as .srt files next to it
+    speed_limit: int = 0         # MB/s, one of SPEED_LIMITS; 0 means no limit
+    proxy: str = ""              # urls.proxy_url address; empty for a direct connection
     keep_awake: bool = True      # keep the PC from sleeping while a download runs
     save_history: bool = True
     check_updates: bool = True   # look for a new version at start
@@ -54,8 +63,23 @@ class Settings:
         language = self.language if self.language in i18n.LANGUAGES else i18n.AUTO
         accent = self.accent if self.accent in ACCENTS else "Indigo"
         fragments = min(max(self.fragments, FRAGMENTS_MIN), FRAGMENTS_MAX)
+        speed_limit = self.speed_limit if self.speed_limit in SPEED_LIMITS else 0
+        try:
+            proxy = urls.proxy_url(self.proxy)
+        except ValueError:
+            proxy = ""
         return replace(self, download_folder=folder, mode=mode, format=fmt, quality=quality, theme=theme,
-                       text_size=text_size, language=language, accent=accent, fragments=fragments)
+                       text_size=text_size, language=language, accent=accent, fragments=fragments,
+                       speed_limit=speed_limit, proxy=proxy)
+
+    @property
+    def clipboard(self):
+        """The clipboard setting as one of CLIPBOARD_CHOICES."""
+        return "watch" if self.watch_clipboard else "start" if self.auto_paste else "off"
+
+    def with_clipboard(self, choice):
+        """A copy with the clipboard setting ``choice`` (one of CLIPBOARD_CHOICES)."""
+        return replace(self, auto_paste=choice != "off", watch_clipboard=choice == "watch")
 
 
 def load(path, default_folder):
@@ -93,9 +117,13 @@ def download_speed_options(settings):
     Segmented streams (HLS/DASH, used by Instagram, X, many live and news
     sites) download several fragments at once. Plain HTTP files are fetched
     in 10 MB ranges, which keeps servers that slow down long single
-    requests from throttling the transfer.
+    requests from throttling the transfer. A speed limit (Settings) caps
+    the whole transfer.
     """
-    return {
+    options = {
         "concurrent_fragment_downloads": settings.fragments,
         "http_chunk_size": 10 * 1024 * 1024,
     }
+    if settings.speed_limit:
+        options["ratelimit"] = settings.speed_limit * 1024 * 1024
+    return options

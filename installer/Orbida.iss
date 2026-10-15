@@ -81,6 +81,14 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
+[Registry]
+; The orbida: address the browser extension opens (browser_extension/): the
+; browser hands it to Orbida.exe, which takes the link (app_setup.link_from_args).
+Root: HKA; Subkey: "Software\Classes\orbida"; ValueType: string; ValueName: ""; ValueData: "URL:Orbida"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\orbida"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\orbida\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
+Root: HKA; Subkey: "Software\Classes\orbida\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
+
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 ; After an in-app update (/SILENT /RELAUNCH=1) start the new version.

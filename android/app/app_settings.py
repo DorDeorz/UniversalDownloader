@@ -10,6 +10,7 @@ import os
 from dataclasses import asdict, dataclass, fields
 
 import i18n
+import urls
 import worker
 
 _log = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ VIDEO_CONTAINERS = worker.MODE_FORMATS[worker.VIDEO_AUDIO]      # mp4, mkv
 AUDIO_FORMATS = worker.MODE_FORMATS[worker.AUDIO_ONLY]          # mp3, m4a, flac, wav
 AUDIO_QUALITIES = tuple(worker.AUDIO_QUALITIES)                 # Best, 320 kbps, ...
 FRAGMENTS_MIN, FRAGMENTS_MAX = 1, 16
+SPEED_LIMITS = (0, 1, 2, 5, 10, 20)   # MB/s; 0 means no limit
 
 
 @dataclass
@@ -38,6 +40,9 @@ class AppSettings:
     audio_format: str = "mp3"
     audio_quality: str = "Best"
     fragments: int = 4                # parallel fragment downloads (HLS/DASH)
+    subtitles: bool = False           # save a video's subtitles as .srt files next to it
+    speed_limit: int = 0              # MB/s, one of SPEED_LIMITS
+    proxy: str = ""                   # urls.proxy_url address; empty for a direct connection
     # Behaviour
     auto_paste: bool = True           # take a link from the clipboard when the app opens
     auto_analyze_shared: bool = True  # analyze links shared from other apps at once
@@ -70,6 +75,12 @@ class AppSettings:
                 ok = isinstance(value, str) and (f.name not in allowed or value in allowed[f.name])
             values[f.name] = value if ok else fallback
         values["fragments"] = min(max(values["fragments"], FRAGMENTS_MIN), FRAGMENTS_MAX)
+        if values["speed_limit"] not in SPEED_LIMITS:
+            values["speed_limit"] = 0
+        try:
+            values["proxy"] = urls.proxy_url(values["proxy"])
+        except ValueError:
+            values["proxy"] = ""
         return AppSettings(**values)
 
 
@@ -103,9 +114,13 @@ def download_speed_options(settings):
     Segmented streams (HLS/DASH, used by Instagram, X, many live and news
     sites) download several fragments at once. Plain HTTP files are fetched
     in 10 MB ranges, which keeps servers that slow down long single
-    requests from throttling the transfer.
+    requests from throttling the transfer. A speed limit caps the whole
+    transfer.
     """
-    return {
+    options = {
         "concurrent_fragment_downloads": settings.fragments,
         "http_chunk_size": 10 * 1024 * 1024,
     }
+    if settings.speed_limit:
+        options["ratelimit"] = settings.speed_limit * 1024 * 1024
+    return options

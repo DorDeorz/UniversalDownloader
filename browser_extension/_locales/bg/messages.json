@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Изпраща гледаното видео или всяка връзка към приложението Orbida."
+  },
+  "menuPage": {
+    "message": "Изтегляне с Orbida"
+  },
+  "menuLink": {
+    "message": "Изтегляне на връзката с Orbida"
+  }
+}

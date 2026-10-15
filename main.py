@@ -9,7 +9,11 @@ def main():
     app_setup.configure_logging()
     app_setup.set_app_user_model_id()
     instance = app_setup.SingleInstance()
+    # A link from the browser extension (orbida://download?url=...) or a command line.
+    link = app_setup.link_from_args(sys.argv[1:])
     if instance.already_running:
+        if link and app_setup.send_link(link):
+            return 0  # the running app takes it
         from tkinter import Tk, messagebox
         root = Tk()
         root.withdraw()
@@ -20,7 +24,7 @@ def main():
         app_setup.migrate_legacy_data()
         from ui import App
         # The updater releases the instance lock before it starts the installer.
-        app = App(instance=instance)
+        app = App(instance=instance, link=link)
         # Release check: install this setup EXE the way the updater does
         # (see the "Update the running app" step in release.yml).
         test_installer = os.environ.pop("ORBIDA_SELFTEST_UPDATE", None)

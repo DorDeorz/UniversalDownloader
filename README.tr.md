@@ -81,7 +81,13 @@ Windows tarafının ayrıntıları için:
 - **TikTok** çalışır: yt-dlp, tarayıcı gibi istek gönderir (curl_cffi).
 - **Spotify** şarkıları, albümleri ve çalma listeleri: Spotify'ın kendi sesi
   kopya korumalı olduğu için her şarkı YouTube'da bulunup ses olarak
-  kaydedilir. SoundCloud ve Bandcamp doğrudan iner.
+  kaydedilir. İlk üç sonuçtan süresi şarkıya en yakın olan seçilir. Dosya
+  "Sanatçı - Şarkı" adıyla, Spotify'daki ad, sanatçı, albüm ve albüm
+  kapağıyla kaydedilir. SoundCloud ve Bandcamp doğrudan iner.
+- **Altyazı** videoların yanına .srt dosyası olarak, uygulamanın dilinde ve
+  İngilizce kaydedilebilir.
+- **Birden çok bağlantı.** Bir bağlantı listesi yapıştırıp Analiz et'e
+  basın: her biri sırayla iner.
 - **Kuyruk.** İndirme sürerken eklenen bağlantılar kuyrukta bekler ve
   sırayla başlar.
 - **Çalma listeleri hatırlar:** Daha önce indirilenler işaretsiz ve
@@ -96,6 +102,8 @@ Windows tarafının ayrıntıları için:
   - tema ve vurgu rengi;
   - dil;
   - paralel bağlantı;
+  - hız sınırı;
+  - proxy (HTTP ya da SOCKS);
   - açılışta kopyalanmış bağlantıyı yapıştırma;
   - indirme sürerken cihazı uyanık tutma.
 
@@ -106,6 +114,10 @@ Windows tarafının ayrıntıları için:
 
 ### Windows
 
+- **Tarayıcı eklentisi:** Chrome, Edge, Brave ve Opera için (aşağıda).
+- **Pano takibi:** Ayarlar › Kopyalanan bağlantılar › Takip et açıksa,
+  Orbida çalışırken kopyaladığınız her bağlantı bir İndir düğmesiyle
+  önerilir.
 - Yalnızca video modu, WebM ve Opus biçimleri.
 - Oynatma listeleri bir seçim penceresiyle açılır. Seçilen öğeler numaralı
   adlarla kendi klasörlerine iner. Başarısız öğeler tek tıkla yeniden
@@ -129,6 +141,30 @@ Windows tarafının ayrıntıları için:
 
 ![Ayarlar](docs/images/settings.png)
 ![Geçmiş](docs/images/history.png)
+
+#### Tarayıcı eklentisi
+
+Kurulum, uygulamaya küçük bir eklenti koyar ve `orbida:` adresini
+Windows'a tanıtır. Eklenti tarayıcıya eklendikten sonra araç çubuğundaki
+düğmesi (ya da Alt+Shift+D) açık sayfayı Orbida'ya gönderir; bir bağlantıya
+sağ tıklayınca **Bağlantıyı Orbida ile indir** çıkar. Orbida kapalıysa
+açılır, açıksa bağlantıyı alıp analiz eder. Tarayıcı, Orbida'yı açmak için
+bir kez izin ister.
+
+Eklenti Chrome Web Mağazası'nda olmadığı için elle eklenir:
+
+1. Orbida'da Ayarlar › **Tarayıcı eklentisi**'ni açıp **Klasörü aç**'a
+   tıklayın.
+2. Chrome, Edge, Brave ya da Opera'da `chrome://extensions` (Edge:
+   `edge://extensions`) sayfasını açıp **Geliştirici modu**'nu açın.
+3. **Paketlenmemiş öğe yükle**'ye tıklayıp açılan klasörü seçin.
+
+Firefox eklentiyi `about:debugging` › Bu Firefox › Geçici eklenti yükle
+ile (`manifest.json` seçilerek) yükleyebilir, ama Firefox kapanınca
+kaldırır. Eklentinin ziyaret ettiğiniz sayfalara erişimi yoktur; yalnızca
+tıkladığınızda sekmenin adresini okur.
+
+![Tarayıcı eklentisi](docs/images/extension.png)
 
 ### Android
 

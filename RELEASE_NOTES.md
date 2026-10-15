@@ -1,12 +1,40 @@
-**Orbida 1.1.0** brings a new look, Spotify, a download queue and playlist
-memory. This release holds both apps:
+**Orbida 1.2.0** brings a browser extension for Windows, Spotify songs with
+their real names and album covers, subtitles, a speed limit and a proxy. This
+release holds both apps:
 
-- **Windows:** `Orbida-Setup-1.1.0.exe`, for Windows 10 or 11 (64-bit).
-- **Android:** `Orbida-1.1.0.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Windows:** `Orbida-Setup-1.2.0.exe`, for Windows 10 or 11 (64-bit).
+- **Android:** `Orbida-1.2.0.apk`, for 64-bit ARM phones with Android 7 or newer.
 
 Orbida 1.0 updates itself to this version: on Windows click **Update to
-1.1.0** in the top bar; on Android open Settings › About › Check for
+1.2.0** in the top bar; on Android open Settings › About › Check for
 updates.
+
+## New in 1.2.0 (both apps)
+
+- **Spotify songs keep Spotify's names and cover.** Files are named
+  "Artist - Song" and tagged with the title, artist, album and album cover
+  from Spotify, not the YouTube video's.
+- **Better song matches.** The first three YouTube results are compared and
+  the one whose length is closest to the Spotify song wins, so long music
+  videos and live versions lose to the plain song.
+- **Subtitles.** Videos can be saved with their subtitles as .srt files, in
+  the app's language and English (Windows: the Subtitles switch next to the
+  mode; Android: Settings › Downloads).
+- **Several links at once.** Paste a list of links and press Analyze: each
+  one downloads in turn.
+- **Speed limit** (1 to 20 MB/s) and **proxy** (HTTP or SOCKS) in Settings.
+
+**Windows:**
+- **Browser extension** for Chrome, Edge, Brave and Opera: a toolbar button
+  and a right-click item send the video page or a link to Orbida, which opens
+  if it is closed. Settings › Browser extension shows how to add it.
+- **Clipboard watch.** With Settings › Copied links › Watch, every link you
+  copy while Orbida runs is offered with a Download button.
+
+## New in 1.1.1 (both apps)
+
+- Spotify playlists longer than 100 songs now download in full. Before,
+  only the first 100 songs were found.
 
 ## New in 1.1.0 (both apps)
 
@@ -63,7 +91,7 @@ Before this version, the Windows app was called Universal Video Downloader.
 - New downloads go to `Downloads\Orbida` by default. A folder you chose
   before stays the same.
 
-**Install:** run `Orbida-Setup-1.1.0.exe`. It installs for your user only,
+**Install:** run `Orbida-Setup-1.1.1.exe`. It installs for your user only,
 with no administrator password. FFmpeg, ffprobe and Deno are included.
 The setup is not code-signed, so SmartScreen may say "Windows protected
 your PC". Click **More info**, then **Run anyway**.

@@ -41,6 +41,7 @@ class QueueItem:
     playlist: str | None = None       # playlist title, for the output folder
     duration: float | None = None
     skip_reason: str | None = None    # set when the entry cannot be downloaded
+    meta: dict | None = None          # song tags and cover for a search (spotify.py)
 
     def as_dict(self):
         return {k: v for k, v in self.__dict__.items() if v is not None}
@@ -94,7 +95,7 @@ def analyze(info, url):
     if "entries" not in info and info.get("_type") != "playlist":
         title = info.get("title") or url
         item = QueueItem(url=info.get("webpage_url") or info.get("original_url") or url, title=title,
-                         duration=info.get("duration"))
+                         duration=info.get("duration"), meta=info.get("meta"))
         reason = skip_reason(info)
         if reason:
             item.skip_reason = reason
@@ -112,7 +113,7 @@ def analyze(info, url):
         index = entry.get("playlist_index") or position
         title = entry.get("title") or f"Video #{index}"
         item = QueueItem(url=entry_url(entry) or "", title=title, index=index, playlist=playlist_title,
-                         duration=entry.get("duration"))
+                         duration=entry.get("duration"), meta=entry.get("meta"))
         item.skip_reason = skip_reason(entry) or (None if item.url else "no downloadable URL")
         (result.skipped if item.skip_reason else result.items).append(item)
     return result

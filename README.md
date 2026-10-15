@@ -74,7 +74,13 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
 - **TikTok** works: yt-dlp sends browser-like requests (curl_cffi).
 - **Spotify** tracks, albums and playlists: Spotify's own audio is
   copy-protected, so each song is looked up on YouTube and saved as audio.
-  SoundCloud and Bandcamp download directly.
+  Of the first three results, the one closest in length to the song wins.
+  The file is named "Artist - Song" and tagged with Spotify's title,
+  artist, album and album cover. SoundCloud and Bandcamp download directly.
+- **Subtitles** can be saved next to videos as .srt files, in the app's
+  language and English.
+- **Several links at once.** Paste a list of links and press Analyze: each
+  one downloads in turn.
 - **Queue.** Links added while a download runs wait in a queue and start
   one after another.
 - **Playlists remember** what you downloaded before: those entries start
@@ -86,14 +92,18 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
   "Title (2).mp4".
 - **History** of finished downloads, with Open and Remove.
 - **Settings.** Theme and accent colour, language, parallel connections,
-  pasting a copied link when the app opens, and keeping the device awake
-  while downloading. Your choices are remembered.
+  a speed limit, a proxy (HTTP or SOCKS), pasting a copied link when the
+  app opens, and keeping the device awake while downloading. Your choices
+  are remembered.
 - **Built-in updates** from GitHub releases.
 - **Safe.** HTTPS certificates are always verified. Errors are shown in
   plain words, never hidden.
 
 ### Windows
 
+- **Browser extension** for Chrome, Edge, Brave and Opera (see below).
+- **Clipboard watch:** with Settings › Copied links › Watch, every link
+  you copy while Orbida runs is offered with a Download button.
 - Video Only mode, and the WebM and Opus formats.
 - Playlists open a selection dialog. The chosen entries go into their own
   folder with numbered names. Failed items can be retried with one click.
@@ -111,6 +121,30 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
 
 ![Settings](docs/images/settings.png)
 ![History](docs/images/history.png)
+
+#### Browser extension
+
+The installer adds a small extension to the app and registers the
+`orbida:` address with Windows. Once the extension is added to the browser,
+its toolbar button (or Alt+Shift+D) sends the page you are on to Orbida, and
+right-clicking a link offers **Download link with Orbida**. Orbida opens if
+it is closed; a running Orbida takes the link and analyzes it. The browser
+asks once whether it may open Orbida.
+
+The extension is not in the Chrome Web Store, so it is added by hand:
+
+1. In Orbida, open Settings › **Browser extension** and click **Open
+   folder**.
+2. In Chrome, Edge, Brave or Opera, open `chrome://extensions` (Edge:
+   `edge://extensions`) and turn on **Developer mode**.
+3. Click **Load unpacked** and choose the folder that opened.
+
+Firefox can load it from `about:debugging` › This Firefox › Load Temporary
+Add-on (pick `manifest.json`), but removes it when Firefox closes. The
+extension needs no access to the pages you visit: it only reads the address
+of the tab when you click it.
+
+![Browser extension](docs/images/extension.png)
 
 ### Android
 

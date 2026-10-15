@@ -77,7 +77,7 @@ def test_unreadable_pages_say_so(html):
 def test_fetch_follows_short_links_and_reads_the_embed_page():
     asked = []
 
-    def open_url(url):
+    def open_url(url, headers=None, data=None):
         asked.append(url)
         if "spotify.link" in url:
             return "https://open.spotify.com/track/abc?si=1", "<html></html>"
@@ -90,11 +90,11 @@ def test_fetch_follows_short_links_and_reads_the_embed_page():
 
 
 def test_fetch_info_answers_spotify_links_without_yt_dlp(monkeypatch):
-    monkeypatch.setattr(logic, "_read_page", lambda url, opts: (url, _page(PLAYLIST)))
+    monkeypatch.setattr(logic, "_read_page", lambda url, opts, headers=None, data=None: (url, _page(PLAYLIST)))
     info = logic.DownloadManager().fetch_info("https://open.spotify.com/playlist/abc")
     assert info["title"] == "Road Trip" and len(info["entries"]) == 2
 
-    def broken(url, opts):
+    def broken(url, opts, headers=None, data=None):
         raise OSError("HTTP Error 404: Not Found")
     monkeypatch.setattr(logic, "_read_page", broken)
     assert "404" in logic.DownloadManager().fetch_info("https://open.spotify.com/playlist/abc")["error"]
@@ -116,3 +116,67 @@ def test_a_song_search_downloads_its_first_result(manager, fake_ydl, tmp_path):
     assert result.ok, result.error
     assert result.title.startswith("Queen – Bohemian Rhapsody")
     assert result.path.endswith(".mp3")
+
+
+def _embed_with_token(count):
+    entity = {"type": "playlist", "name": "Long",
+              "trackList": [{"title": f"Song {i}", "subtitle": "Band"} for i in range(count)]}
+    data = {"props": {"pageProps": {"state": {"data": {"entity": entity},
+                                              "settings": {"session": {"accessToken": "TOKEN"}}}}}}
+    return f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(data)}</script>'
+
+
+def _pathfinder_page(offset, total, limit=100):
+    items = []
+    for i in range(offset, min(offset + limit, total)):
+        items.append({"itemV2": {"data": {"__typename": "Track", "name": f"Song {i}",
+                                          "artists": {"items": [{"profile": {"name": "Band"}}]},
+                                          "trackDuration": {"totalMilliseconds": 180000}}}})
+    items.append({"itemV2": {"data": {"__typename": "LocalTrack", "name": "my file"}}})
+    return {"data": {"playlistV2": {"content": {"items": items, "totalCount": total}}}}
+
+
+def test_long_playlists_are_read_past_the_embed_limit():
+    posts = []
+
+    def open_url(url, headers=None, data=None):
+        if "/embed/" in url:
+            return url, _embed_with_token(100)
+        if url == "https://open.spotify.com/playlist/big":
+            return url, '<script src="https://open.spotifycdn.com/cdn/build/web-player/web-player.35377fe6.js"></script>'
+        if url.endswith("web-player.35377fe6.js"):
+            return url, 'x("fetchPlaylist","query","' + "a" * 64 + '",null)'
+        assert url == spotify.PATHFINDER and headers["Authorization"] == "Bearer TOKEN"
+        body = json.loads(data)
+        posts.append(body)
+        return url, json.dumps(_pathfinder_page(body["variables"]["offset"], 250))
+
+    info = spotify.fetch_info("https://open.spotify.com/playlist/big", open_url)
+    assert len(info["entries"]) == 250 and "partial" not in info
+    assert info["entries"][249]["url"] == "ytsearch1:Band - Song 249 audio"
+    assert info["entries"][100]["duration"] == 180
+    assert [p["variables"]["offset"] for p in posts] == [100, 200]
+    assert posts[0]["extensions"]["persistedQuery"]["sha256Hash"] == "a" * 64
+
+
+def test_short_playlists_need_no_more_requests():
+    asked = []
+
+    def open_url(url, headers=None, data=None):
+        asked.append(url)
+        return url, _embed_with_token(42)
+
+    assert len(spotify.fetch_info("https://open.spotify.com/playlist/small", open_url)["entries"]) == 42
+    assert asked == ["https://open.spotify.com/embed/playlist/small"]
+
+
+def test_the_first_100_songs_stay_when_the_rest_cannot_be_read():
+    def open_url(url, headers=None, data=None):
+        if "/embed/" in url:
+            return url, _embed_with_token(100)
+        if data is not None:
+            raise OSError("HTTP Error 400: Bad Request")
+        return url, "<html></html>"  # no script found: the known query id is used
+
+    info = spotify.fetch_info("https://open.spotify.com/playlist/big", open_url)
+    assert len(info["entries"]) == 100 and "400" in info["partial"]

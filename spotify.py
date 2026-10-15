@@ -7,8 +7,11 @@ not downloaded from Spotify. Instead the public embed page of the link
 title and artists of each song, and each song becomes a YouTube search
 for "<artists> - <title>" whose first result is downloaded.
 
-The embed page lists what Spotify shows in its embedded player; for very
-long playlists that may be fewer songs than the playlist has.
+The embed page lists at most 100 songs of a playlist. The rest are read
+the way Spotify's own web player reads them: its GraphQL endpoint
+("pathfinder"), called with the anonymous token the embed page carries and
+the query id found in the web player's script. If that fails, the first 100
+songs are still returned, with ``partial`` set.
 """
 
 import json
@@ -18,6 +21,15 @@ from urllib.parse import urlsplit
 from playlist import SEARCH_PREFIX
 
 KINDS = ("track", "album", "playlist")
+EMBED_LIMIT = 100          # songs the embed page lists at most
+PAGE_SIZE = 100            # songs per pathfinder request
+MAX_SONGS = 10000          # Spotify's own playlist limit
+PATHFINDER = "https://api-partner.spotify.com/pathfinder/v2/query"
+# The web player's query id when this was written; it is looked up again in
+# the web player's script, since Spotify changes it when the query changes.
+KNOWN_QUERY_HASH = "21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf"
+_SCRIPT = re.compile(r'<script[^>]+src="([^"]*/web-player\.[0-9a-f]+\.js)"')
+_QUERY_HASH = re.compile(r'"fetchPlaylist","query","([0-9a-f]{64})"')
 SHORT_HOSTS = ("spotify.link", "spoti.fi")
 
 _PATH = re.compile(r"^/(?:intl-[\w-]+/)?(?:embed/)?(track|album|playlist)/([A-Za-z0-9]+)")
@@ -51,12 +63,15 @@ def search_query(artists, title):
     return f"{SEARCH_PREFIX}{name} audio"
 
 
-def _entity(html):
+def _page_data(html):
     match = _NEXT_DATA.search(html or "")
     if not match:
         raise SpotifyError("Spotify did not return the song list (the page has changed or the link is private)")
-    data = json.loads(match.group(1))
-    entity = _find_entity(data)
+    return json.loads(match.group(1))
+
+
+def _entity(html):
+    entity = _find_entity(_page_data(html))
     if entity is None:
         raise SpotifyError("Spotify did not return the song list (the page has changed or the link is private)")
     return entity
@@ -122,8 +137,78 @@ def info_from_embed(html, kind):
     return {"_type": "playlist", "title": name, "entries": entries, "extractor_key": "Spotify"}
 
 
+def access_token(html):
+    """The anonymous token in an embed page, or None."""
+    try:
+        return _page_data(html)["props"]["pageProps"]["state"]["settings"]["session"]["accessToken"] or None
+    except (KeyError, TypeError, SpotifyError):
+        return None
+
+
+def query_hash(open_url, playlist_id):
+    """The web player's id of its playlist query (the known one if it cannot be found)."""
+    try:
+        _final, page = open_url(f"https://open.spotify.com/playlist/{playlist_id}")
+        script = _SCRIPT.search(page)
+        if script:
+            _final, js = open_url(script.group(1))
+            found = _QUERY_HASH.search(js)
+            if found:
+                return found.group(1)
+    except Exception:
+        pass
+    return KNOWN_QUERY_HASH
+
+
+def songs_from_pathfinder(data):
+    """``(songs as embed-style items, total count)`` from a fetchPlaylist answer."""
+    try:
+        content = data["data"]["playlistV2"]["content"]
+    except (KeyError, TypeError):
+        raise SpotifyError("Spotify did not return the rest of the playlist") from None
+    items = []
+    for entry in content.get("items") or []:
+        track = ((entry or {}).get("itemV2") or {}).get("data") or {}
+        if track.get("__typename") != "Track" or not track.get("name"):
+            continue  # local files, removed or unavailable songs, podcast episodes
+        artists = [{"name": a["profile"]["name"]} for a in (track.get("artists") or {}).get("items") or []
+                   if (a.get("profile") or {}).get("name")]
+        if not artists:
+            artists = [{"name": a["profile"]["name"]}
+                       for a in ((track.get("albumOfTrack") or {}).get("artists") or {}).get("items") or []
+                       if (a.get("profile") or {}).get("name")]
+        items.append({"title": track["name"], "artists": artists,
+                      "duration": (track.get("trackDuration") or {}).get("totalMilliseconds")})
+    return items, content.get("totalCount")
+
+
+def rest_of_playlist(playlist_id, token, open_url, start):
+    """The songs of a playlist from position ``start`` on."""
+    query = query_hash(open_url, playlist_id)
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json;charset=UTF-8",
+               "App-Platform": "WebPlayer"}
+    songs, offset = [], start
+    while offset < MAX_SONGS:
+        body = json.dumps({
+            "operationName": "fetchPlaylist",
+            "variables": {"uri": f"spotify:playlist:{playlist_id}", "offset": offset, "limit": PAGE_SIZE,
+                          "enableWatchFeedEntrypoint": False},
+            "extensions": {"persistedQuery": {"version": 1, "sha256Hash": query}},
+        }).encode()
+        _final, text = open_url(PATHFINDER, headers=headers, data=body)
+        page, total = songs_from_pathfinder(json.loads(text))
+        songs.extend(page)
+        offset += PAGE_SIZE
+        if not total or offset >= total:
+            break
+    return songs
+
+
 def fetch_info(url, open_url):
-    """Look up a Spotify link; ``open_url(url)`` returns ``(final url, page text)``.
+    """Look up a Spotify link.
+
+    ``open_url(url, headers=None, data=None)`` returns ``(final url, page
+    text)``; with ``data`` it sends a POST.
 
     Returns None when ``url`` is not a Spotify music link (podcasts are left
     to yt-dlp).
@@ -136,4 +221,14 @@ def fetch_info(url, open_url):
         return None
     kind, item_id = link
     _final, html = open_url(embed_url(kind, item_id))
-    return info_from_embed(html, kind)
+    info = info_from_embed(html, kind)
+    if kind == "playlist" and len(info["entries"]) >= EMBED_LIMIT:
+        try:
+            token = access_token(html)
+            if not token:
+                raise SpotifyError("no access token in the embed page")
+            more = [song for song in map(_song, rest_of_playlist(item_id, token, open_url, EMBED_LIMIT)) if song]
+            info["entries"].extend(more)
+        except Exception as e:  # the first 100 songs are still worth downloading
+            info["partial"] = str(e) or type(e).__name__
+    return info

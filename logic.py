@@ -361,10 +361,16 @@ class DownloadManager:
         """
         ydl_opts = base_ydl_options(log_callback)
         try:
-            info = spotify.fetch_info(url, lambda page: _read_page(page, ydl_opts))
+            info = spotify.fetch_info(
+                url, lambda page, headers=None, data=None: _read_page(page, ydl_opts, headers, data))
         except Exception as e:
             return {'error': describe_error(e), 'error_type': type(e).__name__}
         if info is not None:  # a Spotify song or list: songs to search for on YouTube
+            if info.get('partial'):
+                message = f"Spotify: only the first {spotify.EMBED_LIMIT} songs could be read ({info['partial']})"
+                _log.warning(message)
+                if log_callback:
+                    log_callback(message)
             return info
         ydl_opts['extract_flat'] = True
         # Playlist analysis tolerates individual unavailable entries; yt-dlp
@@ -558,10 +564,11 @@ class DownloadManager:
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
 
 
-def _read_page(url, ydl_opts):
-    """``(final url, text)`` of a web page, fetched with yt-dlp's networking."""
+def _read_page(url, ydl_opts, headers=None, data=None):
+    """``(final url, text)`` of a web page, fetched with yt-dlp's networking (POST with ``data``)."""
+    from yt_dlp.networking import Request
     with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
-        with ydl.urlopen(url) as response:
+        with ydl.urlopen(Request(url, data=data, headers=headers or {})) as response:
             return response.url, response.read().decode('utf-8', 'replace')
 
 

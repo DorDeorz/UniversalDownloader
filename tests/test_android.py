@@ -1127,3 +1127,12 @@ def test_old_update_files_are_removed(tmp_path):
     updates.remove_old(str(tmp_path), keep=str(tmp_path / "Orbida-1.0.0.apk"))
     assert sorted(os.listdir(tmp_path)) == ["Orbida-1.0.0.apk", "keep.txt"]
     updates.remove_old(str(tmp_path / "missing"))  # no folder yet: nothing to do
+
+
+def test_navigation_has_download_as_the_round_middle_tab():
+    kv = open(os.path.join(ROOT, "android", "app", "layout.py"), encoding="utf-8").read()
+    bar = kv[kv.index("id: nav"):kv.index("<NavTab>")]
+    assert re.findall(r'name: "(\w+)"', bar) == ["history", "home", "settings"]
+    assert bar.index("main: True") > bar.index('name: "home"')
+    main = open(os.path.join(ROOT, "android", "app", "main.py"), encoding="utf-8").read()
+    assert 'order = ["history", "home", "settings"]' in main  # slides go the way the tabs are laid out

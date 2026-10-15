@@ -21,7 +21,8 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.metrics import dp, sp
-from kivy.properties import BooleanProperty, StringProperty
+from kivy.properties import BooleanProperty, NumericProperty, StringProperty
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
@@ -31,7 +32,6 @@ from kivymd.uix.button import MDButton, MDButtonText
 from kivymd.uix.dialog import (MDDialog, MDDialogButtonContainer, MDDialogContentContainer,
                                MDDialogHeadlineText, MDDialogSupportingText)
 from kivymd.uix.label import MDLabel
-from kivymd.uix.navigationbar import MDNavigationItem
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.slider import MDSlider, MDSliderHandle
 from kivymd.uix.snackbar import MDSnackbar, MDSnackbarText
@@ -145,10 +145,20 @@ def _show(widget, visible):
         parent.remove_widget(widget)
 
 
-class NavItem(MDNavigationItem):
+class NavTab(ButtonBehavior, BoxLayout):
+    """A tab of the navigation bar; ``main`` draws it as the round button in the middle."""
+
     name = StringProperty()
     icon = StringProperty()
     text = StringProperty()
+    active = BooleanProperty(False)
+    main = BooleanProperty(False)
+
+
+class ProgressRing(Widget):
+    """The download's progress as a ring with the percentage inside (0-100)."""
+
+    value = NumericProperty(0)
 
 
 class Root(MDBoxLayout):
@@ -553,7 +563,7 @@ class UniversalDownloaderApp(MDApp):
 
     def switch_tab(self, name):
         screens = self.ids.screens
-        order = ["home", "history", "settings"]
+        order = ["history", "home", "settings"]  # as in the navigation bar
         if name in self._stale and self._stale[name]:
             self._build(name)  # before the slide, so the new screen arrives filled in
         screens.transition.direction = "left" if order.index(name) > order.index(screens.current) else "right"
@@ -586,8 +596,7 @@ class UniversalDownloaderApp(MDApp):
     def go_to(self, name):
         """Switch tabs from code, keeping the navigation bar in step."""
         for item in self.ids.nav.children:
-            if isinstance(item, NavItem) and item.name == name and not item.active:
-                self.ids.nav.set_active_item(item)
+            item.active = item.name == name
         if self.ids.screens.current != name:
             self.switch_tab(name)
 

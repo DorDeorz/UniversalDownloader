@@ -9,7 +9,10 @@ release (tag `orbida-v<version>`) holding both the Windows installer and
 ## What it does
 
 A Material You app (Material Design 3, colours from the wallpaper on
-Android 12 and newer) with three tabs:
+Android 12 and newer) styled after FitWren, the step counter app by the same
+author: a large bold title on each page, filled cards, a progress ring for
+the download, and a navigation bar with History, Download (a round button in
+the middle) and Settings. Its three tabs:
 
 - **Download:** paste or share a link, **Analyze**, choose **Video** (MP4
   or MKV, with a quality limit) or **Audio** (MP3, M4A, FLAC or WAV, with a

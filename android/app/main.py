@@ -26,6 +26,7 @@ from kivy.properties import BooleanProperty, NumericProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.stacklayout import StackLayout
 from kivy.uix.widget import Widget
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -913,7 +914,9 @@ class UniversalDownloaderApp(MDApp):
             draw(row, item)
             rows.add_widget(row)
             lines.append((row, item))
-        quick = MDBoxLayout(adaptive_height=True, spacing=dp(8))
+        # The buttons wrap onto a second line when their texts do not fit.
+        quick = StackLayout(size_hint_y=None, spacing=dp(8))
+        quick.bind(minimum_height=quick.setter("height"))
         for text, which in ((self.tr("playlist.select_all"), lambda i: True),
                             (self.tr("playlist.select_none"), lambda i: False),
                             (self.tr("playlist.select_new"), lambda i: id(i) not in before)):

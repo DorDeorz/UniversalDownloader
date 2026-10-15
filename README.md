@@ -72,6 +72,13 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
 - **Faster downloads.** Streamed videos (Instagram, X, live) download several
   parts at once. You can set how many under **Parallel connections**.
 - **TikTok** works: yt-dlp sends browser-like requests (curl_cffi).
+- **Spotify** tracks, albums and playlists: Spotify's own audio is
+  copy-protected, so each song is looked up on YouTube and saved as audio.
+  SoundCloud and Bandcamp download directly.
+- **Queue.** Links added while a download runs wait in a queue and start
+  one after another.
+- **Playlists remember** what you downloaded before: those entries start
+  unticked and marked, and **Only new** picks the rest.
 - **Every item gets a result.** Each one ends as completed, failed, skipped
   or cancelled, and says why when it did not complete. Cancelling leaves no
   partial files behind.
@@ -91,7 +98,7 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
 - Playlists open a selection dialog. The chosen entries go into their own
   folder with numbered names. Failed items can be retried with one click.
 - 25 interface languages, switched without a restart. Three text sizes.
-  Dark, light or system theme, and eight accent colours.
+  Dark, light, black (AMOLED) or system theme, and eight accent colours.
 - The window fits the screen and stays above the taskbar at every text
   size. Settings open inside the window and never need scrolling.
 - The History page has Open, Show in folder and Remove.
@@ -116,6 +123,9 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
   Signing in stays available but is optional.
 - Files are saved to `Download/Orbida` and show up in gallery and music
   apps. History has Open, Share and Remove.
+- Pick which playlist entries to download.
+- Downloads keep going in the background, with progress in a
+  notification.
 - The screen stays on while a download runs.
 - English and Turkish.
 

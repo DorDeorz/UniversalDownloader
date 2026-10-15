@@ -45,27 +45,3 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q xvfb ffmpeg
           xvfb-run -a python -m pytest
 
-      # TEMPORARY probe (removed before merge): Spotify lookups against the real site.
-      - name: Spotify live probe
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: |
-          python - <<'PY'
-          import logic, playlist, formats, tempfile
-          m = logic.DownloadManager()
-          for url in ["https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b",
-                      "https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj",
-                      "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
-                      "https://open.spotify.com/intl-tr/track/7qiZfU4dY1lWllzX7mPBI3?si=x"]:
-              info = m.fetch_info(url, log_callback=print)
-              if "error" in info:
-                  print("PROBE", url, "ERROR", info["error"]); continue
-              a = playlist.analyze(info, url)
-              print("PROBE", url, "title=", a.title, "items=", len(a.items), "skipped=", len(a.skipped))
-              for item in a.items[:3]:
-                  print("PROBE   ", item.title, "|", item.url)
-          out = tempfile.mkdtemp()
-          r = m.download_video("ytsearch1:The Weeknd - Blinding Lights audio",
-                               {"mode": formats.AUDIO_ONLY, "format": "mp3", "save_path": out}, log_callback=print)
-          print("PROBE download", r.status, r.title, r.path, r.error)
-          PY

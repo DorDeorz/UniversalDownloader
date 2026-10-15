@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Отправляет просматриваемое видео или любую ссылку в приложение Orbida."
+  },
+  "menuPage": {
+    "message": "Скачать через Orbida"
+  },
+  "menuLink": {
+    "message": "Скачать ссылку через Orbida"
+  }
+}

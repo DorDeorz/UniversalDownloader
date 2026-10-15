@@ -155,19 +155,19 @@ def test_long_playlists_are_read_past_the_embed_limit():
     assert len(info["entries"]) == 250 and "partial" not in info
     assert info["entries"][249]["url"] == "ytsearch1:Band - Song 249 audio"
     assert info["entries"][100]["duration"] == 180
-    assert [p["variables"]["offset"] for p in posts] == [100, 200]
+    # The whole list comes from pathfinder, which also names albums and covers.
+    assert [p["variables"]["offset"] for p in posts] == [0, 100, 200]
     assert posts[0]["extensions"]["persistedQuery"]["sha256Hash"] == "a" * 64
 
 
-def test_short_playlists_need_no_more_requests():
-    asked = []
-
+def test_short_playlists_keep_the_embed_songs_when_pathfinder_fails():
     def open_url(url, headers=None, data=None):
-        asked.append(url)
+        if data is not None:
+            raise OSError("HTTP Error 400: Bad Request")
         return url, _embed_with_token(42)
 
-    assert len(spotify.fetch_info("https://open.spotify.com/playlist/small", open_url)["entries"]) == 42
-    assert asked == ["https://open.spotify.com/embed/playlist/small"]
+    info = spotify.fetch_info("https://open.spotify.com/playlist/small", open_url)
+    assert len(info["entries"]) == 42 and "partial" not in info
 
 
 def test_the_first_100_songs_stay_when_the_rest_cannot_be_read():

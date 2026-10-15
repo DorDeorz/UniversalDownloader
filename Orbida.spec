@@ -13,7 +13,8 @@ from version import APP_NAME, __version__  # noqa: E402
 # unpacked on every launch); otherwise one portable EXE.
 ONEDIR = os.environ.get('UVD_ONEDIR') == '1'
 
-datas = [('app.ico', '.'), ('app.png', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('locales', 'locales')]
+datas = [('app.ico', '.'), ('app.png', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('locales', 'locales'),
+         ('browser_extension', 'browser_extension')]
 binaries = [(os.path.join('bin', 'ffmpeg.exe'), 'bin'), (os.path.join('bin', 'ffprobe.exe'), 'bin')]
 # Deno runs YouTube's JavaScript challenges. It sits next to FFmpeg, whose
 # folder the app puts first on PATH, where yt-dlp looks for it. Only the

@@ -38,6 +38,7 @@ class FakeYoutubeDL:
     download_error = None
     write_file = True
     warning = None
+    subtitles = ()
 
     def __init__(self, opts):
         self.opts = opts
@@ -79,6 +80,13 @@ class FakeYoutubeDL:
         self.process_calls.append(info)
         if not download:
             return dict(info)
+        if self.params.get("skip_download"):  # only the extras (the subtitle pass)
+            info = dict(info)
+            base = os.path.splitext(self.prepare_filename(info))[0]
+            info["requested_subtitles"] = {
+                lang: {"ext": "srt", "filepath": f"{base}.{lang}.srt"}
+                for lang in (FakeYoutubeDL.subtitles or ()) if self.params.get("writesubtitles")}
+            return info
         for hook in self.params.get("progress_hooks") or []:
             hook({"status": "downloading", "downloaded_bytes": 5, "total_bytes": 10})
         if FakeYoutubeDL.download_error is not None:
@@ -113,6 +121,7 @@ def fake_ydl(monkeypatch):
     FakeYoutubeDL.download_error = None
     FakeYoutubeDL.write_file = True
     FakeYoutubeDL.warning = None
+    FakeYoutubeDL.subtitles = ()
     monkeypatch.setattr(logic.yt_dlp, "YoutubeDL", FakeYoutubeDL)
     return FakeYoutubeDL
 

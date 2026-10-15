@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Mengirim video yang Anda tonton, atau tautan apa pun, ke aplikasi Orbida."
+  },
+  "menuPage": {
+    "message": "Unduh dengan Orbida"
+  },
+  "menuLink": {
+    "message": "Unduh tautan dengan Orbida"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Trimite videoclipul pe care îl vizionezi sau orice link către aplicația Orbida."
+  },
+  "menuPage": {
+    "message": "Descarcă cu Orbida"
+  },
+  "menuLink": {
+    "message": "Descarcă linkul cu Orbida"
+  }
+}

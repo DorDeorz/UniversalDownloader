@@ -18,6 +18,7 @@ import events
 import filenames
 import formats
 import i18n
+import logic
 import media_tools
 import playlist
 import settings as settings_store
@@ -743,8 +744,10 @@ class SettingsView(ctk.CTkFrame):
             row=0, column=1, sticky="w", padx=16)
         ctk.CTkLabel(header, text=f"{DISPLAY_NAME} {__version__}", font=font(12), text_color=MUTED).grid(
             row=0, column=2, sticky="e", padx=12)
+        self.btn_extension = secondary_button(header, tr("extension.title"), self.open_extension_help, height=34)
+        self.btn_extension.grid(row=0, column=3, sticky="e", padx=(0, 8))
         self.btn_logs = secondary_button(header, tr("settings.logs"), self.open_logs, height=34)
-        self.btn_logs.grid(row=0, column=3, sticky="e")
+        self.btn_logs.grid(row=0, column=4, sticky="e")
 
         self.body = body = ctk.CTkFrame(self, fg_color="transparent")
         body.grid(row=1, column=0, sticky="new", padx=32, pady=(0, 16))
@@ -774,18 +777,37 @@ class SettingsView(ctk.CTkFrame):
         self.cmb_accent.set(settings.accent)
         self._setting_row(look, 7, tr("settings.accent"), tr("settings.accent_hint"), self.cmb_accent, last=True)
 
-        # Downloads, and what happens after them
+        # Downloads: how they connect, then what happens around them
         self.card_finish = after = self._section(body, tr("settings.downloads"))
+        self.card_net = after  # connection settings share the card (the page must not scroll)
         self.cmb_fragments = option_menu(after, list(self.FRAGMENT_CHOICES),
                                          lambda v: self.on_change("fragments", v), width=80, label=str)
         self.cmb_fragments.set(settings.fragments if settings.fragments in self.FRAGMENT_CHOICES else 4)
         self._setting_row(after, 1, tr("settings.fragments"), tr("settings.fragments_hint"), self.cmb_fragments)
-        self.sw_auto_paste = self._switch(after, 3, tr("settings.auto_paste"), settings.auto_paste, "auto_paste")
-        self.sw_awake = self._switch(after, 4, tr("settings.keep_awake"), settings.keep_awake, "keep_awake")
-        self.sw_history = self._switch(after, 5, tr("settings.save_history"), settings.save_history,
+        self.cmb_speed = option_menu(after, list(settings_store.SPEED_LIMITS),
+                                     lambda v: self.on_change("speed_limit", v), width=130,
+                                     label=lambda n: f"{n} MB/s" if n else tr("speed.unlimited"))
+        self.cmb_speed.set(settings.speed_limit)
+        self._inline_row(after, 3, tr("settings.speed_limit"), self.cmb_speed)
+        self.ent_proxy = ctk.CTkEntry(after, width=200, height=34, fg_color=FIELD, border_width=0,
+                                      corner_radius=FIELD_RADIUS, font=font(13),
+                                      placeholder_text="host:port")
+        if settings.proxy:
+            self.ent_proxy.insert(0, settings.proxy)
+        self.ent_proxy.bind("<Return>", lambda _e: self._save_proxy())
+        self.ent_proxy.bind("<FocusOut>", lambda _e: self._save_proxy())
+        self._saved_proxy = settings.proxy
+        self._setting_row(after, 4, tr("settings.proxy"), tr("settings.proxy_hint"), self.ent_proxy)
+        self.cmb_clipboard = option_menu(after, list(settings_store.CLIPBOARD_CHOICES),
+                                         lambda v: self.on_change("clipboard", v), width=170,
+                                         label=lambda c: tr(f"clipboard.{c}"))
+        self.cmb_clipboard.set(settings.clipboard)
+        self._inline_row(after, 6, tr("settings.clipboard"), self.cmb_clipboard)
+        self.sw_awake = self._switch(after, 7, tr("settings.keep_awake"), settings.keep_awake, "keep_awake")
+        self.sw_history = self._switch(after, 8, tr("settings.save_history"), settings.save_history,
                                        "save_history")
-        self.sw_summary = self._switch(after, 6, tr("settings.summary"), settings.show_summary, "show_summary")
-        self.sw_open = self._switch(after, 7, tr("settings.open_folder"), settings.open_folder_when_done,
+        self.sw_summary = self._switch(after, 9, tr("settings.summary"), settings.show_summary, "show_summary")
+        self.sw_open = self._switch(after, 10, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
         self._spacing[-1] = (self.sw_open, (0, 14), (0, 10))
 
@@ -849,6 +871,15 @@ class SettingsView(ctk.CTkFrame):
             parent._wraps_hints = True
             tkinter.Misc.bind(parent, "<Configure>", lambda _e: self._wrap_hints(parent), "+")
 
+    def _inline_row(self, parent, row, title, widget, last=False):
+        """A setting on one line without a hint: its name left, ``widget`` right."""
+        name = ctk.CTkLabel(parent, text=title, font=font(13, "bold"), text_color=TEXT, anchor="w",
+                            justify="left")
+        name.grid(row=row, column=0, sticky="ew", padx=(16, 8))
+        widget.grid(row=row, column=1, sticky="e", padx=(0, 16))
+        for w in (name, widget):
+            self._spacing.append((w, (0, 14 if last else 10), (0, 10 if last else 6)))
+
     def _wrap_hints(self, parent):
         """Long hints wrap at the card's width."""
         try:
@@ -864,7 +895,7 @@ class SettingsView(ctk.CTkFrame):
         if value:
             widget.select()
         widget.grid(row=row, column=0, columnspan=2, sticky="w", padx=16)
-        self._spacing.append((widget, (0, 10), (0, 6)))
+        self._spacing.append((widget, (0, 10), (0, 4)))
         return widget
 
     def _layout(self, columns):
@@ -939,6 +970,25 @@ class SettingsView(ctk.CTkFrame):
 
     def open_logs(self):
         open_path(app_setup.data_dir())
+
+    def _save_proxy(self):
+        """Save the proxy field once it holds a valid address (or is empty)."""
+        text = self.ent_proxy.get().strip()
+        try:
+            proxy = urls.proxy_url(text)
+        except ValueError:
+            self.ent_proxy.configure(border_width=2, border_color=DANGER)
+            return
+        self.ent_proxy.configure(border_width=0)
+        if proxy != text:
+            self.ent_proxy.delete(0, "end")
+            self.ent_proxy.insert(0, proxy)
+        if proxy != self._saved_proxy:
+            self._saved_proxy = proxy
+            self.on_change("proxy", proxy)
+
+    def open_extension_help(self):
+        ExtensionDialog(self.winfo_toplevel())
 
     def show_update_status(self, text):
         """``text`` is a function giving the (translated) result of the last check, or None."""
@@ -1053,6 +1103,76 @@ class HistoryView(ctk.CTkFrame):
             self.refresh()
 
 
+def extension_folder():
+    """The browser extension, copied to the data folder so its path stays the same.
+
+    The browser keeps loading an unpacked extension from the folder it was
+    loaded from; the program folder is replaced on every update, the data
+    folder is not. The copy is refreshed when the app's copy differs.
+    """
+    import filecmp
+    import shutil
+    source = resource_path("browser_extension")
+    target = os.path.join(app_setup.data_dir(), "browser-extension")
+    try:
+        same = os.path.isdir(target) and not filecmp.dircmp(source, target).diff_files and \
+            filecmp.cmp(os.path.join(source, "manifest.json"), os.path.join(target, "manifest.json"), shallow=False)
+        if not same:
+            shutil.rmtree(target, ignore_errors=True)
+            shutil.copytree(source, target)
+        return target
+    except OSError as e:
+        _log.warning("Could not copy the browser extension: %s", e)
+        return source
+
+
+class ExtensionDialog(ctk.CTkToplevel):
+    """How to add the browser extension (loaded unpacked; it is not in a store)."""
+
+    ADDRESS = "chrome://extensions"
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.title(tr("extension.title"))
+        self.configure(fg_color=BG)
+        self.transient(app)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        ctk.CTkLabel(self, text=tr("extension.title"), font=font(17, "bold"), text_color=TEXT,
+                     anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 8))
+        steps = ctk.CTkTextbox(self, font=font(13), fg_color=CARD, text_color=TEXT, wrap="word", height=220,
+                               border_width=0, corner_radius=CARD_RADIUS)
+        steps.insert("1.0", tr("extension.steps", address=self.ADDRESS) + "\n\n" + tr("extension.firefox"))
+        steps.configure(state="disabled")
+        steps.grid(row=1, column=0, sticky="nsew", padx=20)
+        self.lbl_note = ctk.CTkLabel(self, text="", font=font(12), text_color=MUTED, anchor="w")
+        self.lbl_note.grid(row=2, column=0, sticky="ew", padx=20, pady=(8, 0))
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.grid(row=3, column=0, sticky="e", padx=20, pady=(12, 18))
+        self.btn_copy = secondary_button(buttons, tr("extension.copy_address"), self.copy_address)
+        self.btn_copy.pack(side="left", padx=(0, 8))
+        self.btn_close = secondary_button(buttons, tr("extension.close"), self.destroy)
+        self.btn_close.pack(side="left", padx=(0, 8))
+        self.btn_folder = primary_button(buttons, tr("extension.open_folder"), self.open_folder)
+        self.btn_folder.pack(side="left")
+        set_window_icon(self)
+        self.after(200, lambda: set_window_icon(self))
+        fit_dialog(self, (600, 440), (440, 320))
+        self.lift()
+        self.btn_folder.focus_set()
+
+    def open_folder(self):
+        folder = extension_folder()
+        open_path(folder)
+        self.lbl_note.configure(text=folder)
+
+    def copy_address(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.ADDRESS)
+        self.lbl_note.configure(text=tr("extension.copied"))
+
+
 class UpdateDialog(ctk.CTkToplevel):
     """Offers a newer release: its notes, then download, verify and install.
 
@@ -1143,7 +1263,7 @@ def open_path(folder):
 class App(ctk.CTk):
     MIN_SIZE = (900, 700)
 
-    def __init__(self, instance=None):
+    def __init__(self, instance=None, link=None):
         super().__init__()
         # app_setup.SingleInstance held by main(); released before an update installs.
         self.instance = instance
@@ -1160,6 +1280,7 @@ class App(ctk.CTk):
 
         self.settings_path = os.path.join(app_setup.data_dir(), "settings.json")
         self.settings = settings_store.load(self.settings_path, default_download_dir())
+        logic.set_network_options(self.settings.proxy)
         ctk.set_appearance_mode(appearance_mode(self.settings.theme))
         ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
         i18n.set_language(self.settings.language)
@@ -1227,8 +1348,21 @@ class App(ctk.CTk):
         self._start_job("setup", self.run_tool_check)
         self._note_version_change()
         self._startup_calls = []  # cancelled if the window closes first
-        if self.settings.auto_paste:
+        self._clip_poll = None
+        self._clip_seen = ""
+        self._copied = []         # links offered by the clipboard banner
+        self._watch_clipboard()
+        if link:
+            self._startup_calls.append(self.after(350, lambda: self.open_link(link)))
+        elif self.settings.auto_paste:
             self._startup_calls.append(self.after(350, self.auto_paste))
+        # Links sent by the browser extension while the app runs (app_setup.send_link).
+        self.events.register(events.LINK_RECEIVED, self.open_link)
+        try:
+            self.link_server = app_setup.LinkServer(lambda url: self.events.post(events.LINK_RECEIVED, url=url))
+        except OSError as e:
+            _log.warning("Links from the browser extension cannot reach this window: %s", e)
+            self.link_server = None
         if self.settings.check_updates:
             self._startup_calls.append(self.after(1500, self.check_for_updates))
 
@@ -1247,6 +1381,16 @@ class App(ctk.CTk):
                 self.after_cancel(call)
             except Exception:
                 pass
+        for call in (getattr(self, "_clip_poll", None),):
+            if call is not None:
+                try:
+                    self.after_cancel(call)
+                except Exception:
+                    pass
+        self._clip_poll = None
+        if getattr(self, "link_server", None) is not None:
+            self.link_server.close()
+            self.link_server = None
         if self._poll_id is not None:
             try:
                 self.after_cancel(self._poll_id)
@@ -1362,6 +1506,15 @@ class App(ctk.CTk):
         self.btn_clear_queue = secondary_button(self.queue_row, "", self.clear_link_queue, height=28)
         self._live(self.btn_clear_queue, lambda: tr("queue.clear"))
         self.btn_clear_queue.pack(side="left", padx=(10, 0))
+        # A link just copied to the clipboard (Settings: clipboard "watch").
+        self.copied_row = ctk.CTkFrame(url_card, fg_color=FIELD, corner_radius=FIELD_RADIUS)
+        self.copied_row.grid_columnconfigure(0, weight=1)
+        self.lbl_copied = ctk.CTkLabel(self.copied_row, text="", font=font(13), text_color=TEXT, anchor="w")
+        self.lbl_copied.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=6)
+        self.btn_copied = primary_button(self.copied_row, "", self.use_copied, height=28)
+        self.btn_copied.grid(row=0, column=1, pady=6)
+        self.btn_copied_close = secondary_button(self.copied_row, "\u2715", self._hide_copied, width=28, height=28)
+        self.btn_copied_close.grid(row=0, column=2, padx=(6, 8), pady=6)
         self._show_media(lambda: tr("link.hint"), MUTED)
 
         # Options
@@ -1371,7 +1524,13 @@ class App(ctk.CTk):
         self._section_label(opt_card, "options.mode").grid(row=0, column=0, sticky="w", padx=(16, 12), pady=(16, 8))
         self.cmb_mode = segmented(opt_card, list(formats.MODES), self._on_mode_changed,
                                   label=lambda m: tr(MODE_KEYS[m]))
-        self.cmb_mode.grid(row=0, column=1, columnspan=3, sticky="w", pady=(16, 8))
+        self.cmb_mode.grid(row=0, column=1, columnspan=2, sticky="w", pady=(16, 8))
+        # Subtitles are saved next to videos (not in Audio Only mode); remembered in the settings.
+        self.chk_subtitles = switch(opt_card, "", self._on_subtitles_toggled)
+        self._live(self.chk_subtitles, lambda: tr("options.subtitles"))
+        if self.settings.subtitles:
+            self.chk_subtitles.select()
+        self.chk_subtitles.grid(row=0, column=3, sticky="e", padx=(8, 16), pady=(16, 8))
         self._section_label(opt_card, "options.format").grid(row=1, column=0, sticky="w", padx=(16, 12), pady=8)
         self.cmb_format = option_menu(opt_card, ["mp4"], lambda _v: self._save_settings(), width=150)
         self.cmb_format.grid(row=1, column=1, sticky="w", pady=8)
@@ -1535,7 +1694,14 @@ class App(ctk.CTk):
         if name == "theme":
             self._on_theme_changed(value)
             return
+        if name == "clipboard":
+            self.settings = self.settings.with_clipboard(value)
+            self._watch_clipboard()
+            self._save_settings()
+            return
         setattr(self.settings, name, value)
+        if name == "proxy":
+            logic.set_network_options(value)
         if name == "accent":
             recolor(self, apply_accent(value))
 
@@ -1696,8 +1862,14 @@ class App(ctk.CTk):
         self.cmb_quality.set_choices(qualities)
         if self.cmb_quality.get() not in qualities:
             self.cmb_quality.set(qualities[0])
+        self.chk_subtitles.configure(state="disabled" if mode == formats.AUDIO_ONLY else "normal")
         if save:
             self._save_settings()
+
+    def _on_subtitles_toggled(self):
+        self.settings.subtitles = bool(self.chk_subtitles.get())
+        self._save_settings()
+
     def toggle_trim(self):
         state = "normal" if self.chk_trim.get() else "disabled"
         self.ent_start.configure(state=state)
@@ -1741,6 +1913,10 @@ class App(ctk.CTk):
         try:
             text = self.clipboard_get().strip()
         except tkinter.TclError:
+            return
+        links = urls.split_links(text)
+        if len(links) > 1:
+            self.queue_links(links)
             return
         self.url_entry.delete(0, "end")
         self.url_entry.insert(0, text)
@@ -1786,6 +1962,8 @@ class App(ctk.CTk):
             widget.configure(state="normal" if queueing else state)
         for widget in (self.btn_dest, self.chk_trim, self.cmb_mode, self.cmb_format, self.cmb_quality):
             widget.configure(state=state)
+        self.chk_subtitles.configure(
+            state="disabled" if busy or self.cmb_mode.get() == formats.AUDIO_ONLY else "normal")
         trim_state = "normal" if (not busy and self.chk_trim.get()) else "disabled"
         self.ent_start.configure(state=trim_state)
         self.ent_end.configure(state=trim_state)
@@ -1877,6 +2055,12 @@ class App(ctk.CTk):
             self.set_queue([])
 
     def start_analysis_thread(self):
+        links = urls.split_links(self.url_entry.get())
+        if len(links) > 1:
+            # Several links pasted at once: each is downloaded in turn.
+            self.url_entry.delete(0, "end")
+            self.queue_links(links)
+            return
         if self._job_kind == "download":
             self.add_to_queue()
             return
@@ -1914,6 +2098,8 @@ class App(ctk.CTk):
         if status.ok:
             version = status.version.split('-')[0]
             self._set_status(lambda: tr("top.ffmpeg_ready", version=version), SUCCESS)
+            if self.link_queue:
+                self._next_in_queue()  # links that came in during the check
         else:
             self._set_status(lambda: tr("top.ffmpeg_missing"), DANGER)
             messagebox.showerror(tr("top.ffmpeg_missing"), tr("ffmpeg.body", error=status.error), parent=self)
@@ -2032,6 +2218,103 @@ class App(ctk.CTk):
         self._append_log(tr("log.queue_added", url=url))
         self._show_link_queue()
 
+    def queue_links(self, links):
+        """Download ``links`` one after another, without questions (like queued links)."""
+        self.link_queue.extend(links)
+        self._append_log(tr("log.batch", count=len(links)))
+        self._show_link_queue()
+        if not self.is_busy():
+            self._next_in_queue()
+
+    def open_link(self, url):
+        """A link from the browser extension: bring the window up and analyze it."""
+        try:
+            if self.state() == "iconic":
+                self.deiconify()
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(300, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except tkinter.TclError:
+            return
+        if self.settings_view is not None:
+            self.close_settings()
+        if self.history_view is not None:
+            self.close_history()
+        try:
+            url = urls.normalize_url(url)
+        except urls.UrlError:
+            return
+        self._append_log(tr("log.from_browser"))
+        if self.is_busy() and self._job_kind != "download":
+            self.queue_links([url])  # an analysis or the start-up check is running
+            return
+        self.url_entry.delete(0, "end")
+        self.url_entry.insert(0, url)
+        self.start_analysis_thread()
+
+    # --- Clipboard watch ----------------------------------------------------------
+
+    CLIPBOARD_POLL_MS = 1000
+
+    def _clipboard_text(self):
+        try:
+            return self.clipboard_get()
+        except tkinter.TclError:
+            return ""
+
+    def _watch_clipboard(self):
+        """Start or stop looking for copied links (Settings: clipboard)."""
+        if self._clip_poll is not None:
+            self.after_cancel(self._clip_poll)
+            self._clip_poll = None
+        if self.settings.watch_clipboard and not self._closing:
+            self._clip_seen = self._clipboard_text()  # what was copied before is not new
+            self._clip_poll = self.after(self.CLIPBOARD_POLL_MS, self._poll_clipboard)
+        else:
+            self._hide_copied()
+
+    def _poll_clipboard(self):
+        self._clip_poll = None
+        if self._closing:
+            return
+        text = self._clipboard_text()
+        if text != self._clip_seen:
+            self._clip_seen = text
+            links = urls.split_links(text) if len(text) < 100_000 else []
+            if links and links != [self.url_entry.get().strip()]:
+                self._show_copied(links)
+        self._clip_poll = self.after(self.CLIPBOARD_POLL_MS, self._poll_clipboard)
+
+    def _show_copied(self, links):
+        self._copied = links
+        if len(links) == 1:
+            link = links[0]
+            short = link if len(link) <= 60 else link[:57] + "\u2026"
+            self._live(self.lbl_copied, lambda: tr("clipboard.copied", link=short))
+        else:
+            count = len(links)
+            self._live(self.lbl_copied, lambda: tr("clipboard.copied_many", count=count))
+        self._live(self.btn_copied, lambda: tr("clipboard.download"))
+        self.copied_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 14))
+
+    def _hide_copied(self):
+        self._copied = []
+        try:
+            self.copied_row.grid_remove()
+        except (AttributeError, tkinter.TclError):
+            pass
+
+    def use_copied(self):
+        links, self._copied = self._copied, []
+        self._hide_copied()
+        if len(links) > 1:
+            self.queue_links(links)
+        elif links:
+            self.url_entry.delete(0, "end")
+            self.url_entry.insert(0, links[0])
+            self.start_analysis_thread()
+
     def clear_link_queue(self):
         if self.link_queue:
             self.link_queue = []
@@ -2097,6 +2380,8 @@ class App(ctk.CTk):
             'trim_end': self.ent_end.get() if self.chk_trim.get() else None,
             **settings_store.download_speed_options(self.settings),
         }
+        if self.settings.subtitles and opts['mode'] != formats.AUDIO_ONLY:
+            opts.update(subtitles=True, subtitle_langs=logic.subtitle_languages(i18n.current()))
         self._job_mode = opts['mode']
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
             self._live(self.btn_download, lambda: tr("action.downloading"))
@@ -2121,7 +2406,8 @@ class App(ctk.CTk):
                     continue
                 self.log(f"[{i+1}/{total}] {item['title']}")
                 self.events.post(events.ITEM_STARTED, position=i + 1, total=total, title=item['title'])
-                item_opts = dict(opts, playlist_index=item.get('index'), playlist_title=item.get('playlist'))
+                item_opts = dict(opts, playlist_index=item.get('index'), playlist_title=item.get('playlist'),
+                                 meta=item.get('meta'))
                 info = self._known_info(item['url'])
                 result = self._download_once(item, item_opts, cancel_event, info)
                 if info is not None and result.status is ItemStatus.FAILED and not (

@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Gửi video bạn đang xem, hoặc bất kỳ liên kết nào, tới ứng dụng Orbida."
+  },
+  "menuPage": {
+    "message": "Tải bằng Orbida"
+  },
+  "menuLink": {
+    "message": "Tải liên kết bằng Orbida"
+  }
+}

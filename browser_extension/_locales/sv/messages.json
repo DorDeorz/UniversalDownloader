@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Skickar videon du tittar på, eller vilken länk som helst, till Orbida-appen."
+  },
+  "menuPage": {
+    "message": "Ladda ner med Orbida"
+  },
+  "menuLink": {
+    "message": "Ladda ner länk med Orbida"
+  }
+}

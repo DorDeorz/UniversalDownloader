@@ -577,6 +577,19 @@ def test_download_speed_options_reach_yt_dlp():
     ydl = logic.base_ydl_options()
     assert ydl["concurrent_fragment_downloads"] == 6
     assert ydl["http_chunk_size"] == 10 * 1024 * 1024
+    assert "ratelimit" not in ydl
+    limited = app_settings.download_speed_options(app_settings.AppSettings(speed_limit=2))
+    assert limited["ratelimit"] == 2 * 1024 * 1024
+
+
+def test_settings_keep_only_a_valid_speed_limit_and_proxy(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text('{"speed_limit": 7, "proxy": "proxy.example", "subtitles": true}')
+    settings = app_settings.load(str(path))
+    assert (settings.speed_limit, settings.proxy, settings.subtitles) == (0, "", True)
+    path.write_text('{"speed_limit": 10, "proxy": "10.0.0.1:3128"}')
+    settings = app_settings.load(str(path))
+    assert (settings.speed_limit, settings.proxy) == (10, "http://10.0.0.1:3128")
 
 
 # --- history ------------------------------------------------------------------------

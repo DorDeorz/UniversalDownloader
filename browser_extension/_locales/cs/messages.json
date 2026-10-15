@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Pošle sledované video nebo jakýkoli odkaz do aplikace Orbida."
+  },
+  "menuPage": {
+    "message": "Stáhnout přes Orbidu"
+  },
+  "menuLink": {
+    "message": "Stáhnout odkaz přes Orbidu"
+  }
+}

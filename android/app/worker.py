@@ -129,7 +129,7 @@ class Session:
                 else:
                     self.events.post(events.ITEM_STARTED, position=position, total=total, title=item["title"])
                     item_options = dict(options, playlist_index=item.get("index"),
-                                        playlist_title=item.get("playlist"))
+                                        playlist_title=item.get("playlist"), meta=item.get("meta"))
                     result = self._download_item(item, item_options, cancel)
                 result.source = item
                 summary.add(result)

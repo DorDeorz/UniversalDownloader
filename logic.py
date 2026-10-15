@@ -9,6 +9,7 @@ from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 import filenames
 import formats
 import media_tools
+import playlist
 import spotify
 from results import ItemResult, ItemStatus, verify_output
 
@@ -69,6 +70,16 @@ def set_platform_options(options):
     _platform_options = options
 
 
+# Options the user's settings add to every YoutubeDL instance (the proxy);
+# see set_network_options.
+_network_options = {}
+
+def set_network_options(proxy=''):
+    """Send every request through ``proxy`` (a urls.proxy_url address; '' for none)."""
+    global _network_options
+    _network_options = {'proxy': proxy} if proxy else {}
+
+
 def base_ydl_options(log_callback=None):
     """Options shared by every YoutubeDL instance.
 
@@ -79,6 +90,7 @@ def base_ydl_options(log_callback=None):
     return {
         # A copy, because yt-dlp may normalise nested option dicts in place.
         **copy.deepcopy(_platform_options),
+        **_network_options,
         'logger': YtDlpLogger(log_callback),
         'noprogress': True,
         # yt-dlp colours messages when stderr is a console (as on Windows),
@@ -489,6 +501,7 @@ class DownloadManager:
         for key in SPEED_OPTIONS:
             if options.get(key):
                 ydl_opts[key] = options[key]
+        meta = options.get('meta') or {}
 
         try:
             # Phase 1: metadata and format selection, no download.
@@ -496,12 +509,18 @@ class DownloadManager:
                 with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
                     info = ydl.process_ie_result(reusable_info(info), download=False)
             else:
-                info, _clients = self._extract(url, dict(ydl_opts), log_callback)
+                target = url
+                if url.startswith(playlist.SEARCH_PREFIX) and meta.get('duration'):
+                    target = self._closest_result(url, meta['duration'], log_callback) or url
+                check_cancel()
+                info, _clients = self._extract(target, dict(ydl_opts), log_callback)
             if info is not None and info.get('_type') == 'playlist':
                 # A search (Spotify songs: "ytsearch1:...") gives a list of one result.
                 info = next(iter(info.get('entries') or []), None)
             if info is None:
                 return failed('No media information returned')
+            if meta:
+                apply_song_meta(info, meta)
             title = info.get('title') or title
             if plan.needs_audio and not formats.has_audio(info):
                 return failed('This media has no audio track')
@@ -544,6 +563,7 @@ class DownloadManager:
                 # yt-dlp (start, end) çiftleri bekler
                 ydl_opts['download_ranges'] = yt_dlp.utils.download_range_func(None, [trim_range])
                 ydl_opts['force_keyframes_at_cuts'] = True
+            selected = reusable_info(info) if options.get('subtitles') and mode != formats.AUDIO_ONLY else None
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 if plan.strip_audio:
                     ydl.add_post_processor(StripAudioPP(ydl), when='post_process')
@@ -561,7 +581,59 @@ class DownloadManager:
         problem = verify_output(path)
         if problem:
             return failed(problem)
+        if selected is not None and not is_cancelled():
+            self._download_subtitles(selected, base, options.get('subtitle_langs'), tools, log_callback)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
+
+    def _closest_result(self, url, duration, log_callback=None):
+        """The link of the search result whose length is closest to ``duration``.
+
+        ``url`` is a "ytsearch1:" search for a song (spotify.py). The first
+        few results are compared, so a music video with a long intro or a
+        live version loses to the plain song. None when the search fails.
+        """
+        query = SEARCH_CANDIDATES_PREFIX + url[len(playlist.SEARCH_PREFIX):]
+        ydl_opts = base_ydl_options(log_callback)
+        ydl_opts['extract_flat'] = 'in_playlist'
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                found = ydl.extract_info(query, download=False) or {}
+        except Exception as e:
+            _log.warning("Search for %s failed: %s", url, describe_error(e))
+            return None
+        entry = closest_by_duration(list(found.get('entries') or []), duration)
+        return playlist.entry_url(entry) if entry else None
+
+    def _download_subtitles(self, info, base, langs, tools, log_callback=None):
+        """Save the subtitles of a downloaded video next to it as .srt files.
+
+        A separate pass after the video is saved: a missing or refused
+        subtitle (YouTube often limits them) never costs the video itself.
+        """
+        langs = [f'{lang}.*' for lang in (langs or ['en'])]
+        ydl_opts = base_ydl_options(log_callback)
+        ydl_opts.update({
+            'skip_download': True,
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': langs,
+            'subtitlesformat': 'srt/vtt/best',
+            'outtmpl': filenames.escape_template(base) + '.%(ext)s',
+            'ffmpeg_location': tools.directory,
+            'postprocessors': [{'key': 'FFmpegSubtitlesConvertor', 'format': 'srt', 'when': 'before_dl'}],
+            # Subtitle problems become warnings instead of errors.
+            'ignoreerrors': True,
+        })
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                result = ydl.process_ie_result(info, download=True) or {}
+        except Exception as e:
+            result = {}
+            _log.warning("Subtitles failed: %s", describe_error(e))
+        saved = [sub for sub in (result.get('requested_subtitles') or {}).values() if sub.get('filepath')]
+        if log_callback:
+            log_callback(f"Subtitles: {len(saved)} saved" if saved else "Subtitles: none available")
+        return saved
 
 
 def _read_page(url, ydl_opts, headers=None, data=None):
@@ -579,7 +651,58 @@ def plain_http_download(info):
 
 
 # Download options a caller may pass through download_video's ``options``.
-SPEED_OPTIONS = ('concurrent_fragment_downloads', 'http_chunk_size')
+SPEED_OPTIONS = ('concurrent_fragment_downloads', 'http_chunk_size', 'ratelimit')
+
+# How many search results are compared for a song (DownloadManager._closest_result),
+# and how far (seconds) the first result's length may be off before another wins.
+SEARCH_CANDIDATES_PREFIX = 'ytsearch3:'
+CLOSE_ENOUGH_SECONDS = 15
+
+
+def subtitle_languages(language):
+    """Subtitle languages to save for an app shown in ``language``: it, then English."""
+    langs = [language or 'en', *(['no'] if language == 'nb' else []), 'en']
+    return list(dict.fromkeys(langs))
+
+
+def closest_by_duration(entries, duration):
+    """The entry to download for a song ``duration`` seconds long, or None.
+
+    The first result is kept when its length is close; otherwise the result
+    whose length is closest wins (results without a length never do).
+    """
+    entries = [e for e in entries if e and playlist.entry_url(e)]
+    if not entries:
+        return None
+    timed = [e for e in entries if isinstance(e.get('duration'), (int, float))]
+    first = entries[0]
+    if first in timed and abs(first['duration'] - duration) <= CLOSE_ENOUGH_SECONDS:
+        return first
+    if not timed:
+        return first
+    return min(timed, key=lambda e: abs(e['duration'] - duration))
+
+
+def apply_song_meta(info, meta):
+    """Put a song's names and cover (spotify.py) into the info of its YouTube video.
+
+    The file is then named "Artist - Track", its tags name the song rather
+    than the video and the cover embedded is the album's.
+    """
+    artist, track = meta.get('artist'), meta.get('track')
+    if track:
+        info['title'] = f'{artist} - {track}' if artist else track
+        info['track'] = track
+    if artist:
+        info['artist'] = artist
+        info['artists'] = [artist]
+        info['creators'] = [artist]
+    if meta.get('album'):
+        info['album'] = meta['album']
+    if meta.get('cover'):
+        info['thumbnails'] = [{'url': meta['cover'], 'id': 'cover'}]
+        info['thumbnail'] = meta['cover']
+    return info
 
 def _missing_folders(folder):
     """``folder`` and its parents that do not exist yet, outermost first."""

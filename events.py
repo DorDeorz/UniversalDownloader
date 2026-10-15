@@ -26,6 +26,7 @@ UPDATE_CHECKED = "update_checked"    # payload: release (updates.Release or None
 UPDATE_PROGRESS = "update_progress"  # payload: done, total (bytes of the installer)
 UPDATE_READY = "update_ready"        # payload: path (verified installer)
 UPDATE_FAILED = "update_failed"      # payload: error
+LINK_RECEIVED = "link_received"      # payload: url (from the browser extension)
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 

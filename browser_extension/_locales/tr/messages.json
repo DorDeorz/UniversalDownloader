@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "İzlediğin videoyu ya da herhangi bir bağlantıyı Orbida uygulamasına gönderir."
+  },
+  "menuPage": {
+    "message": "Orbida ile indir"
+  },
+  "menuLink": {
+    "message": "Bağlantıyı Orbida ile indir"
+  }
+}

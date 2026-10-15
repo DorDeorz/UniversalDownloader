@@ -1,5 +1,23 @@
 [
   {
+    "version": "1.2.0",
+    "date": "2026-10-15",
+    "en": [
+      "Spotify songs are saved as \"Artist - Song\" with Spotify's title, artist, album and album cover.",
+      "Better Spotify matches: of the first three YouTube results, the one closest in length to the song is downloaded.",
+      "Subtitles: Settings › Downloads › Subtitles saves a video's subtitles as .srt files next to it.",
+      "Several links at once: paste a list of links and tap Analyze; each one downloads in turn.",
+      "Settings › Connection: a speed limit and a proxy."
+    ],
+    "tr": [
+      "Spotify şarkıları Spotify'daki ad, sanatçı, albüm ve albüm kapağıyla \"Sanatçı - Şarkı\" olarak kaydedilir.",
+      "Daha iyi Spotify eşleşmesi: ilk üç YouTube sonucundan süresi şarkıya en yakın olanı indirilir.",
+      "Altyazı: Ayarlar › İndirmeler › Altyazı, videonun altyazısını yanına .srt dosyası olarak kaydeder.",
+      "Birden çok bağlantı: bir bağlantı listesi yapıştırıp Analiz et'e dokunun; her biri sırayla iner.",
+      "Ayarlar › Bağlantı: hız sınırı ve proxy."
+    ]
+  },
+  {
     "version": "1.1.1",
     "date": "2026-10-15",
     "en": [

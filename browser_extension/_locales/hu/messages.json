@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Elküldi a nézett videót vagy bármely linket az Orbida alkalmazásnak."
+  },
+  "menuPage": {
+    "message": "Letöltés az Orbidával"
+  },
+  "menuLink": {
+    "message": "Link letöltése az Orbidával"
+  }
+}

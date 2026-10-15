@@ -37,6 +37,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.slider import MDSlider, MDSliderHandle
 from kivymd.uix.snackbar import MDSnackbar, MDSnackbarText
+from kivymd.uix.textfield import MDTextField, MDTextFieldHelperText, MDTextFieldHintText
 
 import android_env
 import app_settings
@@ -66,7 +67,7 @@ if android_env.on_android():
     md_patches.disable_hover()
 
 APP_NAME = "Orbida"    # the Android app's name; keep in step with title in android/buildozer.spec
-APP_VERSION = "1.1.1"  # keep in step with android/buildozer.spec
+APP_VERSION = "1.2.0"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
@@ -718,6 +719,10 @@ class UniversalDownloaderApp(MDApp):
             text = android_env.clipboard_text().strip()
         except Exception:
             text = ""
+        links = urls.split_links(text)
+        if len(links) > 1:  # several links: Analyze queues them all
+            self.ids.url.text = " ".join(links)
+            return
         link = android_env.find_link(text)
         if link and link != self.ids.url.text.strip():
             self.ids.url.text = link
@@ -757,6 +762,10 @@ class UniversalDownloaderApp(MDApp):
             self._show_media(self.tr("link.changed"), "", "link-variant-off")
 
     def analyze(self):
+        links = urls.split_links(self.ids.url.text)
+        if len(links) > 1:
+            self.queue_links(links)
+            return
         if self.job == "download":
             self.add_to_queue()
             return
@@ -864,6 +873,8 @@ class UniversalDownloaderApp(MDApp):
                 return
         options = worker.build_options(MODES[self.mode], self.download_dir, fmt=self.fmt[self.mode],
                                        quality=self.quality[self.mode], trim_start=start, trim_end=end)
+        if self.settings.subtitles:
+            options.update(subtitles=True, subtitle_langs=logic.subtitle_languages(i18n.current()))
         self._set_platform_options()
         if self.session.download(dataclasses.replace(self.analysis, items=list(self.chosen)), options):
             self.job = "download"
@@ -977,6 +988,7 @@ class UniversalDownloaderApp(MDApp):
         if cookies:
             options["cookiefile"] = cookies
         logic.set_platform_options(options)
+        logic.set_network_options(self.settings.proxy)
 
     def _keep_awake(self, on):
         if not android_env.on_android():
@@ -1152,6 +1164,16 @@ class UniversalDownloaderApp(MDApp):
         self.log(self.tr("log.queue_added", url=url))
         self.snack(self.tr("log.queue_added", url=url))
         self._show_link_queue()
+
+    def queue_links(self, links):
+        """Download ``links`` one after another, without questions (several pasted at once)."""
+        self.link_queue.extend(links)
+        self.ids.url.text = ""
+        self.log(self.tr("log.batch", count=len(links)))
+        self.snack(self.tr("log.batch", count=len(links)))
+        self._show_link_queue()
+        if self.job is None:
+            self._next_in_queue()
 
     def clear_link_queue(self):
         if self.link_queue:
@@ -1365,7 +1387,17 @@ class UniversalDownloaderApp(MDApp):
         choice("equalizer-outline", t("settings.audio_quality"), audio_q, s.audio_quality,
                lambda v: self._change_default(audio_quality=v))
         self._add_fragments_row(box)
+        switch("subtitles-outline", t("settings.subtitles"), s.subtitles,
+               lambda v: self._save_settings(subtitles=v))
         info("folder-download-outline", t("settings.folder"), self.download_dir or "…")
+
+        # Connection
+        section(t("settings.connection"))
+        limits = [(n, f"{n} MB/s" if n else t("speed.unlimited")) for n in app_settings.SPEED_LIMITS]
+        choice("speedometer", t("settings.speed_limit"), limits, s.speed_limit,
+               lambda v: self._change_network(speed_limit=v))
+        info("server-network", t("settings.proxy"), s.proxy or t("settings.proxy_none"),
+             on_release=self.edit_proxy)
 
         # Behaviour
         section(t("settings.behaviour"))
@@ -1556,6 +1588,28 @@ class UniversalDownloaderApp(MDApp):
         return (f"yt-dlp {c.get('yt-dlp')} · FFmpeg {c.get('ffmpeg') or no}",
                 f"{self.t('home.tiktok')}: {yes if c.get('tiktok') else no} · "
                 f"{self.t('home.trim')}: {yes if c.get('https') else no}")
+
+    def _change_network(self, **changes):
+        self._save_settings(**changes)
+        self._set_platform_options()
+
+    def edit_proxy(self):
+        field = MDTextField(MDTextFieldHintText(text="host:port"),
+                            MDTextFieldHelperText(text=self.t("settings.proxy_hint"), mode="persistent"),
+                            text=self.settings.proxy, multiline=False)
+
+        def save():
+            try:
+                proxy = urls.proxy_url(field.text)
+            except ValueError:
+                self.snack(self.t("settings.proxy_invalid"))
+                return
+            self._change_network(proxy=proxy)
+            self._refresh("settings")
+
+        box = MDBoxLayout(field, orientation="vertical", adaptive_height=True, padding=(0, dp(8)))
+        self._dialog(self.t("settings.proxy"), content=box,
+                     buttons=[(self.t("common.cancel"), None), (self.t("common.ok"), save)])
 
     def _change_save_history(self, value):
         self._save_settings(save_history=value)

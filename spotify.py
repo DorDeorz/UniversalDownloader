@@ -7,11 +7,17 @@ not downloaded from Spotify. Instead the public embed page of the link
 title and artists of each song, and each song becomes a YouTube search
 for "<artists> - <title>" whose first result is downloaded.
 
-The embed page lists at most 100 songs of a playlist. The rest are read
-the way Spotify's own web player reads them: its GraphQL endpoint
-("pathfinder"), called with the anonymous token the embed page carries and
-the query id found in the web player's script. If that fails, the first 100
-songs are still returned, with ``partial`` set.
+The embed page lists at most 100 songs of a playlist, without their
+albums and covers. Playlists are therefore read the way Spotify's own web
+player reads them: its GraphQL endpoint ("pathfinder"), called with the
+anonymous token the embed page carries and the query id found in the web
+player's script. If that fails, the embed page's songs are still returned,
+with ``partial`` set when it had to stop at 100.
+
+Each song carries ``meta`` (artist, track, album, cover, duration): the
+download writes Spotify's names and cover into the file instead of the
+YouTube video's, and picks the YouTube result whose length is closest to the
+song's (logic.DownloadManager).
 """
 
 import json
@@ -109,15 +115,34 @@ def _seconds(item):
     return duration / 1000 if isinstance(duration, (int, float)) and duration > 0 else None
 
 
-def _song(item):
+def cover_url(node):
+    """The largest cover image of an embed or pathfinder item, or None."""
+    node = node or {}
+    sources = ((node.get("coverArt") or {}).get("sources")
+               or (node.get("visualIdentity") or {}).get("image")
+               or node.get("images") or [])
+    sources = [s for s in sources if isinstance(s, dict) and str(s.get("url", "")).startswith("https://")]
+    if not sources:
+        return None
+    return max(sources, key=lambda s: (s.get("width") or s.get("maxWidth") or 0))["url"]
+
+
+def _song(item, album=None, cover=None):
     title = (item.get("title") or item.get("name") or "").strip()
     if not title:
         return None
     artists = _artists(item)
+    duration = _seconds(item)
+    own_album, own_cover = item.get("album"), item.get("cover")  # set by songs_from_pathfinder
+    meta = {"artist": artists or None, "track": title,
+            "album": own_album if isinstance(own_album, str) and own_album else album,
+            "cover": own_cover if isinstance(own_cover, str) and own_cover else cover,
+            "duration": duration}
     return {
         "title": f"{artists} - {title}" if artists else title,
         "url": search_query(artists, title),
-        "duration": _seconds(item),
+        "duration": duration,
+        "meta": {k: v for k, v in meta.items() if v},
     }
 
 
@@ -125,13 +150,18 @@ def info_from_embed(html, kind):
     """yt-dlp style info (one song, or a playlist of songs) from an embed page."""
     entity = _entity(html)
     name = (entity.get("name") or entity.get("title") or "Spotify").strip()
+    cover = cover_url(entity)
     if kind == "track":
-        song = _song(entity)
+        song = _song(entity, cover=cover)
         if song is None:
             raise SpotifyError("Spotify did not say which song this is")
         return {"title": song["title"], "webpage_url": song["url"], "duration": song["duration"],
-                "extractor_key": "Spotify"}
-    entries = [song for song in map(_song, entity.get("trackList") or []) if song]
+                "meta": song["meta"], "extractor_key": "Spotify"}
+    # An album's songs share its name and cover; a playlist's embed page
+    # names neither (the pathfinder answer does, see fetch_info).
+    album = name if kind == "album" else None
+    entries = [song for song in (_song(item, album, cover if kind == "album" else None)
+                                 for item in entity.get("trackList") or []) if song]
     if not entries:
         raise SpotifyError("This Spotify list has no songs that can be shown")
     return {"_type": "playlist", "title": name, "entries": entries, "extractor_key": "Spotify"}
@@ -177,8 +207,10 @@ def songs_from_pathfinder(data):
             artists = [{"name": a["profile"]["name"]}
                        for a in ((track.get("albumOfTrack") or {}).get("artists") or {}).get("items") or []
                        if (a.get("profile") or {}).get("name")]
+        album = track.get("albumOfTrack") or {}
         items.append({"title": track["name"], "artists": artists,
-                      "duration": (track.get("trackDuration") or {}).get("totalMilliseconds")})
+                      "duration": (track.get("trackDuration") or {}).get("totalMilliseconds"),
+                      "album": album.get("name"), "cover": cover_url(album)})
     return items, content.get("totalCount")
 
 
@@ -222,13 +254,16 @@ def fetch_info(url, open_url):
     kind, item_id = link
     _final, html = open_url(embed_url(kind, item_id))
     info = info_from_embed(html, kind)
-    if kind == "playlist" and len(info["entries"]) >= EMBED_LIMIT:
+    if kind == "playlist":
         try:
             token = access_token(html)
             if not token:
                 raise SpotifyError("no access token in the embed page")
-            more = [song for song in map(_song, rest_of_playlist(item_id, token, open_url, EMBED_LIMIT)) if song]
-            info["entries"].extend(more)
-        except Exception as e:  # the first 100 songs are still worth downloading
-            info["partial"] = str(e) or type(e).__name__
+            songs = [song for song in map(_song, rest_of_playlist(item_id, token, open_url, 0)) if song]
+            if not songs:
+                raise SpotifyError("Spotify returned no songs for the playlist")
+            info["entries"] = songs
+        except Exception as e:  # the embed page's songs are still worth downloading
+            if len(info["entries"]) >= EMBED_LIMIT:
+                info["partial"] = str(e) or type(e).__name__
     return info

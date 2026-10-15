@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "視聴中の動画や任意のリンクを Orbida アプリに送ります。"
+  },
+  "menuPage": {
+    "message": "Orbida でダウンロード"
+  },
+  "menuLink": {
+    "message": "リンクを Orbida でダウンロード"
+  }
+}

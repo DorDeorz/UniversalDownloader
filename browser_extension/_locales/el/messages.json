@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Orbida"
+  },
+  "description": {
+    "message": "Στέλνει το βίντεο που βλέπετε, ή οποιονδήποτε σύνδεσμο, στην εφαρμογή Orbida."
+  },
+  "menuPage": {
+    "message": "Λήψη με το Orbida"
+  },
+  "menuLink": {
+    "message": "Λήψη συνδέσμου με το Orbida"
+  }
+}

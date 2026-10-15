@@ -307,6 +307,8 @@ def app(monkeypatch, tmp_path):
 @needs_display
 def test_several_pasted_links_download_one_after_another(app):
     from ui_helpers import pump
+    pump(app, timeout=0.5)  # past the paste at start, which reads whatever the clipboard holds
+    app.url_entry.delete(0, "end")
     app.url_entry.insert(0, "https://example.com/one https://example.com/two\nhttps://example.com/three")
     app.start_analysis_thread()
     assert app.url_entry.get() == "https://example.com/one"  # the first is under way

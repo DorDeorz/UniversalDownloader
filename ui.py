@@ -1893,8 +1893,8 @@ class App(ctk.CTk):
             # The field is disabled until the FFmpeg check at start is done.
             self._startup_calls.append(self.after(200, self.auto_paste))
             return
-        if self.is_busy() or self.url_entry.get().strip():
-            return
+        if self.is_busy() or self.url_entry.get().strip() or self.link_queue or self._from_queue:
+            return  # never mix a pasted link into queued work
         try:
             text = self.clipboard_get().strip()
         except tkinter.TclError:

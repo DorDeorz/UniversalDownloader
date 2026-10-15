@@ -45,3 +45,9 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q xvfb ffmpeg
           xvfb-run -a python -m pytest
 
+
+      # TEMPORARY probe (removed before merge): how to read Spotify playlists past 100 songs.
+      - name: Spotify live probe
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: python spotify_probe_tmp.py

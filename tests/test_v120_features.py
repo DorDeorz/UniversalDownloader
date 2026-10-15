@@ -375,3 +375,40 @@ def test_the_extension_version_follows_the_app():
     from version import __version__
     with open(os.path.join(EXTENSION, "manifest.json"), encoding="utf-8") as f:
         assert json.load(f)["version"] == __version__
+
+
+def test_a_page_cut_off_midway_is_read_again(monkeypatch):
+    from http.client import IncompleteRead
+
+    class Response:
+        url = "https://open.spotify.com/embed/track/x"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            calls.append(1)
+            if len(calls) == 1:
+                raise IncompleteRead(b"x" * 17388)
+            return b"<html>ok</html>"
+
+    class YDL:
+        def __init__(self, opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def urlopen(self, request):
+            return Response()
+
+    calls = []
+    monkeypatch.setattr(logic.yt_dlp, "YoutubeDL", YDL)
+    assert logic._read_page("https://open.spotify.com/embed/track/x", {}) == (Response.url, "<html>ok</html>")
+    assert len(calls) == 2

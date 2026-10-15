@@ -636,12 +636,29 @@ class DownloadManager:
         return saved
 
 
+PAGE_ATTEMPTS = 3
+
+
 def _read_page(url, ydl_opts, headers=None, data=None):
-    """``(final url, text)`` of a web page, fetched with yt-dlp's networking (POST with ``data``)."""
+    """``(final url, text)`` of a web page, fetched with yt-dlp's networking (POST with ``data``).
+
+    A connection cut off mid-page ("17388 bytes read") is tried again; an
+    HTTP error answer is not.
+    """
+    from http.client import IncompleteRead as HttpIncompleteRead
     from yt_dlp.networking import Request
-    with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
-        with ydl.urlopen(Request(url, data=data, headers=headers or {})) as response:
-            return response.url, response.read().decode('utf-8', 'replace')
+    from yt_dlp.networking.exceptions import HTTPError, IncompleteRead, TransportError
+    for attempt in range(PAGE_ATTEMPTS):
+        try:
+            with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
+                with ydl.urlopen(Request(url, data=data, headers=headers or {})) as response:
+                    return response.url, response.read().decode('utf-8', 'replace')
+        except HTTPError:
+            raise
+        except (IncompleteRead, HttpIncompleteRead, TransportError) as e:
+            if attempt + 1 == PAGE_ATTEMPTS:
+                raise
+            _log.warning("Reading %s failed (%s); trying again", url, describe_error(e))
 
 
 def plain_http_download(info):

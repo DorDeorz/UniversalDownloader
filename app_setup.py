@@ -210,8 +210,9 @@ class LinkServer:
             pass
         try:
             with open(self.path, encoding="utf-8") as f:
-                if json.load(f).get("token") == self.token:
-                    os.remove(self.path)
+                ours = json.load(f).get("token") == self.token
+            if ours:  # removed after closing: Windows cannot delete an open file
+                os.remove(self.path)
         except (OSError, ValueError):
             pass
 

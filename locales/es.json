@@ -192,5 +192,6 @@
  "log.queue_next": "Siguiente en la cola: {url}",
  "log.queue_cleared": "Cola vaciada",
  "log.queue_nothing_new": "Nada nuevo para descargar en {title}",
- "theme.Black": "Negro"
+ "theme.Black": "Negro",
+ "log.spotify": "Spotify: cada canción se busca en YouTube y se descarga desde allí como audio"
 }

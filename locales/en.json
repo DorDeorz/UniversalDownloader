@@ -192,5 +192,6 @@
  "log.queue_next": "Next from the queue: {url}",
  "log.queue_cleared": "Queue cleared",
  "log.queue_nothing_new": "Nothing new to download in {title}",
- "theme.Black": "Black"
+ "theme.Black": "Black",
+ "log.spotify": "Spotify: each song is looked up on YouTube and downloaded from there as audio"
 }

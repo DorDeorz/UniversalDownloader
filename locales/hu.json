@@ -192,5 +192,6 @@
  "log.queue_next": "Következő a sorból: {url}",
  "log.queue_cleared": "Sor törölve",
  "log.queue_nothing_new": "Nincs új letöltenivaló itt: {title}",
- "theme.Black": "Fekete"
+ "theme.Black": "Fekete",
+ "log.spotify": "Spotify: minden dalt a YouTube-on keres meg, és onnan tölti le hangként"
 }

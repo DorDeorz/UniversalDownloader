@@ -192,5 +192,6 @@
  "log.queue_next": "キューの次: {url}",
  "log.queue_cleared": "キューをクリアしました",
  "log.queue_nothing_new": "{title} に新しくダウンロードするものはありません",
- "theme.Black": "ブラック"
+ "theme.Black": "ブラック",
+ "log.spotify": "Spotify: 各曲を YouTube で検索し、そこから音声としてダウンロードします"
 }

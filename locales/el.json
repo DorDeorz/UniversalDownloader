@@ -192,5 +192,6 @@
  "log.queue_next": "Επόμενο από την ουρά: {url}",
  "log.queue_cleared": "Η ουρά εκκαθαρίστηκε",
  "log.queue_nothing_new": "Τίποτα νέο για λήψη στο {title}",
- "theme.Black": "Μαύρο"
+ "theme.Black": "Μαύρο",
+ "log.spotify": "Spotify: κάθε τραγούδι αναζητείται στο YouTube και κατεβαίνει από εκεί ως ήχος"
 }

@@ -192,5 +192,6 @@
  "log.queue_next": "Suivant dans la file : {url}",
  "log.queue_cleared": "File vidée",
  "log.queue_nothing_new": "Rien de nouveau à télécharger dans {title}",
- "theme.Black": "Noir"
+ "theme.Black": "Noir",
+ "log.spotify": "Spotify : chaque titre est recherché sur YouTube et téléchargé depuis YouTube en audio"
 }

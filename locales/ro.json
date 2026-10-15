@@ -192,5 +192,6 @@
  "log.queue_next": "Următorul din coadă: {url}",
  "log.queue_cleared": "Coada a fost golită",
  "log.queue_nothing_new": "Nimic nou de descărcat în {title}",
- "theme.Black": "Negru"
+ "theme.Black": "Negru",
+ "log.spotify": "Spotify: fiecare melodie este căutată pe YouTube și descărcată de acolo ca audio"
 }

@@ -192,5 +192,6 @@
  "log.queue_next": "队列中的下一个：{url}",
  "log.queue_cleared": "队列已清空",
  "log.queue_nothing_new": "{title} 中没有新的可下载内容",
- "theme.Black": "纯黑"
+ "theme.Black": "纯黑",
+ "log.spotify": "Spotify：每首歌都会在 YouTube 上搜索，并以音频形式从那里下载"
 }

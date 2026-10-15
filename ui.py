@@ -1949,6 +1949,10 @@ class App(ctk.CTk):
         for item in analysis.skipped:
             self._append_log(tr("log.skipped_entry", title=item.title, reason=i18n.tr_message(item.skip_reason)))
         from_queue, self._from_queue = self._from_queue, False
+        if playlist.found_by_search(analysis) and self.cmb_mode.get() != formats.AUDIO_ONLY:
+            # Spotify links are songs: download them as audio (the user can switch back).
+            self._apply_mode(formats.AUDIO_ONLY)
+            self._append_log(tr("log.spotify"))
         if not analysis.items:
             message = tr("link.nothing")
             if analysis.skipped:

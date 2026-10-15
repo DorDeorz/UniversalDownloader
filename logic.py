@@ -9,6 +9,7 @@ from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 import filenames
 import formats
 import media_tools
+import spotify
 from results import ItemResult, ItemStatus, verify_output
 
 _log = logging.getLogger(__name__)
@@ -359,6 +360,12 @@ class DownloadManager:
         Hata olursa None döndürmez, 'error' ve 'error_type' anahtarları olan bir sözlük döndürür.
         """
         ydl_opts = base_ydl_options(log_callback)
+        try:
+            info = spotify.fetch_info(url, lambda page: _read_page(page, ydl_opts))
+        except Exception as e:
+            return {'error': describe_error(e), 'error_type': type(e).__name__}
+        if info is not None:  # a Spotify song or list: songs to search for on YouTube
+            return info
         ydl_opts['extract_flat'] = True
         # Playlist analysis tolerates individual unavailable entries; yt-dlp
         # still reports them through the logger, so they are not silent.
@@ -484,6 +491,9 @@ class DownloadManager:
                     info = ydl.process_ie_result(reusable_info(info), download=False)
             else:
                 info, _clients = self._extract(url, dict(ydl_opts), log_callback)
+            if info is not None and info.get('_type') == 'playlist':
+                # A search (Spotify songs: "ytsearch1:...") gives a list of one result.
+                info = next(iter(info.get('entries') or []), None)
             if info is None:
                 return failed('No media information returned')
             title = info.get('title') or title
@@ -546,6 +556,13 @@ class DownloadManager:
         if problem:
             return failed(problem)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
+
+
+def _read_page(url, ydl_opts):
+    """``(final url, text)`` of a web page, fetched with yt-dlp's networking."""
+    with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
+        with ydl.urlopen(url) as response:
+            return response.url, response.read().decode('utf-8', 'replace')
 
 
 def plain_http_download(info):

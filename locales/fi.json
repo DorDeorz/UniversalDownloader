@@ -192,5 +192,6 @@
  "log.queue_next": "Seuraava jonosta: {url}",
  "log.queue_cleared": "Jono tyhjennetty",
  "log.queue_nothing_new": "Kohteessa {title} ei ole uutta ladattavaa",
- "theme.Black": "Musta"
+ "theme.Black": "Musta",
+ "log.spotify": "Spotify: jokainen kappale haetaan YouTubesta ja ladataan sieltä äänenä"
 }

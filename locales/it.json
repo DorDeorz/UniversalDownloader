@@ -192,5 +192,6 @@
  "log.queue_next": "Prossimo nella coda: {url}",
  "log.queue_cleared": "Coda svuotata",
  "log.queue_nothing_new": "Niente di nuovo da scaricare in {title}",
- "theme.Black": "Nero"
+ "theme.Black": "Nero",
+ "log.spotify": "Spotify: ogni brano viene cercato su YouTube e scaricato da lì come audio"
 }

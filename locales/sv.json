@@ -192,5 +192,6 @@
  "log.queue_next": "Nästa från kön: {url}",
  "log.queue_cleared": "Kön är tömd",
  "log.queue_nothing_new": "Inget nytt att hämta i {title}",
- "theme.Black": "Svart"
+ "theme.Black": "Svart",
+ "log.spotify": "Spotify: varje låt söks upp på YouTube och laddas ner därifrån som ljud"
 }

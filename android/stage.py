@@ -27,6 +27,7 @@ SHARED_MODULES = (
     "media_tools.py",
     "playlist.py",
     "results.py",
+    "spotify.py",
     "urls.py",
     "utils.py",
     "version.py",

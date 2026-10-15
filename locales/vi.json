@@ -192,5 +192,6 @@
  "log.queue_next": "Tiếp theo trong hàng đợi: {url}",
  "log.queue_cleared": "Đã xóa hàng đợi",
  "log.queue_nothing_new": "Không có gì mới để tải trong {title}",
- "theme.Black": "Đen"
+ "theme.Black": "Đen",
+ "log.spotify": "Spotify: mỗi bài hát được tìm trên YouTube và tải về từ đó dưới dạng âm thanh"
 }

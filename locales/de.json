@@ -192,5 +192,6 @@
  "log.queue_next": "Als Nächstes aus der Warteschlange: {url}",
  "log.queue_cleared": "Warteschlange geleert",
  "log.queue_nothing_new": "Nichts Neues zum Herunterladen in {title}",
- "theme.Black": "Schwarz"
+ "theme.Black": "Schwarz",
+ "log.spotify": "Spotify: Jeder Song wird auf YouTube gesucht und von dort als Audio geladen"
 }

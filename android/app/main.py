@@ -997,6 +997,11 @@ class UniversalDownloaderApp(MDApp):
         before = {id(item) for item in playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries])
                   } if analysis.is_playlist else set()
         self.chosen = [item for item in analysis.items if id(item) not in before]
+        if playlist.found_by_search(analysis) and self.mode != "audio":
+            # Spotify links are songs: download them as audio (the user can switch back).
+            self.mode = "audio"
+            self._show_mode()
+            self.log(self.tr("log.spotify"))
         _show(self.ids.btn_pick, analysis.is_playlist and bool(analysis.items))
         self._show_chosen()
         if analysis.is_playlist:

@@ -192,5 +192,6 @@
  "log.queue_next": "Следващ от опашката: {url}",
  "log.queue_cleared": "Опашката е изчистена",
  "log.queue_nothing_new": "Няма нищо ново за изтегляне в {title}",
- "theme.Black": "Черна"
+ "theme.Black": "Черна",
+ "log.spotify": "Spotify: всяка песен се търси в YouTube и се изтегля оттам като аудио"
 }

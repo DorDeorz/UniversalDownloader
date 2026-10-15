@@ -192,5 +192,6 @@
  "log.queue_next": "Næste fra køen: {url}",
  "log.queue_cleared": "Køen er ryddet",
  "log.queue_nothing_new": "Intet nyt at hente i {title}",
- "theme.Black": "Sort"
+ "theme.Black": "Sort",
+ "log.spotify": "Spotify: hver sang søges frem på YouTube og hentes derfra som lyd"
 }

@@ -192,5 +192,6 @@
  "log.queue_next": "Następny z kolejki: {url}",
  "log.queue_cleared": "Kolejka wyczyszczona",
  "log.queue_nothing_new": "Nic nowego do pobrania w {title}",
- "theme.Black": "Czarny"
+ "theme.Black": "Czarny",
+ "log.spotify": "Spotify: każdy utwór jest wyszukiwany w YouTube i stamtąd pobierany jako dźwięk"
 }

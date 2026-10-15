@@ -192,5 +192,6 @@
  "log.queue_next": "Další z fronty: {url}",
  "log.queue_cleared": "Fronta vymazána",
  "log.queue_nothing_new": "V {title} není nic nového ke stažení",
- "theme.Black": "Černá"
+ "theme.Black": "Černá",
+ "log.spotify": "Spotify: každá skladba se vyhledá na YouTube a stáhne odtamtud jako zvuk"
 }

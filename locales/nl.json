@@ -192,5 +192,6 @@
  "log.queue_next": "Volgende uit de wachtrij: {url}",
  "log.queue_cleared": "Wachtrij geleegd",
  "log.queue_nothing_new": "Niets nieuws om te downloaden in {title}",
- "theme.Black": "Zwart"
+ "theme.Black": "Zwart",
+ "log.spotify": "Spotify: elk nummer wordt op YouTube gezocht en daarvandaan als audio gedownload"
 }

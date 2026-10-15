@@ -192,5 +192,6 @@
  "log.queue_next": "Наступний із черги: {url}",
  "log.queue_cleared": "Чергу очищено",
  "log.queue_nothing_new": "У {title} немає нічого нового для завантаження",
- "theme.Black": "Чорна"
+ "theme.Black": "Чорна",
+ "log.spotify": "Spotify: кожну пісню шукають на YouTube і завантажують звідти як аудіо"
 }

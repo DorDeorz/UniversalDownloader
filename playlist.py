@@ -9,6 +9,9 @@ in the playlist so file names can follow the playlist order (#36).
 from dataclasses import dataclass, field
 from urllib.parse import parse_qs, urlsplit
 
+# Items whose "link" is a yt-dlp search: songs from Spotify (spotify.py).
+SEARCH_PREFIX = "ytsearch1:"
+
 # yt-dlp's 'availability' values that mean the entry cannot be downloaded
 # without an account or at all.
 _BLOCKED_AVAILABILITY = {
@@ -61,7 +64,7 @@ def entry_url(entry):
     """Best URL for a flat entry, or None."""
     for key in ("webpage_url", "original_url", "url"):
         value = entry.get(key)
-        if isinstance(value, str) and value.startswith(("http://", "https://")):
+        if isinstance(value, str) and value.startswith(("http://", "https://", SEARCH_PREFIX)):
             return value
     # YouTube flat entries sometimes carry only the video id.
     if entry.get("id") and (entry.get("ie_key") == "Youtube" or entry.get("extractor_key") == "Youtube"):
@@ -122,6 +125,8 @@ def url_key(url):
     in extra parameters (list=, t=, si=), so they are reduced to the video
     id. Other links lose their scheme, "www." and a trailing slash.
     """
+    if (url or "").startswith(SEARCH_PREFIX):  # a song found by search (Spotify)
+        return url.lower()
     parts = urlsplit(url or "")
     host = (parts.hostname or "").lower()
     for prefix in ("www.", "m.", "music."):
@@ -138,6 +143,11 @@ def url_key(url):
     if host == "youtu.be" and path:
         return "youtube:" + path.lstrip("/").split("/")[0]
     return f"{host}{path}" + (f"?{parts.query}" if parts.query else "")
+
+
+def found_by_search(analysis):
+    """True when every item is a song to search for (a Spotify link)."""
+    return bool(analysis.items) and all(item.url.startswith(SEARCH_PREFIX) for item in analysis.items)
 
 
 def downloaded_before(items, urls):

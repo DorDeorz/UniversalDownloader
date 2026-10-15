@@ -192,5 +192,6 @@
  "log.queue_next": "Neste fra køen: {url}",
  "log.queue_cleared": "Køen er tømt",
  "log.queue_nothing_new": "Ingenting nytt å laste ned i {title}",
- "theme.Black": "Svart"
+ "theme.Black": "Svart",
+ "log.spotify": "Spotify: hver sang søkes opp på YouTube og lastes ned derfra som lyd"
 }

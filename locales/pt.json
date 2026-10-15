@@ -192,5 +192,6 @@
  "log.queue_next": "Próximo da fila: {url}",
  "log.queue_cleared": "Fila limpa",
  "log.queue_nothing_new": "Nada novo para baixar em {title}",
- "theme.Black": "Preto"
+ "theme.Black": "Preto",
+ "log.spotify": "Spotify: cada música é procurada no YouTube e baixada de lá como áudio"
 }

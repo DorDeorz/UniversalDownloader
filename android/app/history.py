@@ -63,6 +63,27 @@ class History:
         self.entries = []
         self.save()
 
+    def recent(self, days=7, now=None):
+        """(files, bytes) downloaded in the last ``days`` days whose files are still there."""
+        since = (time.time() if now is None else now) - days * 86400
+        files = size = 0
+        for entry in self.entries:
+            if entry.time < since:
+                continue
+            try:
+                size += os.path.getsize(entry.path)
+            except OSError:
+                continue
+            files += 1
+        return files, size
+
     def existing(self):
         """Entries whose file is still on the device."""
         return [e for e in self.entries if os.path.exists(e.path)]
+
+
+def format_size(size):
+    """Bytes as a short text: 0 MB, 820 MB, 1.4 GB."""
+    if size >= 1000 ** 3:
+        return f"{size / 1000 ** 3:.1f} GB"
+    return f"{size / 1000 ** 2:.0f} MB"

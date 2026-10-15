@@ -1136,3 +1136,26 @@ def test_navigation_has_download_as_the_round_middle_tab():
     assert bar.index("main: True") > bar.index('name: "home"')
     main = open(os.path.join(ROOT, "android", "app", "main.py"), encoding="utf-8").read()
     assert 'order = ["history", "home", "settings"]' in main  # slides go the way the tabs are laid out
+
+
+def test_recent_counts_files_still_there_from_the_last_week(tmp_path):
+    import history
+    log = history.History(str(tmp_path / "history.json"))
+    now = 1_760_000_000
+    for name, size, age_days in (("new.mp4", 3_000_000, 1), ("old.mp4", 5_000_000, 9), ("gone.mp3", 0, 2),
+                                 ("song.mp3", 2_000_000, 6.5)):
+        path = tmp_path / name
+        if name != "gone.mp3":
+            path.write_bytes(b"x" * size)
+        log.add(name, str(path), now=now - age_days * 86400)
+    assert log.recent(7, now=now) == (2, 5_000_000)
+    assert history.format_size(0) == "0 MB"
+    assert history.format_size(5_000_000) == "5 MB"
+    assert history.format_size(1_400_000_000) == "1.4 GB"
+
+
+def test_pure_black_is_off_by_default_and_saved(tmp_path):
+    path = str(tmp_path / "settings.json")
+    assert app_settings.load(path).pure_black is False
+    app_settings.save(path, app_settings.AppSettings(pure_black=True))
+    assert app_settings.load(path).pure_black is True

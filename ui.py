@@ -1,4 +1,6 @@
+import functools
 import logging
+import math
 import os
 import subprocess
 import sys
@@ -33,23 +35,29 @@ ctk.set_default_color_theme("blue")
 
 # Design tokens: (light, dark) pairs, the CustomTkinter convention. Text
 # colours keep at least 4.5:1 contrast on the backgrounds they are used on.
+# The surfaces, shapes and type follow the FitWren step counter app's
+# Material 3 look: warm neutral surfaces, borderless filled cards with large
+# corners, pill-shaped buttons and a progress ring.
 ACCENT = ("#5b5bd6", "#5f5ae6")
 ACCENT_HOVER = ("#4848c2", "#4d48d4")
 ACCENT_DISABLED = ("#b4b4ea", "#3a3970")
 ON_ACCENT = "#ffffff"
 ON_ACCENT_DISABLED = ("#f1f1fc", "#8e8cc0")
-BG = ("#f3f4f8", "#12131c")
-TOPBAR = ("#ffffff", "#181926")
-CARD = ("#ffffff", "#1e2030")
-CARD_BORDER = ("#e1e3ec", "#2a2d42")
-FIELD = ("#f5f6fa", "#262939")
-MUTED = ("#6b6f80", "#9aa0b4")
-TEXT = ("#1b1d29", "#eceef6")
-SECONDARY = ("#e4e5ef", "#2c2f44")
-SECONDARY_HOVER = ("#d6d8e6", "#363a52")
-DANGER = ("#c53b3b", "#ef5b5b")
-SUCCESS = ("#1d7a50", "#3dd68c")
-WARNING = ("#946214", "#f0b429")
+BG = ("#f2f2ee", "#1b1c1a")
+TOPBAR = BG  # the page title sits on the background, as in FitWren
+CARD = ("#e6e7e1", "#262825")
+CARD_BORDER = ("#c5c7bf", "#44473f")  # divider lines (cards have no border)
+FIELD = ("#dcddd7", "#33352f")
+MUTED = ("#52554d", "#b4b7ad")
+TEXT = ("#1b1c1a", "#e4e4de")
+SECONDARY = ("#dcddd7", "#33352f")
+SECONDARY_HOVER = ("#cfd0ca", "#3e413a")
+DANGER = ("#b3261e", "#f2b8b5")
+SUCCESS = ("#1b6b3a", "#7fd49a")
+WARNING = ("#7a5300", "#f0c05a")
+
+CARD_RADIUS = 16
+FIELD_RADIUS = 12
 
 # Accent colours offered in Settings (the names match the Android app's).
 # Every accent keeps white text readable (4.5:1) in both themes.
@@ -60,8 +68,9 @@ ACCENTS = {
              "disabled": ("#b7cbeb", "#293a57"), "on_disabled": ("#f3f6fc", "#9cadc9")},
     "Teal": {"accent": ("#128176", "#128176"), "hover": ("#0e625a", "#0e625a"),
              "disabled": ("#b9e9e4", "#2a5551"), "on_disabled": ("#f3fcfb", "#9cc9c5")},
-    "Green": {"accent": ("#1c8542", "#1c8542"), "hover": ("#166734", "#166734"),
-              "disabled": ("#bce6cc", "#2d523b"), "on_disabled": ("#f3fcf6", "#9cc9ac")},
+    # FitWren's own green.
+    "Green": {"accent": ("#2e7d32", "#2e7d32"), "hover": ("#25672a", "#25672a"),
+              "disabled": ("#bfdcc0", "#2d4a2f"), "on_disabled": ("#f3faf3", "#9cbf9e")},
     "Purple": {"accent": ("#9a50da", "#9a50da"), "hover": ("#8933d4", "#8933d4"),
                "disabled": ("#d2bce6", "#412d52"), "on_disabled": ("#f8f3fc", "#b49cc9")},
     "Pink": {"accent": ("#d9267f", "#d9267f"), "hover": ("#ba216e", "#ba216e"),
@@ -100,7 +109,8 @@ def font(size=13, weight="normal"):
 
 
 def card(parent, **kw):
-    return ctk.CTkFrame(parent, fg_color=CARD, corner_radius=12, border_width=1, border_color=CARD_BORDER, **kw)
+    """A filled, borderless card (Material 3 "filled card", as in FitWren)."""
+    return ctk.CTkFrame(parent, fg_color=CARD, corner_radius=CARD_RADIUS, border_width=0, **kw)
 
 
 # Room for the title bar and frame, which geometry() sizes do not include.
@@ -208,13 +218,17 @@ def apply_accent(name):
     the widgets that already exist.
     """
     global ACCENT, ACCENT_HOVER, ACCENT_DISABLED, ON_ACCENT_DISABLED, SEGMENT_SELECTED, SEGMENT_SELECTED_HOVER
+    global NAV_SELECTED
     tokens = ACCENTS.get(name, ACCENTS["Indigo"])
-    old = (ACCENT, ACCENT_HOVER, ACCENT_DISABLED, ON_ACCENT_DISABLED, SEGMENT_SELECTED, SEGMENT_SELECTED_HOVER)
+    old = (ACCENT, ACCENT_HOVER, ACCENT_DISABLED, ON_ACCENT_DISABLED, SEGMENT_SELECTED, SEGMENT_SELECTED_HOVER,
+           NAV_SELECTED)
     ACCENT, ACCENT_HOVER = tokens["accent"], tokens["hover"]
     ACCENT_DISABLED, ON_ACCENT_DISABLED = tokens["disabled"], tokens["on_disabled"]
     SEGMENT_SELECTED = ("#ffffff", ACCENT[1])
     SEGMENT_SELECTED_HOVER = ("#f4f4fb", ACCENT_HOVER[1])
-    new = (ACCENT, ACCENT_HOVER, ACCENT_DISABLED, ON_ACCENT_DISABLED, SEGMENT_SELECTED, SEGMENT_SELECTED_HOVER)
+    NAV_SELECTED = tonal(ACCENT)
+    new = (ACCENT, ACCENT_HOVER, ACCENT_DISABLED, ON_ACCENT_DISABLED, SEGMENT_SELECTED, SEGMENT_SELECTED_HOVER,
+           NAV_SELECTED)
     return {o: n for o, n in zip(old, new) if o != n}
 
 
@@ -255,6 +269,7 @@ class ChoiceSegment(ctk.CTkSegmentedButton):
     def __init__(self, parent, choices, label=str, command=None, **kw):
         self._choices, self._label, self._on_pick = list(choices), label, command
         kw.setdefault("height", 34)
+        kw.setdefault("corner_radius", kw["height"] // 2)  # a pill
         super().__init__(parent, values=self._labels(), command=self._picked, font=font(13), fg_color=SECONDARY,
                          unselected_color=SECONDARY, unselected_hover_color=SECONDARY_HOVER,
                          selected_color=SEGMENT_SELECTED, selected_hover_color=SEGMENT_SELECTED_HOVER,
@@ -334,21 +349,21 @@ def segmented(parent, values, command, label=str, **kw):
 
 
 def option_menu(parent, choices, command, label=str, **kw):
-    return ChoiceMenu(parent, choices, label, command, height=34, font=font(13), fg_color=SECONDARY,
+    return ChoiceMenu(parent, choices, label, command, height=34, corner_radius=17, font=font(13), fg_color=SECONDARY,
                       button_color=SECONDARY, button_hover_color=SECONDARY_HOVER, text_color=TEXT,
                       dropdown_font=font(13), **kw)
 
 
 def switch(parent, text, command, **kw):
     return ctk.CTkSwitch(parent, text=text, command=command, font=font(13), text_color=TEXT, progress_color=ACCENT,
-                         fg_color=("#c3c6d4", "#3a3e55"), button_color=("#5b5f73", "#e8e9f2"),
-                         button_hover_color=("#44475a", "#ffffff"), **kw)
+                         fg_color=("#c5c7bf", "#44473f"), button_color=("#5d6057", "#e4e4de"),
+                         button_hover_color=("#44473f", "#ffffff"), **kw)
 
 
 def primary_button(parent, text, command, **kw):
     kw.setdefault("height", 36)
     kw.setdefault("font", font(13, "bold"))
-    kw.setdefault("corner_radius", 8)
+    kw.setdefault("corner_radius", kw["height"] // 2)  # Material 3 buttons are pills
     return ctk.CTkButton(parent, text=text, command=command, fg_color=ACCENT, hover_color=ACCENT_HOVER,
                          text_color=ON_ACCENT, text_color_disabled=ON_ACCENT_DISABLED, **kw)
 
@@ -360,8 +375,151 @@ def set_primary_state(button, state, **kw):
 
 def secondary_button(parent, text, command, **kw):
     kw.setdefault("height", 36)
+    kw.setdefault("corner_radius", kw["height"] // 2)
+    kw.setdefault("font", font(13))
     return ctk.CTkButton(parent, text=text, command=command, fg_color=SECONDARY, hover_color=SECONDARY_HOVER,
-                         text_color=TEXT, corner_radius=8, font=font(13), **kw)
+                         text_color=TEXT, **kw)
+
+
+def _hex(colour):
+    return tuple(int(colour[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def mix(colour, other, amount):
+    """``colour`` laid over ``other`` at ``amount`` (0-1) opacity, as "#rrggbb"."""
+    a, b = _hex(colour), _hex(other)
+    return "#%02x%02x%02x" % tuple(round(x * amount + y * (1 - amount)) for x, y in zip(a, b))
+
+
+def tonal(accent):
+    """A Material 3 style container colour for ``accent``: a light tint in the
+    light theme, a deep one in the dark theme (for selected navigation items)."""
+    return mix(accent[0], BG[0], 0.18), mix(accent[1], BG[1], 0.35)
+
+
+NAV_SELECTED = tonal(ACCENT)
+
+
+@functools.lru_cache(maxsize=8)
+def _ring_shape(size, thickness):
+    """Per pixel: how much of it the ring covers (0-1) and its angle from the
+    top, clockwise; pixels outside the ring are None."""
+    c = (size - 1) / 2
+    outer = size / 2 - 0.5
+    inner = outer - thickness
+    rows = []
+    for y in range(size):
+        dy = y - c
+        row = []
+        for x in range(size):
+            dx = x - c
+            d = math.hypot(dx, dy)
+            cover = min(max(outer - d + 0.5, 0.0), 1.0) * min(max(d - inner + 0.5, 0.0), 1.0)
+            row.append((cover, math.atan2(dx, -dy) % (2 * math.pi)) if cover > 0 else None)
+        rows.append(row)
+    return rows
+
+
+def ring_pixels(size, thickness, fraction, progress, track, background):
+    """Rows of "#rrggbb" pixels drawing a progress ring, for PhotoImage.put.
+
+    The ring starts at the top and runs clockwise with round ends, like
+    FitWren's step ring. Edges are anti-aliased by pixel coverage.
+    """
+    fraction = min(max(fraction, 0.0), 1.0)
+    c = (size - 1) / 2
+    mid = size / 2 - 0.5 - thickness / 2
+    half = thickness / 2
+    sweep = fraction * 2 * math.pi
+    # The round ends: circles at the start (top) and the end of the arc.
+    ends = [(c, c - mid), (c + mid * math.sin(sweep), c - mid * math.cos(sweep))] if 0 < fraction < 1 else []
+    steps = 24
+    track_shades = [mix(track, background, i / steps) for i in range(steps + 1)]
+    cache = {}
+
+    def shade(on, cover):
+        # ``on`` of the pixel is progress, the rest of ``cover`` is track.
+        key = (round(min(on / cover, 1.0) * steps), round(cover * steps))
+        if key not in cache:
+            cache[key] = mix(mix(progress, track, key[0] / steps), background, key[1] / steps)
+        return cache[key]
+
+    rows = []
+    for y, shape in enumerate(_ring_shape(size, thickness)):
+        row = []
+        near = [(ex, ey) for ex, ey in ends if abs(y - ey) <= half + 1]
+        for x, cell in enumerate(shape):
+            if cell is None:
+                row.append(background)
+                continue
+            cover, angle = cell
+            under = round(cover * steps)
+            on = cover if fraction >= 1 or angle <= sweep and fraction > 0 else 0.0
+            for ex, ey in near:
+                if abs(x - ex) <= half + 1:
+                    on = max(on, min(max(half - math.hypot(x - ex, y - ey) + 0.5, 0.0), 1.0))
+            row.append(shade(on, cover) if on else track_shades[under])
+        rows.append("{" + " ".join(row) + "}")
+    return " ".join(rows)
+
+
+class ProgressRing(ctk.CTkFrame):
+    """A round progress indicator with the percentage in its middle.
+
+    Works like CTkProgressBar for the app: ``set``, ``get`` and the
+    ``progress_color`` option (which :func:`recolor` repaints).
+    """
+
+    def __init__(self, master, size=96, thickness=9, progress_color=None, track_color=None, **kw):
+        super().__init__(master, width=size, height=size, fg_color="transparent", corner_radius=0, **kw)
+        self._ring_size, self._thickness = size, thickness
+        self._progress_color = progress_color or ACCENT
+        self._track_color = track_color or SECONDARY
+        self._value = 0.0
+        self._drawn = None
+        self._image = None
+        self._label = tkinter.Label(self, borderwidth=0, highlightthickness=0, compound="center")
+        self._label.place(relx=0.5, rely=0.5, anchor="center")
+        self._render()
+
+    def set(self, value):
+        self._value = min(max(float(value), 0.0), 1.0)
+        self._render()
+
+    def get(self):
+        return self._value
+
+    def configure(self, require_redraw=False, **kwargs):
+        if "progress_color" in kwargs:
+            self._progress_color = self._check_color_type(kwargs.pop("progress_color"))
+            require_redraw = True
+        super().configure(require_redraw=require_redraw, **kwargs)
+
+    def cget(self, attribute_name):
+        if attribute_name == "progress_color":
+            return self._progress_color
+        return super().cget(attribute_name)
+
+    def _draw(self, no_color_updates=False):
+        super()._draw(no_color_updates)
+        if hasattr(self, "_label"):
+            self._render()
+
+    def _render(self):
+        size = max(16, round(self._apply_widget_scaling(self._ring_size)))
+        thickness = max(2, round(self._apply_widget_scaling(self._thickness)))
+        bg = self._apply_appearance_mode(self._bg_color)
+        colours = (self._apply_appearance_mode(self._progress_color), self._apply_appearance_mode(self._track_color))
+        percent = round(self._value * 100)
+        key = (size, thickness, percent, colours, bg)
+        if key == self._drawn:
+            return
+        self._drawn = key
+        image = tkinter.PhotoImage(master=self, width=size, height=size)
+        image.put(ring_pixels(size, thickness, percent / 100, colours[0], colours[1], bg))
+        self._image = image
+        self._label.configure(image=image, text=f"{percent}%", bg=bg, fg=self._apply_appearance_mode(TEXT),
+                              font=self._apply_font_scaling(("", max(12, round(self._ring_size / 4.4)), "bold")))
 
 
 class PlaylistSelector(ctk.CTkToplevel):
@@ -417,7 +575,7 @@ class PlaylistSelector(ctk.CTkToplevel):
         self.lbl_count = ctk.CTkLabel(self.btn_frame, text="", font=font(12, "bold"), text_color=MUTED)
         self.lbl_count.pack(side="right")
 
-        self.scroll = ctk.CTkScrollableFrame(self, fg_color=CARD, corner_radius=12, border_width=1,
+        self.scroll = ctk.CTkScrollableFrame(self, fg_color=CARD, corner_radius=CARD_RADIUS, border_width=0,
                                              border_color=CARD_BORDER)
         self.scroll.pack(pady=12, padx=20, fill="both", expand=True)
 
@@ -534,7 +692,7 @@ class SettingsView(ctk.CTkFrame):
         header.grid_columnconfigure(2, weight=1)
         self.btn_back = secondary_button(header, "←  " + tr("settings.back"), on_back, width=100, height=34)
         self.btn_back.grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(header, text=tr("settings.title"), font=font(20, "bold"), text_color=TEXT).grid(
+        ctk.CTkLabel(header, text=tr("settings.title"), font=font(26, "bold"), text_color=TEXT).grid(
             row=0, column=1, sticky="w", padx=16)
         ctk.CTkLabel(header, text=f"{DISPLAY_NAME} {__version__}", font=font(12), text_color=MUTED).grid(
             row=0, column=2, sticky="e", padx=12)
@@ -784,7 +942,7 @@ class HistoryView(ctk.CTkFrame):
         header.grid_columnconfigure(2, weight=1)
         self.btn_back = secondary_button(header, "\u2190  " + tr("settings.back"), on_back, width=100, height=34)
         self.btn_back.grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(header, text=tr("history.title"), font=font(20, "bold"), text_color=TEXT).grid(
+        ctk.CTkLabel(header, text=tr("history.title"), font=font(26, "bold"), text_color=TEXT).grid(
             row=0, column=1, sticky="w", padx=16)
         self.btn_clear = secondary_button(header, tr("history.clear"), self.clear, height=34)
         self.btn_clear.grid(row=0, column=3, sticky="e")
@@ -869,7 +1027,7 @@ class UpdateDialog(ctk.CTkToplevel):
         ctk.CTkLabel(self, text=tr("update.available", version=release.version), font=font(17, "bold"),
                      text_color=TEXT, anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 8))
         notes = ctk.CTkTextbox(self, font=font(12), fg_color=CARD, text_color=TEXT, wrap="word", height=200,
-                               border_width=1, border_color=CARD_BORDER)
+                               border_width=0, corner_radius=CARD_RADIUS)
         notes.insert("1.0", updates.notes_summary(release.notes) or release.page)
         notes.configure(state="disabled")
         notes.grid(row=1, column=0, sticky="nsew", padx=20)
@@ -1056,8 +1214,6 @@ class App(ctk.CTk):
         bar = ctk.CTkFrame(self, corner_radius=0, fg_color=TOPBAR, height=64, border_width=0)
         bar.grid(row=0, column=0, sticky="new")
         bar.grid_columnconfigure(1, weight=1)
-        ctk.CTkFrame(bar, height=1, corner_radius=0, fg_color=CARD_BORDER).grid(row=1, column=0, columnspan=3,
-                                                                              sticky="ew")
         self.top_bar = bar
 
         brand = ctk.CTkFrame(bar, fg_color="transparent")
@@ -1069,7 +1225,7 @@ class App(ctk.CTk):
             self.logo.pack(side="left", padx=(0, 12))
         except tkinter.TclError:
             self.logo = None
-        ctk.CTkLabel(brand, text=DISPLAY_NAME, font=font(17, "bold"), text_color=TEXT).pack(side="left")
+        ctk.CTkLabel(brand, text=DISPLAY_NAME, font=font(22, "bold"), text_color=TEXT).pack(side="left")
         ctk.CTkLabel(brand, text=f"v{__version__}", font=font(12), text_color=MUTED).pack(side="left", padx=(8, 0))
 
         right = ctk.CTkFrame(bar, fg_color="transparent")
@@ -1083,13 +1239,35 @@ class App(ctk.CTk):
         self.lbl_status.pack(side="left", padx=(0, 14), pady=4)
         # Shown once a newer version is found.
         self.btn_update = primary_button(right, "", self.show_update_dialog, height=36)
-        self.btn_history = secondary_button(right, "", self.toggle_history, width=110, height=36)
-        self._live(self.btn_history, lambda: "\u23f2  " + tr("top.history"))
-        self.btn_history.pack(side="left", padx=(0, 8))
-        self.btn_settings = secondary_button(right, "", self.toggle_settings, width=120, height=36)
-        self._live(self.btn_settings, lambda: "\u2699  " + tr("top.settings"))
-        self.btn_settings.pack(side="left")
+        # The pages, as a navigation bar: the open one sits on a tonal pill,
+        # like the selected tab in FitWren.
+        nav = self.nav = ctk.CTkFrame(right, fg_color="transparent")
+        nav.pack(side="left")
+        self.btn_home = self._nav_button(nav, lambda: "\u2193  " + tr("action.download"), self.show_download_page)
+        self.btn_history = self._nav_button(nav, lambda: "\u23f2  " + tr("top.history"), self.toggle_history)
+        self.btn_settings = self._nav_button(nav, lambda: "\u2699  " + tr("top.settings"), self.toggle_settings)
+        for i, button in enumerate((self.btn_home, self.btn_history, self.btn_settings)):
+            button.pack(side="left", padx=(0 if i == 0 else 4, 0))
+        self._sync_nav()
         self._refresh_logo_bg()
+
+    def _nav_button(self, parent, text, command):
+        button = ctk.CTkButton(parent, text="", command=command, height=36, corner_radius=18, width=72,
+                               fg_color="transparent", hover_color=SECONDARY_HOVER, text_color=TEXT,
+                               font=font(13, "bold"))
+        self._live(button, text)
+        return button
+
+    def _sync_nav(self):
+        """Mark the page on screen in the navigation bar."""
+        page = "settings" if self.settings_view is not None else "history" if self.history_view is not None \
+            else "home"
+        for name, button in (("home", self.btn_home), ("history", self.btn_history), ("settings", self.btn_settings)):
+            button.configure(fg_color=NAV_SELECTED if name == page else "transparent")
+
+    def show_download_page(self):
+        self.close_settings()
+        self.close_history()
 
     def _section_label(self, parent, key):
         label = section_label(parent, "")
@@ -1113,7 +1291,7 @@ class App(ctk.CTk):
         url_card.grid(row=1, column=0, sticky="ew", pady=(0, 12))
         url_card.grid_columnconfigure(0, weight=1)
         self.url_entry = ctk.CTkEntry(url_card, placeholder_text="https://www.youtube.com/watch?v=...", height=44,
-                                      font=font(14), fg_color=FIELD, border_width=0, corner_radius=8)
+                                      font=font(14), fg_color=FIELD, border_width=0, corner_radius=22)
         self.url_entry.grid(row=0, column=0, sticky="ew", padx=(16, 8), pady=16)
         self.url_entry.bind("<KeyRelease>", self._on_url_changed)
         self.url_entry.bind("<Return>", lambda _e: self.start_analysis_thread())
@@ -1151,13 +1329,15 @@ class App(ctk.CTk):
         self.chk_trim = switch(trim_row, "", self.toggle_trim)
         self._live(self.chk_trim, lambda: tr("trim.switch"))
         self.chk_trim.grid(row=0, column=0, padx=(0, 16))
-        self.ent_start = ctk.CTkEntry(trim_row, width=110, height=32, fg_color=FIELD, border_width=0)
+        self.ent_start = ctk.CTkEntry(trim_row, width=110, height=32, fg_color=FIELD, border_width=0,
+                                      corner_radius=FIELD_RADIUS)
         self._live(self.ent_start, lambda: tr("trim.start"), "placeholder_text")
         self.ent_start.grid(row=0, column=1, padx=(0, 6))
         lbl_to = ctk.CTkLabel(trim_row, text="", text_color=MUTED, font=font(13))
         lbl_to.grid(row=0, column=2, padx=4)
         self._live(lbl_to, lambda: tr("trim.to"))
-        self.ent_end = ctk.CTkEntry(trim_row, width=110, height=32, fg_color=FIELD, border_width=0)
+        self.ent_end = ctk.CTkEntry(trim_row, width=110, height=32, fg_color=FIELD, border_width=0,
+                                    corner_radius=FIELD_RADIUS)
         self._live(self.ent_end, lambda: tr("trim.end"), "placeholder_text")
         self.ent_end.grid(row=0, column=3, padx=(6, 12))
         self.lbl_trim_hint = ctk.CTkLabel(trim_row, text="", text_color=MUTED, font=font(12))
@@ -1172,7 +1352,7 @@ class App(ctk.CTk):
         folder_row.grid(row=4, column=1, columnspan=3, sticky="ew", padx=(0, 16), pady=12)
         folder_row.grid_columnconfigure(0, weight=1)
         self.lbl_folder = ctk.CTkLabel(folder_row, text="", font=font(13), text_color=TEXT, fg_color=FIELD,
-                                       corner_radius=8, height=36, anchor="w")
+                                       corner_radius=18, height=36, anchor="w")
         self.lbl_folder.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.lbl_folder.bind("<Double-Button-1>", lambda _e: self.open_folder())
         self.btn_dest = secondary_button(folder_row, "", self.select_folder, width=100)
@@ -1188,7 +1368,7 @@ class App(ctk.CTk):
         actions.grid(row=3, column=0, sticky="ew", pady=(0, 12))
         actions.grid_columnconfigure(0, weight=1)
         self.btn_download = primary_button(actions, "", self.start_download_queue, height=48,
-                                           corner_radius=10, font=font(16, "bold"))
+                                           font=font(16, "bold"))
         set_primary_state(self.btn_download, "disabled")
         self._live(self.btn_download, lambda: tr("action.download"))
         self.btn_download.grid(row=0, column=0, sticky="ew")
@@ -1202,18 +1382,19 @@ class App(ctk.CTk):
         # Progress
         prog_card = card(self.main_frame)
         prog_card.grid(row=4, column=0, sticky="ew", pady=(0, 12))
-        prog_card.grid_columnconfigure(0, weight=1)
-        self.lbl_item = ctk.CTkLabel(prog_card, text="", font=font(13, "bold"), text_color=TEXT, anchor="w")
+        # FitWren's step ring, here for the current download.
+        prog_card.grid_columnconfigure(1, weight=1)
+        prog_card.grid_rowconfigure((0, 4), weight=1)
+        self.progress_bar = ProgressRing(prog_card, size=76, thickness=8)
+        self.progress_bar.grid(row=0, column=0, rowspan=5, padx=(14, 16), pady=12)
+        self.lbl_item = ctk.CTkLabel(prog_card, text="", font=font(15, "bold"), text_color=TEXT, anchor="w",
+                                     justify="left")
         self._live(self.lbl_item, lambda: tr("progress.ready"))
-        self.lbl_item.grid(row=0, column=0, columnspan=2, sticky="ew", padx=16, pady=(14, 6))
-        self.progress_bar = ctk.CTkProgressBar(prog_card, height=10, corner_radius=5, progress_color=ACCENT,
-                                               fg_color=SECONDARY)
-        self.progress_bar.set(0)
-        self.progress_bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16)
-        self.lbl_progress = ctk.CTkLabel(prog_card, text="0%", font=font(12), text_color=MUTED, anchor="w")
-        self.lbl_progress.grid(row=2, column=0, sticky="w", padx=16, pady=(4, 12))
-        self.lbl_detail = ctk.CTkLabel(prog_card, text="", font=font(12), text_color=MUTED, anchor="e")
-        self.lbl_detail.grid(row=2, column=1, sticky="e", padx=16, pady=(4, 12))
+        self.lbl_item.grid(row=1, column=1, sticky="ew", padx=(0, 16))
+        self.lbl_progress = ctk.CTkLabel(prog_card, text="0%", font=font(13), text_color=MUTED, anchor="w")
+        self.lbl_progress.grid(row=2, column=1, sticky="w", padx=(0, 16), pady=(2, 0))
+        self.lbl_detail = ctk.CTkLabel(prog_card, text="", font=font(13), text_color=MUTED, anchor="w")
+        self.lbl_detail.grid(row=3, column=1, sticky="w", padx=(0, 16))
 
         # Activity log
         log_card = self.log_card = card(self.main_frame)
@@ -1320,7 +1501,9 @@ class App(ctk.CTk):
             chrome = self.winfo_reqheight() - self._scroll_canvas.winfo_reqheight()
             need = (self.winfo_reqwidth(), chrome + content)
             scale = self._get_window_scaling()
-            base_min = (self.MIN_SIZE[0] * scale, self.MIN_SIZE[1] * scale)
+            # Never narrower than the top bar, whose navigation grows with the
+            # text size and the language.
+            base_min = (max(self.MIN_SIZE[0] * scale, self.top_bar.winfo_reqwidth()), self.MIN_SIZE[1] * scale)
             width = max(self.winfo_width(), need[0])
             height = max(self.winfo_height(), need[1])
             # The content scrolls when the window is made smaller than it.
@@ -1353,6 +1536,7 @@ class App(ctk.CTk):
         self.close_history()
         self._build_settings_view()
         self.main_frame.grid_remove()
+        self._sync_nav()
         self.settings_view.btn_back.focus_set()
     def toggle_settings(self):
         if self.settings_view is None:
@@ -1377,6 +1561,7 @@ class App(ctk.CTk):
         self.settings_view.destroy()
         self.settings_view = None
         self.main_frame.grid()
+        self._sync_nav()
         self.after_idle(self._fill_height)
     def open_history(self):
         """Show the History page in place of the download page."""
@@ -1386,6 +1571,7 @@ class App(ctk.CTk):
         self.history_view = HistoryView(self, self.history, self.close_history)
         self.history_view.grid(row=1, column=0, sticky="nsew")
         self.main_frame.grid_remove()
+        self._sync_nav()
         self.history_view.btn_back.focus_set()
 
     def toggle_history(self):
@@ -1400,6 +1586,7 @@ class App(ctk.CTk):
         self.history_view.destroy()
         self.history_view = None
         self.main_frame.grid()
+        self._sync_nav()
         self.after_idle(self._fill_height)
 
     def _on_escape(self):
@@ -1926,7 +2113,7 @@ class App(ctk.CTk):
         version = self.available_update.version
         self._live(self.btn_update, lambda: "\u2b07  " + tr("top.update", version=version))
         if not self.btn_update.winfo_ismapped():
-            self.btn_update.pack(side="left", padx=(0, 8), before=self.btn_history)
+            self.btn_update.pack(side="left", padx=(0, 8), before=self.nav)
 
     @staticmethod
     def can_install_updates():

@@ -42,6 +42,23 @@ KV = r"""
         shorten_from: "right"
         pos_hint: {"center_y": .5}
 
+# A small FitWren-style stat card: an icon, a big number and what it counts.
+<StatTile@MDCard>:
+    icon: ""
+    style: "filled"
+    orientation: "vertical"
+    size_hint_y: None
+    # Room for a two-line label, so both tiles of a row are the same height.
+    height: max(dp(128), self.minimum_height)
+    padding: dp(16)
+    spacing: dp(4)
+    radius: [dp(16)]
+    MDIcon:
+        icon: root.icon
+        theme_text_color: "Custom"
+        text_color: app.theme_cls.primaryColor
+        adaptive_size: True
+
 <PageAction@MDIconButton>:
     pos_hint: {"center_y": .5}
 
@@ -261,6 +278,33 @@ KV = r"""
                                     Hint:
                                         id: progress_detail
                                         text: ""
+
+                        MDBoxLayout:
+                            id: week_row
+                            adaptive_height: True
+                            spacing: dp(12)
+                            StatTile:
+                                icon: "file-download-outline"
+                                MDLabel:
+                                    id: week_files
+                                    text: "0"
+                                    font_style: "Headline"
+                                    role: "small"
+                                    bold: True
+                                    adaptive_height: True
+                                Hint:
+                                    text: app.t("home.week_files", app.lang)
+                            StatTile:
+                                icon: "harddisk"
+                                MDLabel:
+                                    id: week_size
+                                    text: "0 MB"
+                                    font_style: "Headline"
+                                    role: "small"
+                                    bold: True
+                                    adaptive_height: True
+                                Hint:
+                                    text: app.t("home.week_size", app.lang)
 
                         MDButton:
                             id: btn_details

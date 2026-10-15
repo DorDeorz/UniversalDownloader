@@ -145,6 +145,14 @@ def _show(widget, visible):
         parent.remove_widget(widget)
 
 
+# Pure black theme: surface roles and their grey level (0-1).
+PURE_BLACK = {
+    "background": 0.0, "surface": 0.0, "surfaceDim": 0.0, "surfaceContainerLowest": 0.0,
+    "surfaceContainerLow": 0.03, "surfaceContainer": 0.05, "surfaceContainerHigh": 0.08,
+    "surfaceContainerHighest": 0.11,
+}
+
+
 class NavTab(ButtonBehavior, BoxLayout):
     """A tab of the navigation bar; ``main`` draws it as the round button in the middle."""
 
@@ -310,6 +318,7 @@ class UniversalDownloaderApp(MDApp):
         _show(self.ids.progress_card, False)
         _show(self.ids.trim_box, False)
         _show(self.ids.log, False)
+        self._show_week()
         self.set_busy(False)
         self.ids.btn_download.disabled = True
         self.ids.btn_analyze.disabled = True
@@ -445,6 +454,14 @@ class UniversalDownloaderApp(MDApp):
         self.theme_cls.dynamic_color = s.dynamic_color and android_env.on_android()
         self.theme_cls.theme_style = "Dark" if dark else "Light"
         self.theme_cls.set_colors()
+        if dark and s.pure_black:
+            self._pure_black()
+
+    def _pure_black(self):
+        """AMOLED: black page and bars; cards stay a little lighter so they still show."""
+        theme = self.theme_cls
+        for name, grey in PURE_BLACK.items():
+            setattr(theme, name + "Color", [grey, grey, grey, 1])
 
     # --- Start-up -----------------------------------------------------------------
 
@@ -928,6 +945,7 @@ class UniversalDownloaderApp(MDApp):
                 self.history.add(result.title, result.path, url=result.url,
                                  kind="audio" if self.mode == "audio" else "video")
                 self._refresh("history")
+                self._show_week()
             if android_env.on_android():
                 try:
                     android_env.scan_media(result.path)
@@ -997,6 +1015,7 @@ class UniversalDownloaderApp(MDApp):
             if action == "remove":
                 self.history.remove(entry.path)
                 self._refresh("history")
+                self._show_week()
             else:
                 self.open_file(entry.path, share=action == "share")
 
@@ -1024,6 +1043,7 @@ class UniversalDownloaderApp(MDApp):
         def clear():
             self.history.clear()
             self._refresh("history")
+            self._show_week()
 
         self._dialog(self.t("history.clear"), self.t("history.clear_body"),
                      buttons=[(self.t("common.cancel"), None), (self.t("common.remove"), clear)])
@@ -1118,6 +1138,8 @@ class UniversalDownloaderApp(MDApp):
         choice("theme-light-dark", t("settings.theme"), themes, s.theme, lambda v: self._change_look(theme=v))
         switch("palette-outline", t("settings.dynamic"), s.dynamic_color,
                lambda v: self._change_look(dynamic_color=v), t("settings.dynamic_hint"))
+        switch("circle-half-full", t("settings.pure_black"), s.pure_black,
+               lambda v: self._change_look(pure_black=v), t("settings.pure_black_hint"))
         accents = [(v, t("accent." + v)) for v in app_settings.ACCENTS]
         choice("format-color-fill", t("settings.accent"), accents, s.accent, lambda v: self._change_look(accent=v))
         languages = [(i18n.AUTO, i18n.tr("settings.language_auto"))] + [
@@ -1152,7 +1174,7 @@ class UniversalDownloaderApp(MDApp):
                lambda v: self._save_settings(auto_analyze_shared=v), t("settings.auto_analyze_hint"))
         switch("cellphone-screenshot", t("settings.keep_screen"), s.keep_screen_on,
                lambda v: self._save_settings(keep_screen_on=v), t("settings.keep_screen_hint"))
-        switch("history", t("settings.history"), s.save_history, lambda v: self._save_settings(save_history=v))
+        switch("history", t("settings.history"), s.save_history, self._change_save_history)
 
         # YouTube
         section(t("youtube.section"))
@@ -1333,6 +1355,19 @@ class UniversalDownloaderApp(MDApp):
         return (f"yt-dlp {c.get('yt-dlp')} · FFmpeg {c.get('ffmpeg') or no}",
                 f"{self.t('home.tiktok')}: {yes if c.get('tiktok') else no} · "
                 f"{self.t('home.trim')}: {yes if c.get('https') else no}")
+
+    def _change_save_history(self, value):
+        self._save_settings(save_history=value)
+        self._show_week()
+
+    def _show_week(self):
+        """FitWren-style tiles: files and size downloaded in the last 7 days."""
+        shown = self.settings.save_history
+        _show(self.ids.week_row, shown)
+        if shown:
+            files, size = self.history.recent(7)
+            self.ids.week_files.text = str(files)
+            self.ids.week_size.text = history.format_size(size)
 
     def _change_look(self, **changes):
         # The rows' colours follow the theme by themselves; nothing is rebuilt.

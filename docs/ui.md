@@ -4,10 +4,17 @@ The window is built in `ui.py` with CustomTkinter. Colours are design
 tokens at the top of the file, each a `(light, dark)` pair, so the Light,
 Dark and System themes need no extra code.
 
+The look follows FitWren, the step counter app by the same author
+(Material 3): warm neutral surfaces, filled cards without borders and with
+16 px corners, pill-shaped buttons, fields and choices, large bold titles,
+and a progress ring. The open page is marked in the navigation by a tonal
+pill made from the accent colour (`tonal()`).
+
 ## Layout
 
 - **Top bar**: the app name and version, the FFmpeg status found at
-  startup, and the Settings button.
+  startup, and the navigation: Download, History and Settings. The page
+  on screen sits on a tonal pill.
 - **Link card**: the URL field with Paste and Analyze. The line below it
   shows what the link contains, or why it was rejected (in red).
 - **Options card**: mode (Video + Audio, Video Only, Audio Only), format,
@@ -15,10 +22,12 @@ Dark and System themes need no extra code.
   download folder (shortened in the middle when long) with Change... and
   Open.
 - **Actions**: Download (shows the item count), Cancel and Retry failed.
-- **Progress card**: the current item ("2 of 5: title"), the bar, the
-  percentage, and the speed and time left, or the current step such as
-  "Merging" or "Converting audio". When a job ends the bar turns green
-  (all done), amber (some failed) or red (none done).
+- **Progress card**: a progress ring with the percentage inside (drawn by
+  `ProgressRing`, anti-aliased, with round ends), then the current item
+  ("2 of 5: title"), the percentage and size, and the speed and time left,
+  or the current step such as "Merging" or "Converting audio". When a job
+  ends the ring turns green (all done), amber (some failed) or red (none
+  done).
 - **Activity**: the log of what happened.
 
 The window can be resized. It grows to fit its content, but never past the

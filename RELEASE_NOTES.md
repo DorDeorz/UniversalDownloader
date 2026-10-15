@@ -1,17 +1,39 @@
-**Orbida 1.0.1** fixes Reddit downloads. This release holds both apps:
+**Orbida 1.1.0** brings a new look, Spotify, a download queue and playlist
+memory. This release holds both apps:
 
-- **Windows:** `Orbida-Setup-1.0.1.exe`, for Windows 10 or 11 (64-bit).
-- **Android:** `Orbida-1.0.1.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Windows:** `Orbida-Setup-1.1.0.exe`, for Windows 10 or 11 (64-bit).
+- **Android:** `Orbida-1.1.0.apk`, for 64-bit ARM phones with Android 7 or newer.
 
 Orbida 1.0 updates itself to this version: on Windows click **Update to
-1.0.1** in the top bar; on Android open Settings › About › Check for
+1.1.0** in the top bar; on Android open Settings › About › Check for
 updates.
+
+## New in 1.1.0 (both apps)
+
+- **New look**, after FitWren: warm neutral colours, filled cards, rounded
+  buttons and a progress ring. Your accent colour stays the same.
+- **Spotify** tracks, albums and playlists. Spotify's own audio is
+  copy-protected, so each song is found on YouTube and saved as audio. The
+  app switches to audio for these links.
+- **Queue.** While a download runs, the Analyze button becomes **Add to
+  queue**. Queued links start one after another. Cancel empties the queue.
+- **Playlists remember** what you downloaded before. Those entries start
+  unticked and are marked "downloaded before"; **Only new** selects the rest.
+
+**Windows:** a new **Black** (AMOLED) theme in Settings › Theme, and
+Download, History and Settings in the top bar.
+
+**Android:**
+- Choose which playlist videos to download.
+- Downloads keep going in the background, with progress in a notification.
+  Android 13 and newer ask once for permission to show notifications.
+- Two tiles show the files and size downloaded in the last 7 days.
+- A pure black (AMOLED) switch in Settings › Appearance.
 
 ## New in 1.0.1 (both apps)
 
 - Fixed: Reddit videos failed with "The downloaded file is empty" after
-  many "Conflicting range" errors. They download normally now. The same
-  fix helps any site that streams a video as byte ranges of one file.
+  many "Conflicting range" errors. They download normally now.
 
 Before this version, the Windows app was called Universal Video Downloader.
 
@@ -41,7 +63,7 @@ Before this version, the Windows app was called Universal Video Downloader.
 - New downloads go to `Downloads\Orbida` by default. A folder you chose
   before stays the same.
 
-**Install:** run `Orbida-Setup-1.0.1.exe`. It installs for your user only,
+**Install:** run `Orbida-Setup-1.1.0.exe`. It installs for your user only,
 with no administrator password. FFmpeg, ffprobe and Deno are included.
 The setup is not code-signed, so SmartScreen may say "Windows protected
 your PC". Click **More info**, then **Run anyway**.

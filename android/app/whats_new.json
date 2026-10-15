@@ -1,5 +1,25 @@
 [
   {
+    "version": "1.1.0",
+    "date": "2026-10-15",
+    "en": [
+      "New look, after FitWren: a large title on each page, a round Download button in the middle of the bottom bar, and a progress ring.",
+      "Two tiles show the files and size downloaded in the last 7 days. Settings › Appearance has a new pure black (AMOLED) switch.",
+      "Spotify tracks, albums and playlists: each song is found on YouTube and saved as audio.",
+      "Playlists: choose which videos to download. Ones downloaded before start unticked and are marked.",
+      "Queue: a link added while a download runs waits and starts by itself afterwards.",
+      "Downloads keep going in the background, with their progress in a notification."
+    ],
+    "tr": [
+      "FitWren'den esinlenen yeni görünüm: her sayfada büyük başlık, alt çubuğun ortasında yuvarlak İndir düğmesi ve ilerleme halkası.",
+      "İki kutucuk son 7 günde indirilen dosya sayısını ve boyutu gösterir. Ayarlar › Görünüm'de yeni saf siyah (AMOLED) anahtarı var.",
+      "Spotify şarkıları, albümleri ve çalma listeleri: her şarkı YouTube'da bulunup ses olarak kaydedilir.",
+      "Çalma listeleri: hangi videoların ineceğini seçin. Daha önce indirilenler işaretsiz ve notlu gelir.",
+      "Kuyruk: indirme sürerken eklenen bağlantı bekler ve ardından kendiliğinden başlar.",
+      "İndirmeler arka planda sürer, ilerleme bir bildirimde görünür."
+    ]
+  },
+  {
     "version": "1.0.1",
     "date": "2026-10-03",
     "en": [

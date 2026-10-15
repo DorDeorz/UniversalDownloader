@@ -45,8 +45,4 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q xvfb ffmpeg
           xvfb-run -a python -m pytest
 
-      # TEMPORARY probe (removed before merge): Spotify covers and the closest YouTube match, live.
-      - name: Spotify live probe
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: python spotify_probe_tmp.py
+

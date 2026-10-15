@@ -182,5 +182,15 @@
  "update.restart_note": "Orbida se ferme, installe la nouvelle version et se rouvre. Vos réglages et fichiers sont conservés.",
  "log.auto_paste": "Lien repris du presse-papiers.",
  "log.updated": "Orbida a été mis à jour vers la version {version}.",
- "log.update_available": "Orbida {version} est disponible. Cliquez sur le bouton de mise à jour en haut pour l'installer."
+ "log.update_available": "Orbida {version} est disponible. Cliquez sur le bouton de mise à jour en haut pour l'installer.",
+ "playlist.select_new": "Nouveaux seulement",
+ "playlist.downloaded": "déjà téléchargé",
+ "queue.add": "Ajouter à la file",
+ "queue.waiting": "{count} en attente dans la file",
+ "queue.clear": "Vider la file",
+ "log.queue_added": "Ajouté à la file : {url}",
+ "log.queue_next": "Suivant dans la file : {url}",
+ "log.queue_cleared": "File vidée",
+ "log.queue_nothing_new": "Rien de nouveau à télécharger dans {title}",
+ "theme.Black": "Noir"
 }

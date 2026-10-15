@@ -208,7 +208,41 @@ SEGMENT_SELECTED_HOVER = ("#f4f4fb", ACCENT_HOVER[1])
 
 # Widget options that can carry an accent colour (see recolor).
 _COLOUR_OPTIONS = ("fg_color", "hover_color", "progress_color", "selected_color", "selected_hover_color",
-                   "button_color", "button_hover_color", "border_color", "text_color_disabled")
+                   "button_color", "button_hover_color", "border_color", "text_color_disabled", "bg_color",
+                   "unselected_color", "unselected_hover_color", "track_color", "scrollbar_button_color",
+                   "scrollbar_button_hover_color")
+
+# The Black theme (AMOLED): the dark theme's surfaces become black, cards and
+# fields stay slightly grey so they still show. Light values are unchanged.
+_SURFACES = ("BG", "TOPBAR", "CARD", "CARD_BORDER", "FIELD", "SECONDARY", "SECONDARY_HOVER")
+_DARK_SURFACES = {name: globals()[name][1] for name in _SURFACES}
+_BLACK_SURFACES = {"BG": "#000000", "TOPBAR": "#000000", "CARD": "#121212", "CARD_BORDER": "#2e2e2e",
+                   "FIELD": "#1f1f1f", "SECONDARY": "#1f1f1f", "SECONDARY_HOVER": "#2b2b2b"}
+
+
+def appearance_mode(theme):
+    """CustomTkinter's appearance mode for a theme setting ("Black" is a dark theme)."""
+    return "Dark" if theme == "Black" else theme
+
+
+def apply_pure_black(on):
+    """Use black (or the normal dark) surfaces for widgets built from now on.
+
+    Returns {old colour: new colour} for :func:`recolor`.
+    """
+    global NAV_SELECTED
+    table = _BLACK_SURFACES if on else _DARK_SURFACES
+    mapping = {}
+    for name in _SURFACES:
+        old = globals()[name]
+        new = (old[0], table[name])
+        globals()[name] = new
+        if old != new:
+            mapping[old] = new
+    old_nav, NAV_SELECTED = NAV_SELECTED, tonal(ACCENT)
+    if old_nav != NAV_SELECTED:
+        mapping[old_nav] = NAV_SELECTED
+    return mapping
 
 
 def apply_accent(name):
@@ -490,14 +524,15 @@ class ProgressRing(ctk.CTkFrame):
         return self._value
 
     def configure(self, require_redraw=False, **kwargs):
-        if "progress_color" in kwargs:
-            self._progress_color = self._check_color_type(kwargs.pop("progress_color"))
-            require_redraw = True
+        for option in ("progress_color", "track_color"):
+            if option in kwargs:
+                setattr(self, "_" + option, self._check_color_type(kwargs.pop(option)))
+                require_redraw = True
         super().configure(require_redraw=require_redraw, **kwargs)
 
     def cget(self, attribute_name):
-        if attribute_name == "progress_color":
-            return self._progress_color
+        if attribute_name in ("progress_color", "track_color"):
+            return getattr(self, "_" + attribute_name)
         return super().cget(attribute_name)
 
     def _draw(self, no_color_updates=False):
@@ -531,7 +566,8 @@ class PlaylistSelector(ctk.CTkToplevel):
 
     BATCH = 50  # checkboxes created per idle step, so big playlists stay responsive
 
-    def __init__(self, parent, analysis, callback):
+    def __init__(self, parent, analysis, callback, downloaded=()):
+        """``downloaded``: items downloaded before, which start unticked."""
         super().__init__(parent, fg_color=BG)
         self.title(tr("playlist.title"))
         # CustomTkinter puts its own icon on new windows shortly after
@@ -544,6 +580,7 @@ class PlaylistSelector(ctk.CTkToplevel):
 
         self.callback = callback
         self.items = list(analysis.items)
+        self.downloaded = {id(item) for item in downloaded}
         self.vars = []
         self._done = False
 
@@ -572,6 +609,9 @@ class PlaylistSelector(ctk.CTkToplevel):
         self.btn_none = secondary_button(self.btn_frame, tr("playlist.select_none"), self.select_none, width=100,
                                          height=32)
         self.btn_none.pack(side="left", padx=(8, 0))
+        if self.downloaded:
+            self.btn_new = secondary_button(self.btn_frame, tr("playlist.select_new"), self.select_new, height=32)
+            self.btn_new.pack(side="left", padx=(8, 0))
         self.lbl_count = ctk.CTkLabel(self.btn_frame, text="", font=font(12, "bold"), text_color=MUTED)
         self.lbl_count.pack(side="right")
 
@@ -599,8 +639,11 @@ class PlaylistSelector(ctk.CTkToplevel):
 
     def _add_rows(self, start):
         for item in self.items[start:start + self.BATCH]:
-            var = ctk.IntVar(value=1)
+            before = id(item) in self.downloaded
+            var = ctk.IntVar(value=0 if before else 1)
             label = f"{item.index:>3}. {item.title}" if item.index else item.title
+            if before:
+                label += f"  ({tr('playlist.downloaded')})"
             ctk.CTkCheckBox(self.scroll, text=label, variable=var, command=self._update_count, font=font(13),
                             text_color=TEXT, fg_color=ACCENT, hover_color=ACCENT_HOVER, checkbox_width=20,
                             checkbox_height=20, corner_radius=5).pack(anchor="w", pady=4, padx=8)
@@ -624,6 +667,10 @@ class PlaylistSelector(ctk.CTkToplevel):
         self._update_count()
     def select_none(self):
         for var in self.vars: var.set(0)
+        self._update_count()
+    def select_new(self):
+        for item, var in zip(self.items, self.vars):
+            var.set(0 if id(item) in self.downloaded else 1)
         self._update_count()
 
     def confirm_selection(self):
@@ -1113,10 +1160,11 @@ class App(ctk.CTk):
 
         self.settings_path = os.path.join(app_setup.data_dir(), "settings.json")
         self.settings = settings_store.load(self.settings_path, default_download_dir())
-        ctk.set_appearance_mode(self.settings.theme)
+        ctk.set_appearance_mode(appearance_mode(self.settings.theme))
         ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
         i18n.set_language(self.settings.language)
         apply_accent(self.settings.accent)
+        apply_pure_black(self.settings.theme == "Black")
         self.history = download_history.History(os.path.join(app_setup.data_dir(), "history.json"))
         self._job_mode = None
         self._analysed = None  # (time, url, info) of the last single video analysed
@@ -1127,6 +1175,8 @@ class App(ctk.CTk):
         self.manager = DownloadManager()
         self.download_folder = self.settings.download_folder
         self.download_queue = []
+        self.link_queue = []      # links added while a download runs; downloaded one after another
+        self._from_queue = False  # the running analysis came from link_queue
         self.analyzed_url = None
         # Only one job (analysis or download) runs at a time; see _start_job.
         self._job_thread = None
@@ -1305,6 +1355,13 @@ class App(ctk.CTk):
         self.lbl_media = ctk.CTkLabel(url_card, text="", font=font(13), text_color=MUTED,
                                       anchor="w", justify="left")
         self.lbl_media.grid(row=1, column=0, columnspan=3, sticky="ew", padx=18, pady=(0, 14))
+        # Links waiting in the queue (shown while there are any).
+        self.queue_row = ctk.CTkFrame(url_card, fg_color="transparent")
+        self.lbl_queue = ctk.CTkLabel(self.queue_row, text="", font=font(13, "bold"), text_color=TEXT, anchor="w")
+        self.lbl_queue.pack(side="left")
+        self.btn_clear_queue = secondary_button(self.queue_row, "", self.clear_link_queue, height=28)
+        self._live(self.btn_clear_queue, lambda: tr("queue.clear"))
+        self.btn_clear_queue.pack(side="left", padx=(10, 0))
         self._show_media(lambda: tr("link.hint"), MUTED)
 
         # Options
@@ -1465,7 +1522,11 @@ class App(ctk.CTk):
             dark = ctk.get_appearance_mode() == "Dark"
             self.logo.configure(bg=TOPBAR[1] if dark else TOPBAR[0])
     def _on_theme_changed(self, theme):
-        ctk.set_appearance_mode(theme)
+        mapping = apply_pure_black(theme == "Black")
+        if mapping:
+            recolor(self, mapping)
+            self.configure(fg_color=BG)
+        ctk.set_appearance_mode(appearance_mode(theme))
         self.settings.theme = theme
         self._refresh_logo_bg()
         self._save_settings()
@@ -1477,6 +1538,7 @@ class App(ctk.CTk):
         setattr(self.settings, name, value)
         if name == "accent":
             recolor(self, apply_accent(value))
+
         elif name == "text_size":
             ctk.set_widget_scaling(settings_store.TEXT_SIZES[value])
             self.after(50, self._fit_to_content)
@@ -1718,8 +1780,11 @@ class App(ctk.CTk):
 
     def _set_controls_busy(self, busy):
         state = "disabled" if busy else "normal"
-        for widget in (self.url_entry, self.btn_paste, self.btn_dest, self.chk_trim,
-                       self.cmb_mode, self.cmb_format, self.cmb_quality):
+        # While a download runs, more links can be added to the queue.
+        queueing = busy and self._job_kind == "download"
+        for widget in (self.url_entry, self.btn_paste):
+            widget.configure(state="normal" if queueing else state)
+        for widget in (self.btn_dest, self.chk_trim, self.cmb_mode, self.cmb_format, self.cmb_quality):
             widget.configure(state=state)
         trim_state = "normal" if (not busy and self.chk_trim.get()) else "disabled"
         self.ent_start.configure(state=trim_state)
@@ -1728,7 +1793,8 @@ class App(ctk.CTk):
         # bounded by the network timeout.
         self.btn_cancel.configure(state="normal" if busy and self._job_kind == "download" else "disabled")
         self._live(self.btn_cancel, lambda: tr("action.cancel"))
-        set_primary_state(self.btn_analyze, state)
+        set_primary_state(self.btn_analyze, "normal" if queueing else state)
+        self._live(self.btn_analyze, lambda: tr("queue.add") if queueing else tr("link.analyze"))
         if busy:
             set_primary_state(self.btn_download, "disabled")
             self.btn_retry.configure(state="disabled")
@@ -1811,6 +1877,9 @@ class App(ctk.CTk):
             self.set_queue([])
 
     def start_analysis_thread(self):
+        if self._job_kind == "download":
+            self.add_to_queue()
+            return
         if self.is_busy():
             return
         try:
@@ -1870,25 +1939,49 @@ class App(ctk.CTk):
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._show_media(lambda: message, DANGER)
         self._end_job()
+        if self._from_queue:
+            self._from_queue = False
+            self._next_in_queue()
     def _on_analysis_done(self, analysis, url):
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._end_job()
         self._describe_analysis(analysis)
         for item in analysis.skipped:
             self._append_log(tr("log.skipped_entry", title=item.title, reason=i18n.tr_message(item.skip_reason)))
+        from_queue, self._from_queue = self._from_queue, False
         if not analysis.items:
             message = tr("link.nothing")
             if analysis.skipped:
                 message = tr("link.nothing_reason", reason=i18n.tr_message(analysis.skipped[0].skip_reason))
             self._append_log(message)
-            messagebox.showwarning(tr("link.nothing_title"), message, parent=self)
+            if from_queue:
+                self._next_in_queue()
+            else:
+                messagebox.showwarning(tr("link.nothing_title"), message, parent=self)
+            return
+        if from_queue:
+            # Queued links download without questions; for a playlist, only
+            # the entries not downloaded before.
+            items = analysis.items
+            if analysis.is_playlist:
+                before = {id(i) for i in playlist.downloaded_before(items, [e.url for e in self.history.entries])}
+                items = [i for i in items if id(i) not in before]
+                if not items:
+                    self._append_log(tr("log.queue_nothing_new", title=analysis.title))
+                    self._next_in_queue()
+                    return
+            self.analyzed_url = url
+            self.set_queue([item.as_dict() for item in items],
+                           skipped=[item.as_dict() for item in analysis.skipped])
+            self.start_download_queue()
             return
         if analysis.is_playlist:
             self._append_log(tr("log.playlist", title=analysis.title, count=len(analysis.items),
                                 skipped=len(analysis.skipped)))
             self._pending_skipped = [item.as_dict() for item in analysis.skipped]
+            before = playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries])
             self.playlist_dialog = PlaylistSelector(
-                self, analysis, lambda items: self._on_playlist_selected(url, items))
+                self, analysis, lambda items: self._on_playlist_selected(url, items), downloaded=before)
         else:
             self._append_log(tr("log.video", title=analysis.title))
             self.analyzed_url = url
@@ -1920,6 +2013,51 @@ class App(ctk.CTk):
             return
         self.analyzed_url = url
         self.set_queue([item.as_dict() for item in items], skipped=self._pending_skipped)
+    # --- link queue ---------------------------------------------------------
+
+    def add_to_queue(self):
+        """Put the link in the field at the end of the queue (while a download runs)."""
+        try:
+            url = urls.normalize_url(self.url_entry.get())
+        except urls.UrlError as e:
+            key, values = e.key, e.values
+            self._show_media(lambda: tr(key, **values), DANGER)
+            return
+        self.link_queue.append(url)
+        self.url_entry.delete(0, "end")
+        self._append_log(tr("log.queue_added", url=url))
+        self._show_link_queue()
+
+    def clear_link_queue(self):
+        if self.link_queue:
+            self.link_queue = []
+            self._append_log(tr("log.queue_cleared"))
+        self._show_link_queue()
+
+    def _show_link_queue(self):
+        count = len(self.link_queue)
+        if count:
+            self._live(self.lbl_queue, lambda: tr("queue.waiting", count=count))
+            self.queue_row.grid(row=2, column=0, columnspan=3, sticky="w", padx=18, pady=(0, 14))
+        else:
+            self.queue_row.grid_remove()
+
+    def _next_in_queue(self):
+        """Analyze and download the next queued link, if any."""
+        if not self.link_queue or self.is_busy() or self._closing:
+            self._show_link_queue()
+            return
+        url = self.link_queue.pop(0)
+        self._show_link_queue()
+        self._append_log(tr("log.queue_next", url=url))
+        self.url_entry.delete(0, "end")
+        self.url_entry.insert(0, url)
+        self._from_queue = True
+        self.start_analysis_thread()
+        if not self.is_busy():  # the link was rejected
+            self._from_queue = False
+            self._next_in_queue()
+
     def set_queue(self, items, skipped=()):
         self.download_queue = list(items)
         # Entries that cannot be downloaded; reported as skipped in the result.
@@ -1958,6 +2096,8 @@ class App(ctk.CTk):
         self._job_mode = opts['mode']
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
             self._live(self.btn_download, lambda: tr("action.downloading"))
+            # The field is free for the next link, which joins the queue.
+            self.url_entry.delete(0, "end")
     def run_queue(self, items, opts, cancel_event=None):
         """Worker thread: download each item and post events; no widget access."""
         summary = JobSummary()
@@ -2025,9 +2165,13 @@ class App(ctk.CTk):
         self._append_log(tr("log.result", summary=summary.headline(
             label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))))
         self.last_summary = summary
+        cancelled = self._cancel_event.is_set()
         self._end_job()
         if self._closing:
             return
+        if cancelled and self.link_queue:
+            self.clear_link_queue()  # Cancel stops the whole queue
+        more = bool(self.link_queue)
         def headline():
             return summary.headline(label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))
         self._live(self.lbl_item, lambda: f"{tr(summary.title_key())}: {headline()}")
@@ -2037,6 +2181,9 @@ class App(ctk.CTk):
             self._show_progress(1, lambda: tr("progress.complete"))
         else:
             self._show_progress(done / len(summary.results) if summary.results else 0, headline)
+        if more:
+            self._next_in_queue()
+            return
         if done and self.settings.open_folder_when_done:
             self.open_folder()
         if self.settings.show_summary:

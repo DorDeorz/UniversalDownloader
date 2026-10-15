@@ -9,6 +9,7 @@ that ``Clock`` drains on the main thread, as the Windows app does with Tk's
 ``after()``.
 """
 
+import dataclasses
 import logging
 import os
 import sys
@@ -48,6 +49,7 @@ import layout
 import logic
 import md_patches
 import media_tools
+import playlist
 import self_update
 import texts
 import urls
@@ -255,6 +257,10 @@ class UniversalDownloaderApp(MDApp):
         self.session = None
         self.analysis = None
         self.analysis_url = None
+        self.chosen = []          # the playlist entries picked for download
+        self.link_queue = []      # links added while a download runs
+        self._from_queue = False  # the running analysis came from link_queue
+        self._cancelled = False
         self.download_dir = None
         self.job = None  # "analyze" or "download" while one runs
         self.mode = self.settings.default_mode
@@ -315,6 +321,8 @@ class UniversalDownloaderApp(MDApp):
     def on_start(self):
         self._show_mode()
         _show(self.ids.media_card, False)
+        _show(self.ids.btn_pick, False)
+        _show(self.ids.queue_row, False)
         _show(self.ids.progress_card, False)
         _show(self.ids.trim_box, False)
         _show(self.ids.log, False)
@@ -528,7 +536,7 @@ class UniversalDownloaderApp(MDApp):
         if not status.ok:
             self.snack(self.tr("top.ffmpeg_missing"))
         self.ids.btn_analyze.disabled = False
-        self.ids.btn_download.disabled = not (self.analysis and self.analysis.items)
+        self.ids.btn_download.disabled = not (self.analysis and self.chosen)
         self._refresh("settings")
         Clock.schedule_once(self._prebuild, PREBUILD_SECONDS)
         if android_env.on_android():
@@ -735,9 +743,13 @@ class UniversalDownloaderApp(MDApp):
         if self.job is None and self.analysis is not None and self.ids.url.text.strip() != self.analysis_url:
             self.analysis = None
             self.ids.btn_download.disabled = True
+            _show(self.ids.btn_pick, False)
             self._show_media(self.tr("link.changed"), "", "link-variant-off")
 
     def analyze(self):
+        if self.job == "download":
+            self.add_to_queue()
+            return
         if self.session is None or self.job is not None:
             return
         try:
@@ -748,6 +760,7 @@ class UniversalDownloaderApp(MDApp):
         if started:
             self.job = "analyze"
             self.analysis = None
+            _show(self.ids.btn_pick, False)
             self.set_busy(True)
             self.ids.btn_download.disabled = True
             self._show_media(self.tr("link.reading"), "", "timer-sand")
@@ -798,10 +811,15 @@ class UniversalDownloaderApp(MDApp):
     # --- Download -----------------------------------------------------------------
 
     def set_busy(self, busy):
-        for name in ("btn_analyze", "btn_clear", "btn_video", "btn_audio", "btn_quality", "btn_format",
-                     "trim_switch", "trim_start", "trim_end"):
+        # While a download runs, more links can be added to the queue.
+        queueing = busy and self.job == "download"
+        for name in ("btn_video", "btn_audio", "btn_quality", "btn_format", "trim_switch", "trim_start",
+                     "trim_end"):
             self.ids[name].disabled = busy
-        self.ids.url.disabled = busy
+        for name in ("btn_analyze", "btn_clear", "url"):
+            self.ids[name].disabled = busy and not queueing
+        self.ids.analyze_text.text = self.tr("queue.add" if queueing else "link.analyze")
+        self.ids.analyze_icon.icon = "playlist-plus" if queueing else "magnify"
         self.ids.download_icon.icon = "close" if busy else "download"
         self.ids.download_text.text = self.tr("action.cancel" if busy and self.job == "download"
                                               else "action.download")
@@ -810,11 +828,12 @@ class UniversalDownloaderApp(MDApp):
 
     def download(self):
         if self.job == "download":
+            self._cancelled = True
             self.session.cancel()
             self.ids.download_text.text = self.tr("action.cancelling")
             self.ids.btn_download.disabled = True
             return
-        if self.job is not None or not self.analysis or not self.analysis.items:
+        if self.job is not None or not self.analysis or not self.chosen:
             return
         if not self.download_dir:
             self.snack(self.tr("folder.error_title"))
@@ -835,8 +854,9 @@ class UniversalDownloaderApp(MDApp):
         options = worker.build_options(MODES[self.mode], self.download_dir, fmt=self.fmt[self.mode],
                                        quality=self.quality[self.mode], trim_start=start, trim_end=end)
         self._set_platform_options()
-        if self.session.download(self.analysis, options):
+        if self.session.download(dataclasses.replace(self.analysis, items=list(self.chosen)), options):
             self.job = "download"
+            self._cancelled = False
             self.set_busy(True)
             self._keep_awake(True)
             _show(self.ids.progress_card, True)
@@ -844,6 +864,62 @@ class UniversalDownloaderApp(MDApp):
             self.ids.progress_title.text = self.tr("progress.starting")
             self.ids.progress_detail.text = ""
             self.log(self.tr("log.folder", folder=self.download_dir))
+
+    def _show_chosen(self):
+        if self.analysis is not None and self.analysis.is_playlist:
+            self.ids.pick_text.text = self.tr("playlist.selected", count=len(self.chosen)) + \
+                f" / {len(self.analysis.items)}"
+
+    def choose_videos(self):
+        """Tick the playlist entries to download; ones downloaded before are marked."""
+        if self.analysis is None or self.job is not None:
+            return
+        items = self.analysis.items
+        before = {id(item) for item in playlist.downloaded_before(items, [e.url for e in self.history.entries])}
+        ticked = {id(item) for item in self.chosen}
+        rows = BoxLayout(orientation="vertical", size_hint_y=None)
+        rows.bind(minimum_height=rows.setter("height"))
+        lines = []
+
+        def draw(row, item):
+            row.icon = "checkbox-marked" if id(item) in ticked else "checkbox-blank-outline"
+            row.accent = id(item) in ticked
+
+        def toggle(row, item):
+            ticked.symmetric_difference_update({id(item)})
+            draw(row, item)
+
+        def tick(which):
+            ticked.clear()
+            ticked.update(id(item) for item in items if which(item))
+            for row, item in lines:
+                draw(row, item)
+
+        for item in items:
+            title = f"{item.index}. {item.title}" if item.index else item.title
+            row = LiteRow(headline=title, supporting=self.tr("playlist.downloaded") if id(item) in before else "")
+            row.bind(on_release=lambda r, i=item: toggle(r, i))
+            draw(row, item)
+            rows.add_widget(row)
+            lines.append((row, item))
+        quick = MDBoxLayout(adaptive_height=True, spacing=dp(8))
+        for text, which in ((self.tr("playlist.select_all"), lambda i: True),
+                            (self.tr("playlist.select_none"), lambda i: False),
+                            (self.tr("playlist.select_new"), lambda i: id(i) not in before)):
+            quick.add_widget(MDButton(MDButtonText(text=text), style="outlined",
+                                      on_release=lambda _b, w=which: tick(w)))
+        visible = min(len(items) * dp(72), Window.height * 0.45)
+        scroll = ScrollView(size_hint_y=None, height=visible, do_scroll_x=False, bar_width=dp(4))
+        scroll.add_widget(rows)
+        box = MDBoxLayout(quick, scroll, orientation="vertical", adaptive_height=True, spacing=dp(8))
+
+        def done():
+            self.chosen = [item for item in items if id(item) in ticked]
+            self._show_chosen()
+            self.ids.btn_download.disabled = not self.chosen
+
+        self._dialog(self.tr("playlist.title"), content=box,
+                     buttons=[(self.t("common.cancel"), None), (self.t("common.done"), done)])
 
     def _set_platform_options(self):
         options = {**getattr(self, "_js_options", {}), **app_settings.download_speed_options(self.settings)}
@@ -870,6 +946,12 @@ class UniversalDownloaderApp(MDApp):
         self.analysis = analysis
         self.analysis_url = self.ids.url.text.strip()
         self.set_busy(False)
+        # Playlist entries downloaded before start unticked.
+        before = {id(item) for item in playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries])
+                  } if analysis.is_playlist else set()
+        self.chosen = [item for item in analysis.items if id(item) not in before]
+        _show(self.ids.btn_pick, analysis.is_playlist and bool(analysis.items))
+        self._show_chosen()
         if analysis.is_playlist:
             sub = self.tr("media.videos", count=len(analysis.items))
             if analysis.skipped:
@@ -885,11 +967,20 @@ class UniversalDownloaderApp(MDApp):
             text = (self.tr("link.nothing_reason", reason=i18n.tr_message(reason)) if reason
                     else self.tr("link.nothing"))
             self._show_media(text, "", "alert-circle-outline")
-        self.ids.btn_download.disabled = not analysis.items
+        self.ids.btn_download.disabled = not self.chosen
         if browser_route.enabled():
             self.log(self.t("youtube.browser_count", count=browser_route.request_count()))
         selftest(f"analysis items={len(analysis.items)} title={analysis.title!r} "
                  f"browser_requests={browser_route.request_count()}")
+        if self._from_queue:
+            # Queued links download without questions (playlists: only new entries).
+            self._from_queue = False
+            if not self.chosen:
+                self.log(self.tr("log.queue_nothing_new", title=analysis.title))
+                Clock.schedule_once(lambda *_: self._next_in_queue(), 0)
+            else:
+                self.download()
+            return
         if self._selftest and analysis.items:
             self._next_selftest_pass()
 
@@ -912,6 +1003,9 @@ class UniversalDownloaderApp(MDApp):
         self.ids.btn_download.disabled = True
         self._show_media(self.tr("link.nothing_reason", reason=message), "", "alert-circle-outline")
         self.log(message)
+        if self._from_queue:
+            self._from_queue = False
+            Clock.schedule_once(lambda *_: self._next_in_queue(), 0)
         selftest(f"analysis failed: {message} browser_requests={browser_route.request_count()}")
         if not logic.is_bot_check(message) or not android_env.on_android():
             return
@@ -977,8 +1071,53 @@ class UniversalDownloaderApp(MDApp):
             self.ids.progress.value = 100
             self.ids.progress_detail.text = self.t("home.saved", folder=self.download_dir)
         selftest(f"job done all_ok={summary.all_ok}")
-        if self._selftest:
+        if self._cancelled and self.link_queue:
+            self.clear_link_queue()  # Cancel stops the whole queue
+        if self.link_queue:
+            Clock.schedule_once(lambda *_: self._next_in_queue(), 0)
+        elif self._selftest:
             self._next_selftest_pass()
+
+    # --- Link queue ---------------------------------------------------------------
+
+    def add_to_queue(self):
+        """Put the link in the field at the end of the queue (while a download runs)."""
+        try:
+            url = urls.normalize_url(self.ids.url.text)
+        except urls.UrlError as e:
+            self.snack(self.tr(e.key, **e.values))
+            return
+        self.link_queue.append(url)
+        self.ids.url.text = ""
+        self.log(self.tr("log.queue_added", url=url))
+        self.snack(self.tr("log.queue_added", url=url))
+        self._show_link_queue()
+
+    def clear_link_queue(self):
+        if self.link_queue:
+            self.link_queue = []
+            self.log(self.tr("log.queue_cleared"))
+        self._show_link_queue()
+
+    def _show_link_queue(self):
+        count = len(self.link_queue)
+        self.ids.queue_text.text = self.tr("queue.waiting", count=count) if count else ""
+        _show(self.ids.queue_row, bool(count))
+
+    def _next_in_queue(self):
+        """Analyze and download the next queued link, if any."""
+        if not self.link_queue or self.job is not None:
+            self._show_link_queue()
+            return
+        url = self.link_queue.pop(0)
+        self._show_link_queue()
+        self.log(self.tr("log.queue_next", url=url))
+        self.ids.url.text = url
+        self._from_queue = True
+        self.analyze()
+        if self.job is None:  # the link was rejected
+            self._from_queue = False
+            self._next_in_queue()
 
     # --- History ------------------------------------------------------------------
 
@@ -1382,7 +1521,7 @@ class UniversalDownloaderApp(MDApp):
         self._refresh("settings", "history")
         if self.job is None:
             self.set_busy(False)
-            self.ids.btn_download.disabled = not (self.analysis and self.analysis.items)
+            self.ids.btn_download.disabled = not (self.analysis and self.chosen)
 
     def _redraw_field_texts(self, *_):
         """Text fields draw their hint and helper texts once; redraw after a language change."""

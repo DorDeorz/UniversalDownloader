@@ -182,5 +182,15 @@
  "update.restart_note": "Orbida se cierra, instala la nueva versión y se vuelve a abrir. Tus ajustes y archivos se conservan.",
  "log.auto_paste": "Enlace tomado del portapapeles.",
  "log.updated": "Orbida se actualizó a la versión {version}.",
- "log.update_available": "Orbida {version} está disponible. Haz clic en el botón de actualización de arriba para instalarla."
+ "log.update_available": "Orbida {version} está disponible. Haz clic en el botón de actualización de arriba para instalarla.",
+ "playlist.select_new": "Solo nuevos",
+ "playlist.downloaded": "ya descargado",
+ "queue.add": "Añadir a la cola",
+ "queue.waiting": "{count} en espera en la cola",
+ "queue.clear": "Vaciar la cola",
+ "log.queue_added": "Añadido a la cola: {url}",
+ "log.queue_next": "Siguiente en la cola: {url}",
+ "log.queue_cleared": "Cola vaciada",
+ "log.queue_nothing_new": "Nada nuevo para descargar en {title}",
+ "theme.Black": "Negro"
 }

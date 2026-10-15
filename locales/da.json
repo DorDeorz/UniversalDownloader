@@ -182,5 +182,15 @@
  "update.restart_note": "Orbida lukker, installerer den nye version og åbner igen. Indstillinger og filer bevares.",
  "log.auto_paste": "Linket blev hentet fra udklipsholderen.",
  "log.updated": "Orbida er opdateret til {version}.",
- "log.update_available": "Orbida {version} er tilgængelig. Klik på opdateringsknappen øverst for at installere den."
+ "log.update_available": "Orbida {version} er tilgængelig. Klik på opdateringsknappen øverst for at installere den.",
+ "playlist.select_new": "Kun nye",
+ "playlist.downloaded": "hentet før",
+ "queue.add": "Føj til kø",
+ "queue.waiting": "{count} venter i køen",
+ "queue.clear": "Ryd køen",
+ "log.queue_added": "Føjet til køen: {url}",
+ "log.queue_next": "Næste fra køen: {url}",
+ "log.queue_cleared": "Køen er ryddet",
+ "log.queue_nothing_new": "Intet nyt at hente i {title}",
+ "theme.Black": "Sort"
 }

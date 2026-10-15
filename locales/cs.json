@@ -182,5 +182,15 @@
  "update.restart_note": "Orbida se zavře, nainstaluje novou verzi a znovu se otevře. Nastavení a soubory zůstanou zachovány.",
  "log.auto_paste": "Odkaz převzat ze schránky.",
  "log.updated": "Orbida byla aktualizována na verzi {version}.",
- "log.update_available": "Je k dispozici Orbida {version}. Nainstalujete ji tlačítkem aktualizace nahoře."
+ "log.update_available": "Je k dispozici Orbida {version}. Nainstalujete ji tlačítkem aktualizace nahoře.",
+ "playlist.select_new": "Jen nové",
+ "playlist.downloaded": "již staženo",
+ "queue.add": "Přidat do fronty",
+ "queue.waiting": "Ve frontě čeká: {count}",
+ "queue.clear": "Vymazat frontu",
+ "log.queue_added": "Přidáno do fronty: {url}",
+ "log.queue_next": "Další z fronty: {url}",
+ "log.queue_cleared": "Fronta vymazána",
+ "log.queue_nothing_new": "V {title} není nic nového ke stažení",
+ "theme.Black": "Černá"
 }

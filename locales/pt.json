@@ -182,5 +182,15 @@
  "update.restart_note": "O Orbida fecha, instala a nova versão e abre de novo. Suas configurações e arquivos são mantidos.",
  "log.auto_paste": "Link obtido da área de transferência.",
  "log.updated": "O Orbida foi atualizado para a versão {version}.",
- "log.update_available": "O Orbida {version} está disponível. Clique no botão de atualização no topo para instalar."
+ "log.update_available": "O Orbida {version} está disponível. Clique no botão de atualização no topo para instalar.",
+ "playlist.select_new": "Só novos",
+ "playlist.downloaded": "já baixado",
+ "queue.add": "Adicionar à fila",
+ "queue.waiting": "{count} aguardando na fila",
+ "queue.clear": "Limpar a fila",
+ "log.queue_added": "Adicionado à fila: {url}",
+ "log.queue_next": "Próximo da fila: {url}",
+ "log.queue_cleared": "Fila limpa",
+ "log.queue_nothing_new": "Nada novo para baixar em {title}",
+ "theme.Black": "Preto"
 }

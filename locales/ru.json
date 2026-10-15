@@ -182,5 +182,15 @@
  "update.restart_note": "Orbida закроется, установит новую версию и откроется снова. Настройки и файлы сохранятся.",
  "log.auto_paste": "Ссылка взята из буфера обмена.",
  "log.updated": "Orbida обновлена до версии {version}.",
- "log.update_available": "Доступна Orbida {version}. Нажмите кнопку обновления вверху, чтобы установить её."
+ "log.update_available": "Доступна Orbida {version}. Нажмите кнопку обновления вверху, чтобы установить её.",
+ "playlist.select_new": "Только новые",
+ "playlist.downloaded": "уже скачано",
+ "queue.add": "Добавить в очередь",
+ "queue.waiting": "В очереди ожидает: {count}",
+ "queue.clear": "Очистить очередь",
+ "log.queue_added": "Добавлено в очередь: {url}",
+ "log.queue_next": "Следующий из очереди: {url}",
+ "log.queue_cleared": "Очередь очищена",
+ "log.queue_nothing_new": "В {title} нет ничего нового для загрузки",
+ "theme.Black": "Чёрная"
 }

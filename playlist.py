@@ -7,6 +7,7 @@ in the playlist so file names can follow the playlist order (#36).
 """
 
 from dataclasses import dataclass, field
+from urllib.parse import parse_qs, urlsplit
 
 # yt-dlp's 'availability' values that mean the entry cannot be downloaded
 # without an account or at all.
@@ -112,3 +113,34 @@ def analyze(info, url):
         item.skip_reason = skip_reason(entry) or (None if item.url else "no downloadable URL")
         (result.skipped if item.skip_reason else result.items).append(item)
     return result
+
+
+def url_key(url):
+    """A key that is the same for every link to one video.
+
+    YouTube links differ in form (watch?v=, youtu.be/, shorts/, music.) and
+    in extra parameters (list=, t=, si=), so they are reduced to the video
+    id. Other links lose their scheme, "www." and a trailing slash.
+    """
+    parts = urlsplit(url or "")
+    host = (parts.hostname or "").lower()
+    for prefix in ("www.", "m.", "music."):
+        if host.startswith(prefix):
+            host = host[len(prefix):]
+    path = parts.path.rstrip("/")
+    if host == "youtube.com":
+        video = parse_qs(parts.query).get("v", [None])[0]
+        if video:
+            return "youtube:" + video
+        for prefix in ("/shorts/", "/live/", "/embed/"):
+            if path.startswith(prefix):
+                return "youtube:" + path[len(prefix):].split("/")[0]
+    if host == "youtu.be" and path:
+        return "youtube:" + path.lstrip("/").split("/")[0]
+    return f"{host}{path}" + (f"?{parts.query}" if parts.query else "")
+
+
+def downloaded_before(items, urls):
+    """The items whose link is among ``urls`` (links downloaded earlier)."""
+    known = {url_key(u) for u in urls if u}
+    return [item for item in items if item.url and url_key(item.url) in known]

@@ -182,5 +182,15 @@
  "update.restart_note": "Orbida stängs, installerar den nya versionen och öppnas igen. Inställningar och filer behålls.",
  "log.auto_paste": "Länken hämtades från urklipp.",
  "log.updated": "Orbida har uppdaterats till {version}.",
- "log.update_available": "Orbida {version} finns tillgänglig. Klicka på uppdateringsknappen längst upp för att installera."
+ "log.update_available": "Orbida {version} finns tillgänglig. Klicka på uppdateringsknappen längst upp för att installera.",
+ "playlist.select_new": "Bara nya",
+ "playlist.downloaded": "hämtad tidigare",
+ "queue.add": "Lägg till i kön",
+ "queue.waiting": "{count} väntar i kön",
+ "queue.clear": "Töm kön",
+ "log.queue_added": "Tillagd i kön: {url}",
+ "log.queue_next": "Nästa från kön: {url}",
+ "log.queue_cleared": "Kön är tömd",
+ "log.queue_nothing_new": "Inget nytt att hämta i {title}",
+ "theme.Black": "Svart"
 }

@@ -182,5 +182,15 @@
  "update.restart_note": "Orbida закриється, установить нову версію та відкриється знову. Налаштування й файли збережуться.",
  "log.auto_paste": "Посилання взято з буфера обміну.",
  "log.updated": "Orbida оновлено до версії {version}.",
- "log.update_available": "Доступна Orbida {version}. Натисніть кнопку оновлення вгорі, щоб установити її."
+ "log.update_available": "Доступна Orbida {version}. Натисніть кнопку оновлення вгорі, щоб установити її.",
+ "playlist.select_new": "Лише нові",
+ "playlist.downloaded": "вже завантажено",
+ "queue.add": "Додати до черги",
+ "queue.waiting": "У черзі очікує: {count}",
+ "queue.clear": "Очистити чергу",
+ "log.queue_added": "Додано до черги: {url}",
+ "log.queue_next": "Наступний із черги: {url}",
+ "log.queue_cleared": "Чергу очищено",
+ "log.queue_nothing_new": "У {title} немає нічого нового для завантаження",
+ "theme.Black": "Чорна"
 }

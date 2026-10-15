@@ -182,5 +182,15 @@
  "update.restart_note": "Orbida 将关闭、安装新版本并重新打开。你的设置和文件会保留。",
  "log.auto_paste": "已从剪贴板获取链接。",
  "log.updated": "Orbida 已更新到 {version}。",
- "log.update_available": "Orbida {version} 已发布。点击顶部的更新按钮进行安装。"
+ "log.update_available": "Orbida {version} 已发布。点击顶部的更新按钮进行安装。",
+ "playlist.select_new": "仅新项目",
+ "playlist.downloaded": "已下载过",
+ "queue.add": "加入队列",
+ "queue.waiting": "队列中有 {count} 个等待",
+ "queue.clear": "清空队列",
+ "log.queue_added": "已加入队列：{url}",
+ "log.queue_next": "队列中的下一个：{url}",
+ "log.queue_cleared": "队列已清空",
+ "log.queue_nothing_new": "{title} 中没有新的可下载内容",
+ "theme.Black": "纯黑"
 }

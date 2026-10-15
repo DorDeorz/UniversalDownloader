@@ -125,9 +125,34 @@ KV = r"""
                                 style: "filled"
                                 on_release: app.analyze()
                                 MDButtonIcon:
+                                    id: analyze_icon
                                     icon: "magnify"
                                 MDButtonText:
+                                    id: analyze_text
                                     text: app.tr("link.analyze", app.lang)
+
+                        # Links added while a download runs; they download one after another.
+                        MDBoxLayout:
+                            id: queue_row
+                            adaptive_height: True
+                            spacing: dp(8)
+                            MDIcon:
+                                icon: "playlist-plus"
+                                pos_hint: {"center_y": .5}
+                                theme_text_color: "Custom"
+                                text_color: app.theme_cls.primaryColor
+                            MDLabel:
+                                id: queue_text
+                                text: ""
+                                bold: True
+                                adaptive_height: True
+                                pos_hint: {"center_y": .5}
+                            MDButton:
+                                style: "text"
+                                pos_hint: {"center_y": .5}
+                                on_release: app.clear_link_queue()
+                                MDButtonText:
+                                    text: app.tr("queue.clear", app.lang)
 
                         MDCard:
                             id: media_card
@@ -160,6 +185,16 @@ KV = r"""
                                     Hint:
                                         id: media_sub
                                         text: ""
+
+                        MDButton:
+                            id: btn_pick
+                            style: "tonal"
+                            on_release: app.choose_videos()
+                            MDButtonIcon:
+                                icon: "playlist-check"
+                            MDButtonText:
+                                id: pick_text
+                                text: app.tr("playlist.title", app.lang)
 
                         MDLabel:
                             text: app.t("home.mode", app.lang)

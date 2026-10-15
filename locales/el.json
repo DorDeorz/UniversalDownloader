@@ -182,5 +182,16 @@
  "update.restart_note": "Το Orbida κλείνει, εγκαθιστά τη νέα έκδοση και ανοίγει ξανά. Οι ρυθμίσεις και τα αρχεία σας διατηρούνται.",
  "log.auto_paste": "Ο σύνδεσμος πάρθηκε από το πρόχειρο.",
  "log.updated": "Το Orbida ενημερώθηκε στην έκδοση {version}.",
- "log.update_available": "Το Orbida {version} είναι διαθέσιμο. Πατήστε το κουμπί ενημέρωσης επάνω για να το εγκαταστήσετε."
+ "log.update_available": "Το Orbida {version} είναι διαθέσιμο. Πατήστε το κουμπί ενημέρωσης επάνω για να το εγκαταστήσετε.",
+ "playlist.select_new": "Μόνο νέα",
+ "playlist.downloaded": "έχει ήδη ληφθεί",
+ "queue.add": "Προσθήκη στην ουρά",
+ "queue.waiting": "{count} σε αναμονή στην ουρά",
+ "queue.clear": "Εκκαθάριση ουράς",
+ "log.queue_added": "Προστέθηκε στην ουρά: {url}",
+ "log.queue_next": "Επόμενο από την ουρά: {url}",
+ "log.queue_cleared": "Η ουρά εκκαθαρίστηκε",
+ "log.queue_nothing_new": "Τίποτα νέο για λήψη στο {title}",
+ "theme.Black": "Μαύρο",
+ "log.spotify": "Spotify: κάθε τραγούδι αναζητείται στο YouTube και κατεβαίνει από εκεί ως ήχος"
 }

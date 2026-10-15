@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida се затваря, инсталира новата версия и се отваря отново. Настройките и файловете се запазват.",
  "log.auto_paste": "Връзката е взета от клипборда.",
  "log.updated": "Orbida е актуализирана до версия {version}.",
- "log.update_available": "Налична е Orbida {version}. Натиснете бутона за актуализация горе, за да я инсталирате."
+ "log.update_available": "Налична е Orbida {version}. Натиснете бутона за актуализация горе, за да я инсталирате.",
+ "playlist.select_new": "Само новите",
+ "playlist.downloaded": "вече изтеглено",
+ "queue.add": "Добави в опашката",
+ "queue.waiting": "Чакащи в опашката: {count}",
+ "queue.clear": "Изчисти опашката",
+ "log.queue_added": "Добавено в опашката: {url}",
+ "log.queue_next": "Следващ от опашката: {url}",
+ "log.queue_cleared": "Опашката е изчистена",
+ "log.queue_nothing_new": "Няма нищо ново за изтегляне в {title}",
+ "theme.Black": "Черна",
+ "log.spotify": "Spotify: всяка песен се търси в YouTube и се изтегля оттам като аудио"
 }

@@ -44,3 +44,4 @@ jobs:
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q xvfb ffmpeg
           xvfb-run -a python -m pytest
+

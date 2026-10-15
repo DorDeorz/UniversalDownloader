@@ -14,7 +14,7 @@ import i18n
 
 _log = logging.getLogger(__name__)
 
-THEMES = ("System", "Dark", "Light")
+THEMES = ("System", "Dark", "Light", "Black")  # Black: the dark theme on black (AMOLED)
 # Accent colour names, as on Android; ui.ACCENTS holds their colours.
 ACCENTS = ("Indigo", "Blue", "Teal", "Green", "Purple", "Pink", "Red", "Orange")
 # Parallel fragment downloads for segmented (HLS/DASH) streams.

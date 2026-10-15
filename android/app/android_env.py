@@ -302,6 +302,77 @@ class WakeLock:
             self._lock.release()
 
 
+class DownloadNotice:
+    """Background downloads with a progress notification (DownloadService.java).
+
+    While the service runs, Android keeps the app going when the user
+    switches to another app. Progress updates are throttled: Android drops
+    notification updates that come too fast anyway.
+    """
+
+    MIN_INTERVAL = 1.0  # seconds between progress updates
+
+    def __init__(self, clock=None):
+        import time
+        self._clock = clock or time.monotonic
+        self._service = None
+        self.running = False
+        self._last = (None, None, None)
+        self._last_time = 0.0
+
+    def _java(self):
+        if self._service is None:
+            from jnius import autoclass
+            self._service = autoclass("io.github.dordeorz.universaldownloader.DownloadService")
+        return self._service
+
+    def start(self, channel, title, text="", percent=-1):
+        if self.running:
+            return
+        service = self._java()
+        service.clearDone(_activity())
+        service.start(_activity(), channel, title, text, int(percent))
+        self.running = True
+        self._last = (title, text, int(percent))
+        self._last_time = self._clock()
+
+    def update(self, title, text="", percent=-1, force=False):
+        """Show new progress; returns whether it was sent to Android."""
+        if not self.running:
+            return False
+        state = (title, text, int(percent))
+        now = self._clock()
+        if state == self._last or (not force and now - self._last_time < self.MIN_INTERVAL):
+            return False
+        self._java().update(_activity(), *state)
+        self._last, self._last_time = state, now
+        return True
+
+    def service_running(self):
+        """Whether Android actually started the service (for the self-test)."""
+        return bool(self._service is not None and self._service.isRunning())
+
+    def stop(self, done_title=None, done_text=""):
+        """End the service; with ``done_title``, leave a "finished" notification."""
+        if not self.running:
+            return
+        service = self._java()
+        service.stop(_activity())
+        self.running = False
+        if done_title:
+            service.done(_activity(), done_title, done_text)
+
+
+def ask_notification_permission():
+    """Ask once for permission to show notifications (Android 13+)."""
+    from jnius import autoclass
+    if autoclass("android.os.Build$VERSION").SDK_INT < 33:
+        return
+    from android.permissions import Permission, check_permission, request_permissions
+    if not check_permission(Permission.POST_NOTIFICATIONS):
+        request_permissions([Permission.POST_NOTIFICATIONS])
+
+
 def open_or_share(path, mime, share=False, on_error=None):
     """Open ``path`` in another app, or offer it to share.
 

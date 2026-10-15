@@ -10,7 +10,7 @@ package.domain = io.github.dordeorz
 # Filled by android/stage.py: android/app plus the shared modules.
 source.dir = .build/src
 source.include_exts = py,json
-version = 1.0.1
+version = 1.1.0
 # The app icon and start screen, drawn from android/icon/icon.svg (see
 # android/icon/render.py). Android 8+ shows the adaptive layers in the
 # launcher's shape; older versions show icon.png.
@@ -35,9 +35,12 @@ requirements = python3,kivy==2.3.1,pyjnius,android,udtools,charset_normalizer,ma
 # Storage permission is only needed on Android 10 and older; newer versions
 # let the app write its own files to Download/ without it.
 # WAKE_LOCK keeps a download running while the screen is off.
+# FOREGROUND_SERVICE(_DATA_SYNC) lets DownloadService keep it running while
+# the app is in the background; POST_NOTIFICATIONS shows its progress
+# (asked for on Android 13+ when the first download starts).
 # REQUEST_INSTALL_PACKAGES lets the app hand a downloaded update to Android's
 # installer (self_update.py, UpdateInstaller.java).
-android.permissions = INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK, REQUEST_INSTALL_PACKAGES, (name=android.permission.WRITE_EXTERNAL_STORAGE;maxSdkVersion=29), (name=android.permission.READ_EXTERNAL_STORAGE;maxSdkVersion=29)
+android.permissions = INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK, FOREGROUND_SERVICE, FOREGROUND_SERVICE_DATA_SYNC, POST_NOTIFICATIONS, REQUEST_INSTALL_PACKAGES, (name=android.permission.WRITE_EXTERNAL_STORAGE;maxSdkVersion=29), (name=android.permission.READ_EXTERNAL_STORAGE;maxSdkVersion=29)
 android.extra_manifest_application_arguments = manifest_application_arguments.xml
 # Offer the app in Android's Share menu for links (text); a link shared
 # while the app runs reaches the same activity (singleTask).
@@ -52,8 +55,9 @@ android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.allow_backup = False
 android.enable_androidx = True
-# Java sources: BrowserFetch (the hidden WebView behind browser_route.py) and
-# UpdateInstaller (installs an update over the app).
+# Java sources: BrowserFetch (the hidden WebView behind browser_route.py),
+# UpdateInstaller (installs an update over the app) and DownloadService
+# (background downloads with a progress notification).
 android.add_src = java
 # `buildozer android release` makes an APK (signed with the key from the
 # P4A_RELEASE_* variables, see .github/workflows/android.yml), not a bundle.
@@ -61,6 +65,8 @@ android.release_artifact = apk
 
 p4a.local_recipes = recipes
 p4a.bootstrap = sdl2
+# Adds DownloadService to the manifest (p4a's template has no place for it).
+p4a.hook = p4a_hook.py
 
 [buildozer]
 log_level = 2

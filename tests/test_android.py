@@ -1127,3 +1127,218 @@ def test_old_update_files_are_removed(tmp_path):
     updates.remove_old(str(tmp_path), keep=str(tmp_path / "Orbida-1.0.0.apk"))
     assert sorted(os.listdir(tmp_path)) == ["Orbida-1.0.0.apk", "keep.txt"]
     updates.remove_old(str(tmp_path / "missing"))  # no folder yet: nothing to do
+
+
+def test_navigation_has_download_as_the_round_middle_tab():
+    kv = open(os.path.join(ROOT, "android", "app", "layout.py"), encoding="utf-8").read()
+    bar = kv[kv.index("id: nav"):kv.index("<NavTab>")]
+    assert re.findall(r'name: "(\w+)"', bar) == ["history", "home", "settings"]
+    assert bar.index("main: True") > bar.index('name: "home"')
+    main = open(os.path.join(ROOT, "android", "app", "main.py"), encoding="utf-8").read()
+    assert 'order = ["history", "home", "settings"]' in main  # slides go the way the tabs are laid out
+
+
+def test_recent_counts_files_still_there_from_the_last_week(tmp_path):
+    import history
+    log = history.History(str(tmp_path / "history.json"))
+    now = 1_760_000_000
+    for name, size, age_days in (("new.mp4", 3_000_000, 1), ("old.mp4", 5_000_000, 9), ("gone.mp3", 0, 2),
+                                 ("song.mp3", 2_000_000, 6.5)):
+        path = tmp_path / name
+        if name != "gone.mp3":
+            path.write_bytes(b"x" * size)
+        log.add(name, str(path), now=now - age_days * 86400)
+    assert log.recent(7, now=now) == (2, 5_000_000)
+    assert history.format_size(0) == "0 MB"
+    assert history.format_size(5_000_000) == "5 MB"
+    assert history.format_size(1_400_000_000) == "1.4 GB"
+
+
+def test_pure_black_is_off_by_default_and_saved(tmp_path):
+    path = str(tmp_path / "settings.json")
+    assert app_settings.load(path).pure_black is False
+    app_settings.save(path, app_settings.AppSettings(pure_black=True))
+    assert app_settings.load(path).pure_black is True
+
+
+# --- background downloads -----------------------------------------------------------
+
+
+def test_build_hook_adds_the_download_service_once():
+    sys.path.insert(0, os.path.join(ROOT, "android"))
+    try:
+        import p4a_hook
+    finally:
+        sys.path.pop(0)
+    manifest = '<manifest>\n  <application>\n    <activity />\n  </application>\n</manifest>\n'
+    once = p4a_hook.add_service(manifest)
+    assert once.count("DownloadService") == 1
+    assert 'android:foregroundServiceType="dataSync"' in once
+    assert once.index("DownloadService") < once.index("</application>")
+    assert p4a_hook.add_service(once) == once
+    spec = open(os.path.join(ROOT, "android", "buildozer.spec"), encoding="utf-8").read()
+    assert "p4a.hook = p4a_hook.py" in spec
+    for permission in ("FOREGROUND_SERVICE", "FOREGROUND_SERVICE_DATA_SYNC", "POST_NOTIFICATIONS"):
+        assert re.search(rf"^android\.permissions = .*\b{permission}\b", spec, re.M)
+    java = open(os.path.join(ROOT, "android", "java", "io", "github", "dordeorz", "universaldownloader",
+                             "DownloadService.java"), encoding="utf-8").read()
+    for method in ("start(Context context, String channel, String newTitle, String newText, int newPercent)",
+                   "update(Context context, String newTitle, String newText, int newPercent)",
+                   "stop(Context context)", "done(Context context, String newTitle, String newText)",
+                   "clearDone(Context context)"):
+        assert f"public static void {method}" in java
+
+
+class FakeService:
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, name):
+        return lambda *args: self.calls.append((name, args[1:]))
+
+
+def test_download_notice_throttles_progress(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(android_env, "_activity", lambda: "activity")
+    notice = android_env.DownloadNotice(clock=lambda: now[0])
+    notice._service = service = FakeService()
+    assert not notice.update("t", "x", 5)  # not running yet
+    notice.start("Downloads", "Starting")
+    notice.start("Downloads", "Again")  # already running
+    assert [c[0] for c in service.calls] == ["clearDone", "start"]
+    assert not notice.update("t", "10%", 10)  # too soon
+    assert notice.update("t", "10%", 10, force=True)
+    now[0] += 2
+    assert not notice.update("t", "10%", 10)  # nothing changed
+    assert notice.update("t", "60%", 60.7)
+    assert service.calls[-1] == ("update", ("t", "60%", 60))
+    notice.stop("Done", "1 completed")
+    assert [c[0] for c in service.calls[-2:]] == ["stop", "done"]
+    assert not notice.running
+    notice.stop("Done")  # not running: nothing happens
+    assert service.calls[-1][0] == "done" and len(service.calls) == 6
+
+
+_QUEUE_PROBE = """
+import json, os, sys
+sys.path[:0] = [{app!r}, {root!r}]
+from kivy.config import Config
+Config.set("graphics", "width", "412")
+Config.set("graphics", "height", "892")
+import md_patches
+md_patches.disable_hover()
+import main
+from kivy.clock import Clock
+from kivy.core.window import Window
+from lite import LiteRow
+from playlist import AnalysisResult, QueueItem
+from results import ItemResult, ItemStatus, JobSummary
+
+app = main.UniversalDownloaderApp()
+result = {{}}
+
+class Notice:
+    running = False
+    def __init__(self):
+        self.calls = []
+    def start(self, channel, title, text="", percent=-1):
+        self.running = True
+        self.calls.append(["start", channel])
+    def update(self, title, text="", percent=-1, force=False):
+        self.calls.append(["update", percent])
+    def stop(self, title=None, text=""):
+        self.running = False
+        self.calls.append(["stop", title])
+
+def probe(*_):
+    notice = app._notice = Notice()
+    # A playlist with one video downloaded before.
+    app.history.add("Old", os.path.join(os.getcwd(), "old.mp4"), url="https://www.youtube.com/watch?v=aaaaaaaaaaa")
+    items = [QueueItem(url=f"https://www.youtube.com/watch?v={{c * 11}}", title=f"Video {{c}}") for c in "abc"]
+    app.ids.url.text = "https://www.youtube.com/playlist?list=PL1"
+    app._on_analysis_done(AnalysisResult(title="List", items=items, is_playlist=True), "")
+    result["chosen"] = [i.title for i in app.chosen]
+    result["pick_shown"] = app.ids.btn_pick.parent is not None
+    app.choose_videos()
+    dialog = [w for w in Window.children if type(w).__name__ == "MDDialog"][0]
+    rows = [w for w in dialog.walk() if isinstance(w, LiteRow)]
+    result["rows"] = [r.headline for r in rows]
+    rows[0].dispatch("on_release")  # tick the old one too
+    rows[1].dispatch("on_release")  # untick Video b
+    done = [w for w in dialog.walk() if type(w).__name__ == "MDButton"][-1]
+    done.dispatch("on_release")
+    result["chosen_after"] = [i.title for i in app.chosen]
+    # A download is running: the field queues links and the service runs.
+    app.job = "download"
+    app.set_busy(True)
+    result["started"] = list(notice.calls)
+    app._on_item_started(1, 2, "Video a")
+    app._on_progress(0.5, "50%", "")
+    app.ids.url.text = "https://example.com/next"
+    app.analyze()
+    result["queue"] = list(app.link_queue)
+    result["url_free"] = not app.ids.url.disabled
+    analyzed = []
+    app.analyze = lambda: (analyzed.append(app.ids.url.text), setattr(app, "job", "analyze"))
+    app._paused = True
+    summary = JobSummary()
+    summary.add(ItemResult(url="u", title="Video a", status=ItemStatus.COMPLETED, path="p"))
+    app._on_job_done(summary)
+    result["kept_after_first"] = notice.running
+    Clock.schedule_once(after_queue, 0.3)
+
+def after_queue(*_):
+    notice = app._notice
+    result["analyzed"] = app.ids.url.text
+    result["expected_done"] = app.tr("summary.complete")
+    result["running_while_next_analyzes"] = notice.running
+    app._on_analysis_failed("no luck")
+    Clock.schedule_once(finish, 0.3)
+
+def finish(*_):
+    notice = app._notice
+    result["running_at_end"] = notice.running
+    result["calls"] = notice.calls
+    print("UIPROBE " + json.dumps(result), flush=True)
+    app.stop()
+
+orig = app.on_start
+def on_start():
+    orig()
+    Clock.schedule_once(probe, 2)
+app.on_start = on_start
+app.run()
+"""
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not os.environ.get("DISPLAY"), reason="needs a Linux display")
+def test_playlist_picker_queue_and_background_service(tmp_path):
+    import importlib.util
+    import json
+    import subprocess
+    if importlib.util.find_spec("kivymd") is None:
+        pytest.skip("KivyMD (the Android UI toolkit) is not installed")
+    script = tmp_path / "probe.py"
+    script.write_text(_QUEUE_PROBE.format(app=os.path.join(ROOT, "android", "app"), root=ROOT))
+    (tmp_path / "config").mkdir()
+    (tmp_path / "old.mp4").write_bytes(b"x")
+    env = dict(os.environ, KIVY_HOME=str(tmp_path / "kivy"), XDG_CONFIG_HOME=str(tmp_path / "config"),
+               HOME=str(tmp_path), KIVY_NO_ARGS="1")
+    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env,
+                         cwd=tmp_path)
+    line = next((x for x in out.stdout.splitlines() if x.startswith("UIPROBE ")), None)
+    assert line, out.stdout[-3000:] + out.stderr[-3000:]
+    r = json.loads(line[len("UIPROBE "):])
+    assert r["chosen"] == ["Video b", "Video c"]  # Video a was downloaded before
+    assert r["pick_shown"]
+    assert r["rows"][0].startswith("Video a") and len(r["rows"]) == 3
+    assert r["chosen_after"] == ["Video a", "Video c"]
+    assert r["started"] == [["start", texts.t("notify.channel")]]
+    assert r["queue"] == ["https://example.com/next"] and r["url_free"]
+    assert r["kept_after_first"] and r["running_while_next_analyzes"]
+    assert not r["running_at_end"]
+    # One service for the whole queue, and a "finished" notice since the app is in the background.
+    assert [c[0] for c in r["calls"]].count("start") == 1
+    assert r["analyzed"] == "https://example.com/next"
+    assert r["calls"][-1] == ["stop", r["expected_done"]]
+    assert ["update", 50] in r["calls"]

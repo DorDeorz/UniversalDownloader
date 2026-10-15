@@ -182,5 +182,16 @@
  "update.restart_note": "Az Orbida bezárul, telepíti az új verziót, majd újra megnyílik. A beállítások és a fájlok megmaradnak.",
  "log.auto_paste": "A hivatkozás a vágólapról származik.",
  "log.updated": "Az Orbida frissült erre a verzióra: {version}.",
- "log.update_available": "Elérhető az Orbida {version}. A telepítéshez kattintson a fenti frissítés gombra."
+ "log.update_available": "Elérhető az Orbida {version}. A telepítéshez kattintson a fenti frissítés gombra.",
+ "playlist.select_new": "Csak az újak",
+ "playlist.downloaded": "korábban letöltve",
+ "queue.add": "Hozzáadás a sorhoz",
+ "queue.waiting": "{count} vár a sorban",
+ "queue.clear": "Sor törlése",
+ "log.queue_added": "Hozzáadva a sorhoz: {url}",
+ "log.queue_next": "Következő a sorból: {url}",
+ "log.queue_cleared": "Sor törölve",
+ "log.queue_nothing_new": "Nincs új letöltenivaló itt: {title}",
+ "theme.Black": "Fekete",
+ "log.spotify": "Spotify: minden dalt a YouTube-on keres meg, és onnan tölti le hangként"
 }

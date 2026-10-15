@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida sluit, installeert de nieuwe versie en opent opnieuw. Je instellingen en bestanden blijven bewaard.",
  "log.auto_paste": "Link uit het klembord overgenomen.",
  "log.updated": "Orbida is bijgewerkt naar {version}.",
- "log.update_available": "Orbida {version} is beschikbaar. Klik bovenaan op de updateknop om het te installeren."
+ "log.update_available": "Orbida {version} is beschikbaar. Klik bovenaan op de updateknop om het te installeren.",
+ "playlist.select_new": "Alleen nieuwe",
+ "playlist.downloaded": "eerder gedownload",
+ "queue.add": "Aan wachtrij toevoegen",
+ "queue.waiting": "{count} wachtend in de wachtrij",
+ "queue.clear": "Wachtrij legen",
+ "log.queue_added": "Aan de wachtrij toegevoegd: {url}",
+ "log.queue_next": "Volgende uit de wachtrij: {url}",
+ "log.queue_cleared": "Wachtrij geleegd",
+ "log.queue_nothing_new": "Niets nieuws om te downloaden in {title}",
+ "theme.Black": "Zwart",
+ "log.spotify": "Spotify: elk nummer wordt op YouTube gezocht en daarvandaan als audio gedownload"
 }

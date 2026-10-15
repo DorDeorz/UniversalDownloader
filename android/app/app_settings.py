@@ -28,6 +28,7 @@ class AppSettings:
     # Appearance
     theme: str = "system"
     dynamic_color: bool = True        # Material You colours from the wallpaper (Android 12+)
+    pure_black: bool = False          # AMOLED: black background in the dark theme
     accent: str = "Blue"              # used when dynamic_color is off or unavailable
     language: str = "auto"
     # Downloads

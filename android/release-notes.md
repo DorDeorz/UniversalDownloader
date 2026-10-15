@@ -1,6 +1,14 @@
-**Orbida for Android**, version 1.0.1 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
+**Orbida for Android**, version 1.1.0 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
 
 Coming from an Android preview (UniversalDownloader or Orbida 0.x)? Uninstall it once: 1.0 has a new app id and signing key. From 1.0 on, the app updates itself (Settings › About › Check for updates).
+
+**New in 1.1.0**
+- New look, after FitWren: a large title on each page, a round Download button in the middle of the bottom bar, and a progress ring.
+- Two tiles show the files and size downloaded in the last 7 days. Settings › Appearance has a new pure black (AMOLED) switch.
+- Spotify tracks, albums and playlists: each song is found on YouTube and saved as audio.
+- Playlists: choose which videos to download. Ones downloaded before start unticked and are marked.
+- Queue: a link added while a download runs waits and starts by itself afterwards.
+- Downloads keep going in the background, with their progress in a notification.
 
 **New in 1.0.1**
 - Fixed: Reddit videos failed with "The downloaded file is empty". They download normally now.

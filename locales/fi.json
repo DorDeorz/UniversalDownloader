@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida sulkeutuu, asentaa uuden version ja avautuu uudelleen. Asetukset ja tiedostot säilyvät.",
  "log.auto_paste": "Linkki otettiin leikepöydältä.",
  "log.updated": "Orbida päivitettiin versioon {version}.",
- "log.update_available": "Orbida {version} on saatavilla. Asenna se yläreunan päivityspainikkeella."
+ "log.update_available": "Orbida {version} on saatavilla. Asenna se yläreunan päivityspainikkeella.",
+ "playlist.select_new": "Vain uudet",
+ "playlist.downloaded": "ladattu aiemmin",
+ "queue.add": "Lisää jonoon",
+ "queue.waiting": "Jonossa odottaa: {count}",
+ "queue.clear": "Tyhjennä jono",
+ "log.queue_added": "Lisätty jonoon: {url}",
+ "log.queue_next": "Seuraava jonosta: {url}",
+ "log.queue_cleared": "Jono tyhjennetty",
+ "log.queue_nothing_new": "Kohteessa {title} ei ole uutta ladattavaa",
+ "theme.Black": "Musta",
+ "log.spotify": "Spotify: jokainen kappale haetaan YouTubesta ja ladataan sieltä äänenä"
 }

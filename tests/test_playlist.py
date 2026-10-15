@@ -206,3 +206,24 @@ def test_skipped_entries_are_reported_in_the_job_summary(app, monkeypatch):
         pump(app, 0.05)
 
     assert app.last_summary.headline() == "1 completed, 2 skipped"
+
+
+@pytest.mark.parametrize("a, b", [
+    ("https://www.youtube.com/watch?v=abc123&list=PL1&index=2", "https://youtu.be/abc123?si=x"),
+    ("https://m.youtube.com/watch?v=abc123", "https://music.youtube.com/watch?v=abc123"),
+    ("https://www.youtube.com/shorts/abc123", "https://youtube.com/watch?v=abc123&t=30"),
+    ("https://vimeo.com/123/", "http://www.vimeo.com/123"),
+])
+def test_links_to_the_same_video_share_a_key(a, b):
+    assert playlist.url_key(a) == playlist.url_key(b)
+
+
+def test_other_videos_have_other_keys():
+    assert playlist.url_key("https://youtu.be/abc") != playlist.url_key("https://youtu.be/abd")
+    assert playlist.url_key("https://site.com/v?id=1") != playlist.url_key("https://site.com/v?id=2")
+
+
+def test_downloaded_before_matches_any_link_form():
+    items = [playlist.QueueItem(url="https://www.youtube.com/watch?v=a1", title="A", index=1),
+             playlist.QueueItem(url="https://www.youtube.com/watch?v=b2", title="B", index=2)]
+    assert playlist.downloaded_before(items, ["https://youtu.be/b2", ""]) == [items[1]]

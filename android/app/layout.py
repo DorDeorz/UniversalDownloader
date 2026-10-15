@@ -2,10 +2,15 @@
 
 Only the fixed structure lives here; main.py fills in texts, lists and
 states. ``app.t`` looks up a text in the current language.
+
+The look follows the FitWren step counter app: a large bold title on each
+page, filled cards, a progress ring for the download, and a navigation bar
+with the main page (Download) as a round button in the middle.
 """
 
 KV = r"""
 #:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
 
 <Section@MDLabel>:
     font_style: "Title"
@@ -21,6 +26,41 @@ KV = r"""
     theme_text_color: "Custom"
     text_color: app.theme_cls.onSurfaceVariantColor
     adaptive_height: True
+
+<PageHeader@BoxLayout>:
+    title: ""
+    size_hint_y: None
+    height: dp(64)
+    padding: dp(20), 0, dp(8), 0
+    spacing: dp(4)
+    MDLabel:
+        text: root.title
+        font_style: "Headline"
+        role: "small"
+        bold: True
+        shorten: True
+        shorten_from: "right"
+        pos_hint: {"center_y": .5}
+
+# A small FitWren-style stat card: an icon, a big number and what it counts.
+<StatTile@MDCard>:
+    icon: ""
+    style: "filled"
+    orientation: "vertical"
+    size_hint_y: None
+    # Room for a two-line label, so both tiles of a row are the same height.
+    height: max(dp(128), self.minimum_height)
+    padding: dp(16)
+    spacing: dp(4)
+    radius: [dp(16)]
+    MDIcon:
+        icon: root.icon
+        theme_text_color: "Custom"
+        text_color: app.theme_cls.primaryColor
+        adaptive_size: True
+
+<PageAction@MDIconButton>:
+    pos_hint: {"center_y": .5}
 
 <ChoiceButton@MDButton>:
     style: "outlined"
@@ -42,14 +82,11 @@ KV = r"""
             MDBoxLayout:
                 orientation: "vertical"
 
-                MDTopAppBar:
-                    type: "small"
-                    MDTopAppBarTitle:
-                        text: app.title
-                    MDTopAppBarTrailingButtonContainer:
-                        MDActionTopAppBarButton:
-                            icon: "content-paste"
-                            on_release: app.paste()
+                PageHeader:
+                    title: app.title
+                    PageAction:
+                        icon: "content-paste"
+                        on_release: app.paste()
 
                 MDScrollView:
                     do_scroll_x: False
@@ -88,9 +125,34 @@ KV = r"""
                                 style: "filled"
                                 on_release: app.analyze()
                                 MDButtonIcon:
+                                    id: analyze_icon
                                     icon: "magnify"
                                 MDButtonText:
+                                    id: analyze_text
                                     text: app.tr("link.analyze", app.lang)
+
+                        # Links added while a download runs; they download one after another.
+                        MDBoxLayout:
+                            id: queue_row
+                            adaptive_height: True
+                            spacing: dp(8)
+                            MDIcon:
+                                icon: "playlist-plus"
+                                pos_hint: {"center_y": .5}
+                                theme_text_color: "Custom"
+                                text_color: app.theme_cls.primaryColor
+                            MDLabel:
+                                id: queue_text
+                                text: ""
+                                bold: True
+                                adaptive_height: True
+                                pos_hint: {"center_y": .5}
+                            MDButton:
+                                style: "text"
+                                pos_hint: {"center_y": .5}
+                                on_release: app.clear_link_queue()
+                                MDButtonText:
+                                    text: app.tr("queue.clear", app.lang)
 
                         MDCard:
                             id: media_card
@@ -123,6 +185,16 @@ KV = r"""
                                     Hint:
                                         id: media_sub
                                         text: ""
+
+                        MDButton:
+                            id: btn_pick
+                            style: "tonal"
+                            on_release: app.choose_videos()
+                            MDButtonIcon:
+                                icon: "playlist-check"
+                            MDButtonText:
+                                id: pick_text
+                                text: app.tr("playlist.title", app.lang)
 
                         MDLabel:
                             text: app.t("home.mode", app.lang)
@@ -212,28 +284,62 @@ KV = r"""
 
                         MDCard:
                             id: progress_card
-                            style: "outlined"
+                            style: "filled"
                             size_hint_y: None
                             height: progress_box.height
                             radius: [dp(16)]
                             MDBoxLayout:
                                 id: progress_box
-                                orientation: "vertical"
                                 adaptive_height: True
                                 padding: dp(16)
-                                spacing: dp(10)
-                                MDLabel:
-                                    id: progress_title
-                                    text: app.tr("progress.ready", app.lang)
-                                    adaptive_height: True
-                                MDLinearProgressIndicator:
+                                spacing: dp(16)
+                                ProgressRing:
                                     id: progress
-                                    size_hint_y: None
-                                    height: dp(6)
-                                    value: 0
+                                    size_hint: None, None
+                                    size: dp(88), dp(88)
+                                    pos_hint: {"center_y": .5}
+                                MDBoxLayout:
+                                    orientation: "vertical"
+                                    adaptive_height: True
+                                    spacing: dp(6)
+                                    pos_hint: {"center_y": .5}
+                                    MDLabel:
+                                        id: progress_title
+                                        text: app.tr("progress.ready", app.lang)
+                                        font_style: "Title"
+                                        role: "medium"
+                                        bold: True
+                                        adaptive_height: True
+                                    Hint:
+                                        id: progress_detail
+                                        text: ""
+
+                        MDBoxLayout:
+                            id: week_row
+                            adaptive_height: True
+                            spacing: dp(12)
+                            StatTile:
+                                icon: "file-download-outline"
+                                MDLabel:
+                                    id: week_files
+                                    text: "0"
+                                    font_style: "Headline"
+                                    role: "small"
+                                    bold: True
+                                    adaptive_height: True
                                 Hint:
-                                    id: progress_detail
-                                    text: ""
+                                    text: app.t("home.week_files", app.lang)
+                            StatTile:
+                                icon: "harddisk"
+                                MDLabel:
+                                    id: week_size
+                                    text: "0 MB"
+                                    font_style: "Headline"
+                                    role: "small"
+                                    bold: True
+                                    adaptive_height: True
+                                Hint:
+                                    text: app.t("home.week_size", app.lang)
 
                         MDButton:
                             id: btn_details
@@ -259,14 +365,11 @@ KV = r"""
             name: "history"
             MDBoxLayout:
                 orientation: "vertical"
-                MDTopAppBar:
-                    type: "small"
-                    MDTopAppBarTitle:
-                        text: app.t("nav.history", app.lang)
-                    MDTopAppBarTrailingButtonContainer:
-                        MDActionTopAppBarButton:
-                            icon: "delete-sweep-outline"
-                            on_release: app.confirm_clear_history()
+                PageHeader:
+                    title: app.t("nav.history", app.lang)
+                    PageAction:
+                        icon: "delete-sweep-outline"
+                        on_release: app.confirm_clear_history()
                 MDScrollView:
                     do_scroll_x: False
                     MDList:
@@ -277,37 +380,96 @@ KV = r"""
             name: "settings"
             MDBoxLayout:
                 orientation: "vertical"
-                MDTopAppBar:
-                    type: "small"
-                    MDTopAppBarTitle:
-                        text: app.t("nav.settings", app.lang)
+                PageHeader:
+                    title: app.t("nav.settings", app.lang)
                 MDScrollView:
                     do_scroll_x: False
                     MDList:
                         id: settings_list
                         padding: 0, 0, 0, dp(24)
 
-    MDNavigationBar:
+    # FitWren's navigation bar: the main page is the round button in the middle.
+    BoxLayout:
         id: nav
-        on_switch_tabs: app.switch_tab(args[1].name)
-
-        NavItem:
-            name: "home"
-            icon: "download-circle-outline"
-            text: app.t("nav.home", app.lang)
-            active: True
-        NavItem:
+        size_hint_y: None
+        height: dp(80)
+        canvas.before:
+            Color:
+                rgba: app.theme_cls.surfaceContainerColor
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        NavTab:
             name: "history"
             icon: "history"
             text: app.t("nav.history", app.lang)
-        NavItem:
+        NavTab:
+            name: "home"
+            icon: "download"
+            text: app.t("nav.home", app.lang)
+            main: True
+            active: True
+        NavTab:
             name: "settings"
             icon: "cog-outline"
             text: app.t("nav.settings", app.lang)
 
-<NavItem>:
-    MDNavigationItemIcon:
-        icon: root.icon
-    MDNavigationItemLabel:
-        text: root.text
+<NavTab>:
+    orientation: "vertical"
+    spacing: dp(4)
+    padding: (0, dp(12), 0, dp(12)) if root.main else (0, dp(12), 0, dp(16))
+    on_release: app.go_to(root.name)
+    AnchorLayout:
+        LiteIcon:
+            icon: root.icon
+            size: (dp(56), dp(56)) if root.main else (dp(64), dp(32))
+            font_size: sp(30) if root.main else sp(24)
+            color:
+                (app.theme_cls.onPrimaryColor if root.active else app.theme_cls.onPrimaryContainerColor) \
+                if root.main else \
+                (app.theme_cls.onSecondaryContainerColor if root.active else app.theme_cls.onSurfaceVariantColor)
+            canvas.before:
+                Color:
+                    rgba:
+                        (app.theme_cls.primaryColor if root.active else app.theme_cls.primaryContainerColor) \
+                        if root.main else \
+                        (app.theme_cls.secondaryContainerColor[:3] + [1 if root.active else 0])
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [self.height / 2]
+    Label:
+        text: "" if root.main else root.text
+        size_hint_y: None
+        height: 0 if root.main else self.texture_size[1]
+        opacity: 0 if root.main else 1
+        font_size: sp(12)
+        bold: root.active
+        shorten: True
+        text_size: self.width, None
+        halign: "center"
+        color: app.theme_cls.onSurfaceColor if root.active else app.theme_cls.onSurfaceVariantColor
+
+<ProgressRing>:
+    canvas:
+        Color:
+            rgba: app.theme_cls.outlineVariantColor
+        Line:
+            circle: self.center_x, self.center_y, min(self.width, self.height) / 2 - dp(5)
+            width: dp(4.5)
+        Color:
+            rgba: app.theme_cls.primaryColor[:3] + [1 if self.value > 0 else 0]
+        Line:
+            circle: self.center_x, self.center_y, min(self.width, self.height) / 2 - dp(5), 0, max(self.value, 0.5) * 3.6
+            width: dp(4.5)
+            cap: "round"
+    MDLabel:
+        text: "%d%%" % root.value
+        center: root.center
+        size: root.size
+        halign: "center"
+        valign: "middle"
+        font_style: "Title"
+        role: "large"
+        bold: True
 """

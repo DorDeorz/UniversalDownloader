@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida kapanır, yeni sürümü kurar ve yeniden açılır. Ayarlarınız ve dosyalarınız korunur.",
  "log.auto_paste": "Bağlantı panodan alındı.",
  "log.updated": "Orbida {version} sürümüne güncellendi.",
- "log.update_available": "Orbida {version} yayınlandı. Kurmak için üstteki güncelleme düğmesine tıklayın."
+ "log.update_available": "Orbida {version} yayınlandı. Kurmak için üstteki güncelleme düğmesine tıklayın.",
+ "playlist.select_new": "Sadece yeniler",
+ "playlist.downloaded": "daha önce indirildi",
+ "queue.add": "Kuyruğa ekle",
+ "queue.waiting": "Kuyrukta {count} bağlantı bekliyor",
+ "queue.clear": "Kuyruğu temizle",
+ "log.queue_added": "Kuyruğa eklendi: {url}",
+ "log.queue_next": "Kuyruktaki sıradaki: {url}",
+ "log.queue_cleared": "Kuyruk temizlendi",
+ "log.queue_nothing_new": "{title} içinde indirilecek yeni bir şey yok",
+ "theme.Black": "Siyah",
+ "log.spotify": "Spotify: her şarkı YouTube'da aranır ve oradan ses olarak indirilir"
 }

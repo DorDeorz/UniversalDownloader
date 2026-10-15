@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida が閉じ、新しいバージョンをインストールしてから再び開きます。設定とファイルはそのまま残ります。",
  "log.auto_paste": "クリップボードからリンクを取得しました。",
  "log.updated": "Orbida を {version} に更新しました。",
- "log.update_available": "Orbida {version} が利用できます。上部の更新ボタンをクリックしてインストールしてください。"
+ "log.update_available": "Orbida {version} が利用できます。上部の更新ボタンをクリックしてインストールしてください。",
+ "playlist.select_new": "新しいものだけ",
+ "playlist.downloaded": "ダウンロード済み",
+ "queue.add": "キューに追加",
+ "queue.waiting": "キューで待機中: {count}",
+ "queue.clear": "キューをクリア",
+ "log.queue_added": "キューに追加しました: {url}",
+ "log.queue_next": "キューの次: {url}",
+ "log.queue_cleared": "キューをクリアしました",
+ "log.queue_nothing_new": "{title} に新しくダウンロードするものはありません",
+ "theme.Black": "ブラック",
+ "log.spotify": "Spotify: 各曲を YouTube で検索し、そこから音声としてダウンロードします"
 }

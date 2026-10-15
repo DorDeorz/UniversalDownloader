@@ -9,18 +9,24 @@ release (tag `orbida-v<version>`) holding both the Windows installer and
 ## What it does
 
 A Material You app (Material Design 3, colours from the wallpaper on
-Android 12 and newer) with three tabs:
+Android 12 and newer) styled after FitWren, the step counter app by the same
+author: a large bold title on each page, filled cards, a progress ring for
+the download, and a navigation bar with History, Download (a round button in
+the middle) and Settings. Its three tabs:
 
 - **Download:** paste or share a link, **Analyze**, choose **Video** (MP4
   or MKV, with a quality limit) or **Audio** (MP3, M4A, FLAC or WAV, with a
   bitrate), optionally **Only part of it** (start and end time), then
-  **Download** with progress and **Cancel**. Playlists download every
-  available entry. Files are saved to `Download/Orbida/<site>/`
+  **Download** with progress and **Cancel**. For a playlist, **Choose
+  videos** picks which entries to download; entries already in History
+  start unticked and marked as downloaded. A link added while a download
+  runs joins a queue and starts on its own afterwards (Cancel also empties
+  the queue). Files are saved to `Download/Orbida/<site>/`
   and added to the media index, so they show up in gallery and music apps.
   When that folder cannot be written, the app uses its own folder under
   `Android/data/io.github.dordeorz.orbida/`.
 - **History:** what was downloaded, with Open, Share and Remove.
-- **Settings:** theme (system, light, dark), wallpaper colours, accent
+- **Settings:** theme (system, light, dark, plus pure black), wallpaper colours, accent
   colour, language, default mode, quality and formats, parallel
   connections, auto-paste from the clipboard, analyzing shared links at
   once, keeping the screen on while downloading, history on/off, and
@@ -28,11 +34,19 @@ Android 12 and newer) with three tabs:
   the bundled components.
 
 Links can be shared to the app from any app's **Share** menu. While a
-download runs the app holds a wake lock, so it continues with the screen
-off as long as Android keeps the app alive.
+download (or the queue) runs, a foreground service
+(`android/java/.../DownloadService.java`) shows its progress in a
+notification and keeps the app running when the user switches to another
+app; a wake lock keeps it going with the screen off. When the downloads end
+while the app is in the background, a "Download complete" notification
+stays behind. Android 13+ asks once for permission to show notifications;
+without it the download still continues, only the notification is hidden.
+p4a's manifest template has no place for a typed Java service, so
+`android/p4a_hook.py` (buildozer's `p4a.hook`) adds its entry
+(`foregroundServiceType="dataSync"`) before Gradle runs.
 
-Not in the app: Video Only, picking a folder, background downloads after
-the app is closed.
+Not in the app: Video Only, picking a folder, downloads that continue after
+the app is swiped away from recent apps.
 
 Speed and YouTube:
 

@@ -79,6 +79,13 @@ Windows tarafının ayrıntıları için:
   anda birkaç parçayla iner. Kaç parça olacağını **Paralel bağlantı**
   ayarı belirler.
 - **TikTok** çalışır: yt-dlp, tarayıcı gibi istek gönderir (curl_cffi).
+- **Spotify** şarkıları, albümleri ve çalma listeleri: Spotify'ın kendi sesi
+  kopya korumalı olduğu için her şarkı YouTube'da bulunup ses olarak
+  kaydedilir. SoundCloud ve Bandcamp doğrudan iner.
+- **Kuyruk.** İndirme sürerken eklenen bağlantılar kuyrukta bekler ve
+  sırayla başlar.
+- **Çalma listeleri hatırlar:** Daha önce indirilenler işaretsiz ve
+  "daha önce indirildi" notuyla gelir, **Sadece yeniler** gerisini seçer.
 - **Her öğenin bir sonucu olur.** Her öğe tamamlandı, başarısız, atlandı ya
   da iptal edildi olarak biter. Tamamlanmadıysa nedeni de yazılır. İptal
   edilen indirme yarım dosya bırakmaz.
@@ -104,7 +111,7 @@ Windows tarafının ayrıntıları için:
   adlarla kendi klasörlerine iner. Başarısız öğeler tek tıkla yeniden
   denenir.
 - 25 arayüz dili vardır ve dil, yeniden başlatmadan değişir. Üç metin
-  boyutu, koyu, açık ya da sistem teması ve sekiz vurgu rengi var.
+  boyutu, koyu, açık, siyah (AMOLED) ya da sistem teması ve sekiz vurgu rengi var.
 - Pencere her metin boyutunda ekrana sığar ve görev çubuğunun üstünde
   kalır. Ayarlar pencerenin içinde açılır ve kaydırma gerektirmez.
 - Geçmiş sayfasında Aç, Klasörde göster ve Kaldır düğmeleri var.
@@ -134,6 +141,8 @@ Windows tarafının ayrıntıları için:
   mümkün ama gerekmez.
 - Dosyalar `Download/Orbida` klasörüne kaydedilir ve galeri ile müzik
   uygulamalarında görünür. Geçmiş sekmesinde Aç, Paylaş ve Kaldır var.
+- Çalma listesinden indirilecek öğeleri seçebilirsiniz.
+- İndirmeler arka planda sürer, ilerleme bildirimde görünür.
 - İndirme sürerken ekran açık kalır.
 - İngilizce ve Türkçe.
 

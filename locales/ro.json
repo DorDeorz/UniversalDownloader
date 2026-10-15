@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida se închide, instalează noua versiune și se redeschide. Setările și fișierele se păstrează.",
  "log.auto_paste": "Linkul a fost preluat din clipboard.",
  "log.updated": "Orbida a fost actualizată la versiunea {version}.",
- "log.update_available": "Orbida {version} este disponibilă. Apasă butonul de actualizare din partea de sus pentru a o instala."
+ "log.update_available": "Orbida {version} este disponibilă. Apasă butonul de actualizare din partea de sus pentru a o instala.",
+ "playlist.select_new": "Doar cele noi",
+ "playlist.downloaded": "descărcat deja",
+ "queue.add": "Adaugă în coadă",
+ "queue.waiting": "{count} în așteptare în coadă",
+ "queue.clear": "Golește coada",
+ "log.queue_added": "Adăugat în coadă: {url}",
+ "log.queue_next": "Următorul din coadă: {url}",
+ "log.queue_cleared": "Coada a fost golită",
+ "log.queue_nothing_new": "Nimic nou de descărcat în {title}",
+ "theme.Black": "Negru",
+ "log.spotify": "Spotify: fiecare melodie este căutată pe YouTube și descărcată de acolo ca audio"
 }

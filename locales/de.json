@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida wird geschlossen, installiert die neue Version und startet neu. Einstellungen und Dateien bleiben erhalten.",
  "log.auto_paste": "Link aus der Zwischenablage übernommen.",
  "log.updated": "Orbida wurde auf {version} aktualisiert.",
- "log.update_available": "Orbida {version} ist verfügbar. Klicken Sie oben auf die Update-Schaltfläche, um es zu installieren."
+ "log.update_available": "Orbida {version} ist verfügbar. Klicken Sie oben auf die Update-Schaltfläche, um es zu installieren.",
+ "playlist.select_new": "Nur neue",
+ "playlist.downloaded": "bereits heruntergeladen",
+ "queue.add": "Zur Warteschlange",
+ "queue.waiting": "{count} in der Warteschlange",
+ "queue.clear": "Warteschlange leeren",
+ "log.queue_added": "Zur Warteschlange hinzugefügt: {url}",
+ "log.queue_next": "Als Nächstes aus der Warteschlange: {url}",
+ "log.queue_cleared": "Warteschlange geleert",
+ "log.queue_nothing_new": "Nichts Neues zum Herunterladen in {title}",
+ "theme.Black": "Schwarz",
+ "log.spotify": "Spotify: Jeder Song wird auf YouTube gesucht und von dort als Audio geladen"
 }

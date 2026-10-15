@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida sẽ đóng, cài phiên bản mới rồi mở lại. Cài đặt và tệp của bạn được giữ nguyên.",
  "log.auto_paste": "Đã lấy liên kết từ bảng nhớ tạm.",
  "log.updated": "Orbida đã được cập nhật lên {version}.",
- "log.update_available": "Đã có Orbida {version}. Nhấn nút cập nhật ở trên cùng để cài đặt."
+ "log.update_available": "Đã có Orbida {version}. Nhấn nút cập nhật ở trên cùng để cài đặt.",
+ "playlist.select_new": "Chỉ mục mới",
+ "playlist.downloaded": "đã tải trước đây",
+ "queue.add": "Thêm vào hàng đợi",
+ "queue.waiting": "{count} đang chờ trong hàng đợi",
+ "queue.clear": "Xóa hàng đợi",
+ "log.queue_added": "Đã thêm vào hàng đợi: {url}",
+ "log.queue_next": "Tiếp theo trong hàng đợi: {url}",
+ "log.queue_cleared": "Đã xóa hàng đợi",
+ "log.queue_nothing_new": "Không có gì mới để tải trong {title}",
+ "theme.Black": "Đen",
+ "log.spotify": "Spotify: mỗi bài hát được tìm trên YouTube và tải về từ đó dưới dạng âm thanh"
 }

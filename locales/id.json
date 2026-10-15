@@ -182,5 +182,16 @@
  "update.restart_note": "Orbida akan ditutup, memasang versi baru, lalu terbuka lagi. Pengaturan dan file Anda tetap tersimpan.",
  "log.auto_paste": "Tautan diambil dari papan klip.",
  "log.updated": "Orbida telah diperbarui ke versi {version}.",
- "log.update_available": "Orbida {version} sudah tersedia. Klik tombol pembaruan di atas untuk memasangnya."
+ "log.update_available": "Orbida {version} sudah tersedia. Klik tombol pembaruan di atas untuk memasangnya.",
+ "playlist.select_new": "Hanya yang baru",
+ "playlist.downloaded": "sudah diunduh",
+ "queue.add": "Tambah ke antrean",
+ "queue.waiting": "{count} menunggu di antrean",
+ "queue.clear": "Kosongkan antrean",
+ "log.queue_added": "Ditambahkan ke antrean: {url}",
+ "log.queue_next": "Berikutnya dari antrean: {url}",
+ "log.queue_cleared": "Antrean dikosongkan",
+ "log.queue_nothing_new": "Tidak ada yang baru untuk diunduh di {title}",
+ "theme.Black": "Hitam",
+ "log.spotify": "Spotify: setiap lagu dicari di YouTube dan diunduh dari sana sebagai audio"
 }

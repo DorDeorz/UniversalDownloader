@@ -2,7 +2,7 @@
 # Install the APK on a running emulator and let the app download <url>
 # three times (Video + Audio, MP3, then seconds 1-3 as a trimmed MP4) through
 # its self-test hook. Passes when all jobs succeed, the files exist, QuickJS
-# ran and FFmpeg has HTTPS.
+# ran, FFmpeg has HTTPS and the background download service was running.
 #
 #   android/emulator_test.sh <apk> <url>
 set -uo pipefail
@@ -37,6 +37,7 @@ status=0
 [ "$(adb logcat -d | grep -a -c 'UDSELFTEST job done all_ok=True')" -eq 3 ] || { echo "FAIL: not all three downloads succeeded"; status=1; }
 adb logcat -d | grep -a -q "UDSELFTEST tools ok=True https=True" || { echo "FAIL: FFmpeg missing or without HTTPS"; status=1; }
 adb logcat -d | grep -a -q "QuickJS ready" || { echo "FAIL: QuickJS did not run"; status=1; }
+adb logcat -d | grep -a -q "UDSELFTEST item completed .*background=True" || { echo "FAIL: the download service did not run"; status=1; }
 [ "$(adb shell ls /sdcard/Download/Orbida/Other | grep -c '\.mp4')" -ge 2 ] || { echo "FAIL: MP4 and trimmed MP4 not saved"; status=1; }
 adb shell ls /sdcard/Download/Orbida/Other | grep -q '\.mp3$' || { echo "FAIL: no MP3 saved"; status=1; }
 if [ $status -ne 0 ]; then

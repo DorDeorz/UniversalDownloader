@@ -283,6 +283,10 @@ class UniversalDownloaderApp(MDApp):
         self._update_dialog = None   # the download progress dialog while an update downloads
         self._update_label = None
         self._wake_lock = None
+        self._notice = None          # android_env.DownloadNotice on Android
+        self._paused = False         # the app is in the background
+        self._finished = None        # (title, text) of the last download, for the notification
+        self._asked_notifications = False
         self._stderr = deque(maxlen=12)  # last lines FFmpeg printed, shown when an item fails
         self._apply_language()
         self._apply_theme()
@@ -333,6 +337,7 @@ class UniversalDownloaderApp(MDApp):
         if android_env.on_android():
             os.environ["TMPDIR"] = android_env.cache_dir()
             self._wake_lock = android_env.WakeLock()
+            self._notice = android_env.DownloadNotice()
             try:
                 android_env.forward_native_stderr(self._on_native_stderr)
             except OSError as e:
@@ -413,6 +418,7 @@ class UniversalDownloaderApp(MDApp):
         self.root_view.padding = [0, top, 0, bottom]
 
     def on_resume(self):
+        self._paused = False
         # Recolouring every widget is slow, so only follow a changed dark mode
         # (wallpaper colours are read again on the next start).
         self._stale["history"] = True  # files may have been moved meanwhile
@@ -420,8 +426,9 @@ class UniversalDownloaderApp(MDApp):
             self._apply_theme()
 
     def on_pause(self):
-        # Keep running when the user switches apps; the wake lock keeps
-        # downloads going while Android lets the process live.
+        # Keep running when the user switches apps; DownloadService and the
+        # wake lock keep downloads going in the background.
+        self._paused = True
         return True
 
     def on_stop(self):
@@ -429,6 +436,8 @@ class UniversalDownloaderApp(MDApp):
             self.session.cancel()
             self.session.wait(5)
         self._keep_awake(False)
+        if self._notice is not None:
+            self._notice.stop()
 
     # --- Appearance ---------------------------------------------------------------
 
@@ -825,6 +834,7 @@ class UniversalDownloaderApp(MDApp):
                                               else "action.download")
         self.ids.btn_download.style = "tonal" if busy else "filled"
         self.ids.btn_download.disabled = busy and self.job != "download"
+        self._sync_background()
 
     def download(self):
         if self.job == "download":
@@ -864,6 +874,7 @@ class UniversalDownloaderApp(MDApp):
             self.ids.progress_title.text = self.tr("progress.starting")
             self.ids.progress_detail.text = ""
             self.log(self.tr("log.folder", folder=self.download_dir))
+            self._ask_notifications()
 
     def _show_chosen(self):
         if self.analysis is not None and self.analysis.is_playlist:
@@ -920,6 +931,42 @@ class UniversalDownloaderApp(MDApp):
 
         self._dialog(self.tr("playlist.title"), content=box,
                      buttons=[(self.t("common.cancel"), None), (self.t("common.done"), done)])
+
+    # --- Background downloads -----------------------------------------------------
+
+    def _sync_background(self):
+        """Run DownloadService while a download or the link queue is going."""
+        if self._notice is None:
+            return
+        wanted = self.job == "download" or bool(self.link_queue) or self._from_queue
+        try:
+            if wanted and not self._notice.running and self.job == "download":
+                self._finished = None
+                self._notice.start(self.t("notify.channel"), self.tr("progress.starting"))
+            elif not wanted and self._notice.running:
+                # Only worth a notification when the user is not looking at the app.
+                title, text = self._finished if self._finished and self._paused else (None, "")
+                self._notice.stop(title, text)
+        except Exception as e:
+            _log.warning("Download notification: %s", e)
+
+    def _notify(self, force=False):
+        if self._notice is None or not self._notice.running:
+            return
+        try:
+            self._notice.update(self.ids.progress_title.text, self.ids.progress_detail.text,
+                                int(self.ids.progress.value), force=force)
+        except Exception as e:
+            _log.warning("Download notification: %s", e)
+
+    def _ask_notifications(self):
+        if self._notice is None or self._asked_notifications:
+            return
+        self._asked_notifications = True
+        try:
+            android_env.ask_notification_permission()
+        except Exception as e:
+            _log.warning("Notification permission: %s", e)
 
     def _set_platform_options(self):
         options = {**getattr(self, "_js_options", {}), **app_settings.download_speed_options(self.settings)}
@@ -1024,13 +1071,16 @@ class UniversalDownloaderApp(MDApp):
         self.ids.progress_title.text = title if total == 1 else self.tr(
             "progress.item", position=position, total=total, title=title)
         self.ids.progress_detail.text = ""
+        self._notify(force=True)
 
     def _on_progress(self, fraction, text, detail):
         self.ids.progress.value = fraction * 100
         self.ids.progress_detail.text = f"{text}  {detail}".strip()
+        self._notify()
 
     def _on_stage(self, text):
         self.ids.progress_detail.text = i18n.tr_message(text)
+        self._notify()
 
     def _on_item_done(self, result):
         if result.status is ItemStatus.COMPLETED:
@@ -1051,7 +1101,8 @@ class UniversalDownloaderApp(MDApp):
             if result.status is ItemStatus.FAILED:
                 for detail in list(self._stderr)[-6:]:
                     self.log(f"  {detail}")
-        selftest(f"item {result.status.value} path={result.path} error={result.error}")
+        background = self._notice is not None and self._notice.service_running()
+        selftest(f"item {result.status.value} path={result.path} error={result.error} background={background}")
 
     def _on_native_stderr(self, line):
         """Worker thread: a line a program (usually FFmpeg) wrote to stderr."""
@@ -1059,11 +1110,12 @@ class UniversalDownloaderApp(MDApp):
         print(f"UDSTDERR {line}", flush=True)  # Kivy's logger would mangle FFmpeg's text
 
     def _on_job_done(self, summary):
+        headline = summary.headline(label=lambda status: self.tr("status." + status.value),
+                                    nothing=self.tr("summary.nothing"))
+        self._finished = (self.tr(summary.title_key()), headline)
         self.job = None
         self.set_busy(False)
         self._keep_awake(False)
-        headline = summary.headline(label=lambda status: self.tr("status." + status.value),
-                                    nothing=self.tr("summary.nothing"))
         self.log(self.tr("log.result", summary=headline))
         self.ids.progress_title.text = self.tr(summary.title_key())
         self.ids.progress_detail.text = headline
@@ -1103,17 +1155,19 @@ class UniversalDownloaderApp(MDApp):
         count = len(self.link_queue)
         self.ids.queue_text.text = self.tr("queue.waiting", count=count) if count else ""
         _show(self.ids.queue_row, bool(count))
+        self._sync_background()
 
     def _next_in_queue(self):
         """Analyze and download the next queued link, if any."""
         if not self.link_queue or self.job is not None:
             self._show_link_queue()
             return
+        # Set first: the background service keeps running between two links.
+        self._from_queue = True
         url = self.link_queue.pop(0)
         self._show_link_queue()
         self.log(self.tr("log.queue_next", url=url))
         self.ids.url.text = url
-        self._from_queue = True
         self.analyze()
         if self.job is None:  # the link was rejected
             self._from_queue = False

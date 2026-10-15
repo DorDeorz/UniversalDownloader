@@ -1,6 +1,9 @@
-**Orbida for Android**, version 1.1.0 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
+**Orbida for Android**, version 1.1.1 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
 
 Coming from an Android preview (UniversalDownloader or Orbida 0.x)? Uninstall it once: 1.0 has a new app id and signing key. From 1.0 on, the app updates itself (Settings › About › Check for updates).
+
+**New in 1.1.1**
+- Spotify playlists longer than 100 songs now download in full.
 
 **New in 1.1.0**
 - New look, after FitWren: a large title on each page, a round Download button in the middle of the bottom bar, and a progress ring.

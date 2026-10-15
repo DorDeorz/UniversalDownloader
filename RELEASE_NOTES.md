@@ -1,12 +1,17 @@
-**Orbida 1.1.0** brings a new look, Spotify, a download queue and playlist
-memory. This release holds both apps:
+**Orbida 1.1.1** reads Spotify playlists past their first 100 songs. This
+release holds both apps:
 
-- **Windows:** `Orbida-Setup-1.1.0.exe`, for Windows 10 or 11 (64-bit).
-- **Android:** `Orbida-1.1.0.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Windows:** `Orbida-Setup-1.1.1.exe`, for Windows 10 or 11 (64-bit).
+- **Android:** `Orbida-1.1.1.apk`, for 64-bit ARM phones with Android 7 or newer.
 
 Orbida 1.0 updates itself to this version: on Windows click **Update to
-1.1.0** in the top bar; on Android open Settings › About › Check for
+1.1.1** in the top bar; on Android open Settings › About › Check for
 updates.
+
+## New in 1.1.1 (both apps)
+
+- Spotify playlists longer than 100 songs now download in full. Before,
+  only the first 100 songs were found.
 
 ## New in 1.1.0 (both apps)
 
@@ -63,7 +68,7 @@ Before this version, the Windows app was called Universal Video Downloader.
 - New downloads go to `Downloads\Orbida` by default. A folder you chose
   before stays the same.
 
-**Install:** run `Orbida-Setup-1.1.0.exe`. It installs for your user only,
+**Install:** run `Orbida-Setup-1.1.1.exe`. It installs for your user only,
 with no administrator password. FFmpeg, ffprobe and Deno are included.
 The setup is not code-signed, so SmartScreen may say "Windows protected
 your PC". Click **More info**, then **Run anyway**.

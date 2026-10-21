@@ -247,5 +247,10 @@
  "signin.ask_title": "Přihlášení k {site}",
  "signin.ask_body": "{site} ukazuje toto jen přihlášeným účtům.\n\nPoužít přihlášení z vašeho Firefoxu nebo Zen? Tyto cookies dostanou jen Reddit, Instagram, YouTube, Facebook, X a TikTok. Vypnout to můžete v Nastavení.",
  "signin.off": "{site} ukazuje toto jen přihlášeným účtům. Zapněte v Nastavení přihlášení z prohlížeče a zkuste to znovu",
- "signin.missing": "{site} ukazuje toto jen přihlášeným účtům. Přihlaste se k {site} ve Firefoxu nebo Zen a zkuste to znovu"
+ "signin.missing": "{site} ukazuje toto jen přihlášeným účtům. Přihlaste se k {site} ve Firefoxu nebo Zen a zkuste to znovu",
+ "action.pause": "Pozastavit",
+ "action.resume": "Pokračovat",
+ "progress.paused": "Pozastaveno",
+ "log.paused": "Stahování pozastaveno",
+ "log.resumed": "Stahování pokračuje"
 }

@@ -247,5 +247,10 @@
  "signin.ask_title": "Autentificare {site}",
  "signin.ask_body": "{site} arată asta doar conturilor autentificate.\n\nFolosești autentificarea din Firefox sau Zen? Doar Reddit, Instagram, YouTube, Facebook, X și TikTok primesc aceste cookie-uri. O poți dezactiva din Setări.",
  "signin.off": "{site} arată asta doar conturilor autentificate. Activează autentificarea din browser în Setări, apoi încearcă din nou",
- "signin.missing": "{site} arată asta doar conturilor autentificate. Autentifică-te pe {site} în Firefox sau Zen, apoi încearcă din nou"
+ "signin.missing": "{site} arată asta doar conturilor autentificate. Autentifică-te pe {site} în Firefox sau Zen, apoi încearcă din nou",
+ "action.pause": "Pauză",
+ "action.resume": "Reia",
+ "progress.paused": "În pauză",
+ "log.paused": "Descărcare în pauză",
+ "log.resumed": "Descărcare reluată"
 }

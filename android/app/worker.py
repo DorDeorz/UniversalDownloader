@@ -65,6 +65,7 @@ class Session:
         self.tr = tr
         self._thread = None
         self._cancel = threading.Event()
+        self._pause = threading.Event()  # set while the download is paused
         self._analysed = None  # (time, url, info) of the last single video analysed
         self._last_progress = float("-inf")
 
@@ -76,12 +77,24 @@ class Session:
         if self.busy:
             return False
         self._cancel = threading.Event()
+        self._pause = threading.Event()
         self._thread = threading.Thread(target=target, args=(*args, self._cancel), daemon=True)
         self._thread.start()
         return True
 
     def cancel(self):
         self._cancel.set()
+
+    @property
+    def paused(self):
+        return self._pause.is_set()
+
+    def pause(self):
+        """Hold the running download where it is (logic.wait_while_paused); Cancel still works."""
+        self._pause.set()
+
+    def resume(self):
+        self._pause.clear()
 
     def cancel_analysis(self):
         """Drop the running analysis at once: it stops at the next page it
@@ -175,7 +188,7 @@ class Session:
         try:
             return self.manager.download_video(
                 item["url"], options, self._progress, log_callback=self._log,
-                title=item["title"], cancel_event=cancel, info=info)
+                title=item["title"], cancel_event=cancel, info=info, pause_event=self._pause)
         except Exception as e:
             return ItemResult(item["url"], item["title"], ItemStatus.FAILED, error=describe_error(e))
 

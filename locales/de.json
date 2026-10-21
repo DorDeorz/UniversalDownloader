@@ -247,5 +247,10 @@
  "signin.ask_title": "{site}-Anmeldung",
  "signin.ask_body": "{site} zeigt dies nur angemeldeten Konten.\n\nDie Anmeldung deines Firefox oder Zen verwenden? Nur Reddit, Instagram, YouTube, Facebook, X und TikTok erhalten diese Cookies. Du kannst es in den Einstellungen ausschalten.",
  "signin.off": "{site} zeigt dies nur angemeldeten Konten. Schalte die Browser-Anmeldung in den Einstellungen ein und versuche es erneut",
- "signin.missing": "{site} zeigt dies nur angemeldeten Konten. Melde dich in Firefox oder Zen bei {site} an und versuche es erneut"
+ "signin.missing": "{site} zeigt dies nur angemeldeten Konten. Melde dich in Firefox oder Zen bei {site} an und versuche es erneut",
+ "action.pause": "Pausieren",
+ "action.resume": "Fortsetzen",
+ "progress.paused": "Pausiert",
+ "log.paused": "Download pausiert",
+ "log.resumed": "Download fortgesetzt"
 }

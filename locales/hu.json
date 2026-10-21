@@ -247,5 +247,10 @@
  "signin.ask_title": "{site}-bejelentkezés",
  "signin.ask_body": "A(z) {site} ezt csak bejelentkezett fiókoknak mutatja.\n\nHasználjuk a Firefox vagy Zen bejelentkezésedet? Ezeket a sütiket csak a Reddit, Instagram, YouTube, Facebook, X és TikTok kapja meg. A Beállításokban kikapcsolhatod.",
  "signin.off": "A(z) {site} ezt csak bejelentkezett fiókoknak mutatja. Kapcsold be a böngésző-bejelentkezést a Beállításokban, majd próbáld újra",
- "signin.missing": "A(z) {site} ezt csak bejelentkezett fiókoknak mutatja. Jelentkezz be a(z) {site} oldalra a Firefoxban vagy Zenben, majd próbáld újra"
+ "signin.missing": "A(z) {site} ezt csak bejelentkezett fiókoknak mutatja. Jelentkezz be a(z) {site} oldalra a Firefoxban vagy Zenben, majd próbáld újra",
+ "action.pause": "Szünet",
+ "action.resume": "Folytatás",
+ "progress.paused": "Szüneteltetve",
+ "log.paused": "Letöltés szüneteltetve",
+ "log.resumed": "Letöltés folytatva"
 }

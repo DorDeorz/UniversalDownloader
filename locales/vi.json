@@ -247,5 +247,10 @@
  "signin.ask_title": "Đăng nhập {site}",
  "signin.ask_body": "{site} chỉ hiện nội dung này cho tài khoản đã đăng nhập.\n\nDùng đăng nhập của Firefox hoặc Zen? Chỉ Reddit, Instagram, YouTube, Facebook, X và TikTok nhận các cookie đó. Bạn có thể tắt trong Cài đặt.",
  "signin.off": "{site} chỉ hiện nội dung này cho tài khoản đã đăng nhập. Bật đăng nhập trình duyệt trong Cài đặt rồi thử lại",
- "signin.missing": "{site} chỉ hiện nội dung này cho tài khoản đã đăng nhập. Đăng nhập {site} trong Firefox hoặc Zen rồi thử lại"
+ "signin.missing": "{site} chỉ hiện nội dung này cho tài khoản đã đăng nhập. Đăng nhập {site} trong Firefox hoặc Zen rồi thử lại",
+ "action.pause": "Tạm dừng",
+ "action.resume": "Tiếp tục",
+ "progress.paused": "Đã tạm dừng",
+ "log.paused": "Đã tạm dừng tải xuống",
+ "log.resumed": "Tiếp tục tải xuống"
 }

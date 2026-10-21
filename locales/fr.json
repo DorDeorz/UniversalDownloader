@@ -247,5 +247,10 @@
  "signin.ask_title": "Connexion à {site}",
  "signin.ask_body": "{site} ne montre ceci qu'aux comptes connectés.\n\nUtiliser la connexion de votre Firefox ou Zen ? Seuls Reddit, Instagram, YouTube, Facebook, X et TikTok reçoivent ces cookies. Vous pouvez la désactiver dans les paramètres.",
  "signin.off": "{site} ne montre ceci qu'aux comptes connectés. Activez la connexion du navigateur dans les paramètres, puis réessayez",
- "signin.missing": "{site} ne montre ceci qu'aux comptes connectés. Connectez-vous à {site} dans Firefox ou Zen, puis réessayez"
+ "signin.missing": "{site} ne montre ceci qu'aux comptes connectés. Connectez-vous à {site} dans Firefox ou Zen, puis réessayez",
+ "action.pause": "Pause",
+ "action.resume": "Reprendre",
+ "progress.paused": "En pause",
+ "log.paused": "Téléchargement en pause",
+ "log.resumed": "Téléchargement repris"
 }

@@ -247,5 +247,10 @@
  "signin.ask_title": "Aanmelden bij {site}",
  "signin.ask_body": "{site} toont dit alleen aan aangemelde accounts.\n\nDe aanmelding van je Firefox of Zen gebruiken? Alleen Reddit, Instagram, YouTube, Facebook, X en TikTok krijgen die cookies. Je kunt het uitzetten in Instellingen.",
  "signin.off": "{site} toont dit alleen aan aangemelde accounts. Zet de browseraanmelding aan in Instellingen en probeer het opnieuw",
- "signin.missing": "{site} toont dit alleen aan aangemelde accounts. Meld je in Firefox of Zen aan bij {site} en probeer het opnieuw"
+ "signin.missing": "{site} toont dit alleen aan aangemelde accounts. Meld je in Firefox of Zen aan bij {site} en probeer het opnieuw",
+ "action.pause": "Pauzeren",
+ "action.resume": "Hervatten",
+ "progress.paused": "Gepauzeerd",
+ "log.paused": "Download gepauzeerd",
+ "log.resumed": "Download hervat"
 }

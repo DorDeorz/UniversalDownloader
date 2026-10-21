@@ -247,5 +247,10 @@
  "signin.ask_title": "Inloggning på {site}",
  "signin.ask_body": "{site} visar det här bara för inloggade konton.\n\nAnvända inloggningen från Firefox eller Zen? Bara Reddit, Instagram, YouTube, Facebook, X och TikTok får de cookies. Du kan stänga av det under Inställningar.",
  "signin.off": "{site} visar det här bara för inloggade konton. Slå på webbläsarinloggning under Inställningar och försök igen",
- "signin.missing": "{site} visar det här bara för inloggade konton. Logga in på {site} i Firefox eller Zen och försök igen"
+ "signin.missing": "{site} visar det här bara för inloggade konton. Logga in på {site} i Firefox eller Zen och försök igen",
+ "action.pause": "Pausa",
+ "action.resume": "Fortsätt",
+ "progress.paused": "Pausad",
+ "log.paused": "Nedladdning pausad",
+ "log.resumed": "Nedladdning återupptagen"
 }

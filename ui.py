@@ -1369,6 +1369,7 @@ class App(ctk.CTk):
         self._job_thread = None
         self._job_kind = None
         self._cancel_event = threading.Event()
+        self._pause_event = threading.Event()
         self._closing = False
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -1758,6 +1759,8 @@ class App(ctk.CTk):
         """``text`` and ``detail`` are strings, or functions for translated text."""
         self.progress_bar.set(fraction)
         self._live(self.lbl_progress, text if callable(text) else (lambda: text))
+        if self._job_kind == "download" and self._pause_event.is_set():
+            detail = lambda: tr("progress.paused")  # an update sent just before the pause  # noqa: E731
         self._live(self.lbl_detail, detail if callable(detail) else (lambda: detail))
     def _show_stage(self, text):
         self._live(self.lbl_detail, lambda: i18n.tr_message(text))
@@ -2069,6 +2072,7 @@ class App(ctk.CTk):
             return False
         self._job_kind = kind
         self._cancel_event = threading.Event()
+        self._pause_event = threading.Event()  # set while the download is paused
         if with_cancel:
             args = (*args, self._cancel_event)
         self._set_controls_busy(True)
@@ -2106,11 +2110,33 @@ class App(ctk.CTk):
         set_primary_state(self.btn_analyze, "normal" if queueing else state)
         self._live(self.btn_analyze, lambda: tr("queue.add") if queueing else tr("link.analyze"))
         if busy:
-            set_primary_state(self.btn_download, "disabled")
+            self._refresh_pause_button()
             self.btn_retry.configure(state="disabled")
         else:
             self._refresh_download_button()
             self._refresh_retry_button()
+
+    def _refresh_pause_button(self):
+        """While a download runs, the Download button pauses and resumes it."""
+        if self._job_kind != "download" or self._cancel_event.is_set():
+            set_primary_state(self.btn_download, "disabled")
+            return
+        set_primary_state(self.btn_download, "normal")
+        paused = self._pause_event.is_set()
+        self._live(self.btn_download, lambda: tr("action.resume") if paused else tr("action.pause"))
+
+    def toggle_pause(self):
+        """Pause the running download where it is, or let it go on (logic.wait_while_paused)."""
+        if self._job_kind != "download" or self._cancel_event.is_set():
+            return
+        if self._pause_event.is_set():
+            self._pause_event.clear()
+            self._append_log(tr("log.resumed"))
+        else:
+            self._pause_event.set()
+            self._append_log(tr("log.paused"))
+            self._live(self.lbl_detail, lambda: tr("progress.paused"))
+        self._refresh_pause_button()
 
     def _refresh_download_button(self):
         count = len(self.download_queue)
@@ -2144,6 +2170,7 @@ class App(ctk.CTk):
         self.btn_cancel.configure(state="disabled")
         self._live(self.btn_cancel, lambda: tr("action.cancelling"))
         self._append_log(tr("action.cancelling"))
+        self._refresh_pause_button()
 
     def _cancel_analysis(self):
         """Stop waiting for the analysis at once.
@@ -2574,6 +2601,9 @@ class App(ctk.CTk):
         if not self.is_busy():
             self._refresh_download_button()
     def start_download_queue(self):
+        if self._job_kind == "download":
+            self.toggle_pause()  # the button pauses and resumes while a download runs
+            return
         if not self.download_queue or self.is_busy(): return
         if self.chk_trim.get():
             # Kötü trim değerleriyle kuyruğu hiç başlatma
@@ -2608,10 +2638,9 @@ class App(ctk.CTk):
             opts['sponsorblock'] = True
         self._job_mode = opts['mode']
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
-            self._live(self.btn_download, lambda: tr("action.downloading"))
             # The field is free for the next link, which joins the queue.
             self.url_entry.delete(0, "end")
-    def run_queue(self, items, opts, cancel_event=None):
+    def run_queue(self, items, opts, cancel_event=None, pause_event=None):
         """Worker thread: download each item and post events; no widget access."""
         summary = JobSummary()
         total = len(items)
@@ -2633,13 +2662,13 @@ class App(ctk.CTk):
                 item_opts = dict(opts, playlist_index=item.get('index'), playlist_title=item.get('playlist'),
                                  meta=item.get('meta'))
                 info = self._known_info(item['url'])
-                result = self._download_once(item, item_opts, cancel_event, info)
+                result = self._download_once(item, item_opts, cancel_event, info, pause_event)
                 if info is not None and result.status is ItemStatus.FAILED and not (
                         cancel_event is not None and cancel_event.is_set()):
                     # The saved media links may have expired; ask the site again.
                     self._analysed = None
                     self.log(f"Retrying with fresh information ({result.error})")
-                    result = self._download_once(item, item_opts, cancel_event, None)
+                    result = self._download_once(item, item_opts, cancel_event, None, pause_event)
                 result.source = item
                 summary.add(result)
                 self.events.post(events.ITEM_DONE, result=result)
@@ -2659,8 +2688,10 @@ class App(ctk.CTk):
             return None
         return info
 
-    def _download_once(self, item, options, cancel_event, info):
+    def _download_once(self, item, options, cancel_event, info, pause_event=None):
         extra = {'info': info} if info is not None else {}
+        if pause_event is not None:
+            extra['pause_event'] = pause_event
         try:
             return self.manager.download_video(
                 item['url'], options, self.progress_hook, log_callback=self.log, title=item['title'],
@@ -2669,8 +2700,8 @@ class App(ctk.CTk):
             return ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
 
     def _run_queue_with_cancel(self, items, opts):
-        # Bound at start so a later job's event cannot leak into this one.
-        self.run_queue(items, opts, self._cancel_event)
+        # Bound at start so a later job's events cannot leak into this one.
+        self.run_queue(items, opts, self._cancel_event, self._pause_event)
     def _on_item_done(self, result):
         self._append_log(describe_result(result))
         if result.status is ItemStatus.COMPLETED and result.path and self.settings.save_history:

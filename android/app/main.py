@@ -88,6 +88,7 @@ LOG_LINES = 150
 HISTORY_SHOWN = 100  # newest entries listed; each row is a handful of widgets
 TAB_SECONDS = 0.2    # tab switch animation
 PREBUILD_SECONDS = 0.5  # after start-up, fill in Settings and History in the background
+NETWORK_CHECK_SECONDS = 5  # how often Wi-Fi only looks at the network during a download
 SELFTEST_TAG = "UDSELFTEST"
 MODES = {"video": worker.VIDEO_AUDIO, "audio": worker.AUDIO_ONLY}
 MIME = {"mp4": "video/mp4", "mkv": "video/x-matroska", "webm": "video/webm", "mp3": "audio/mpeg",
@@ -282,6 +283,8 @@ class UniversalDownloaderApp(MDApp):
         self._mix = None  # the Mix link a song being analyzed was opened in
         self.mix_url = None  # offered on the "Download the Mix" button
         self._cancelled = False
+        self._mobile_data_ok = False  # the user chose to download on mobile data
+        self._wifi_paused = False     # paused by the Wi-Fi-only setting, not by the user
         self.download_dir = None
         self.job = None  # "analyze" or "download" while one runs
         self.mode = self.settings.default_mode
@@ -318,6 +321,7 @@ class UniversalDownloaderApp(MDApp):
         self.ids.screens.transition.duration = TAB_SECONDS
         self._wire_handlers()
         Clock.schedule_interval(lambda *_: self.events.dispatch_pending(), 0.1)
+        Clock.schedule_interval(self._watch_network, NETWORK_CHECK_SECONDS)
         Window.bind(on_keyboard=self._on_key)
         return self.root_view
 
@@ -884,9 +888,14 @@ class UniversalDownloaderApp(MDApp):
         self.ids.download_text.text = self.tr("action.cancel" if cancellable else "action.download")
         self.ids.btn_download.style = "tonal" if busy else "filled"
         self.ids.btn_download.disabled = busy and not cancellable
+        # A running download can be paused (worker.Session.pause).
+        downloading = busy and self.job == "download"
+        self.ids.btn_pause.opacity = 1 if downloading else 0
+        self.ids.btn_pause.disabled = not downloading
+        self.ids.btn_pause.icon = "play" if downloading and self.session.paused else "pause"
         self._sync_background()
 
-    def download(self):
+    def download(self, mobile_data_ok=False):
         if self.job == "analyze":
             self.cancel_analysis()
             return
@@ -904,6 +913,11 @@ class UniversalDownloaderApp(MDApp):
         error, _warning = filenames.check_folder(self.download_dir)
         if error:
             self._dialog(self.tr("folder.error_title"), error)
+            return
+        if self.settings.wifi_only and not mobile_data_ok and android_env.is_metered():
+            self._dialog(self.t("wifi.ask_title"), self.t("wifi.ask_body"),
+                         buttons=[(self.t("common.cancel"), None),
+                                  (self.t("wifi.anyway"), lambda: self.download(mobile_data_ok=True))])
             return
         free = filenames.low_space_mb(self.download_dir)
         if free is not None:  # a warning only: the files may still fit
@@ -932,6 +946,8 @@ class UniversalDownloaderApp(MDApp):
         if self.session.download(dataclasses.replace(self.analysis, items=list(self.chosen)), options):
             self.job = "download"
             self._cancelled = False
+            self._mobile_data_ok = mobile_data_ok
+            self._wifi_paused = False
             self.set_busy(True)
             self._keep_awake(True)
             _show(self.ids.progress_card, True)
@@ -1207,8 +1223,42 @@ class UniversalDownloaderApp(MDApp):
 
     def _on_progress(self, fraction, text, detail):
         self.ids.progress.value = fraction * 100
+        if self.session.paused:  # an update sent just before the pause
+            detail = self.t("wifi.paused") if self._wifi_paused else self.tr("progress.paused")
         self.ids.progress_detail.text = f"{text}  {detail}".strip()
         self._notify()
+
+    # --- Pause and Wi-Fi only -----------------------------------------------------
+
+    def toggle_pause(self):
+        """Pause the running download where it is, or let it go on."""
+        if self.job != "download" or self._cancelled:
+            return
+        self._set_paused(not self.session.paused)
+
+    def _set_paused(self, paused, wifi=False):
+        if paused:
+            self.session.pause()
+            self.log(self.t("wifi.paused") if wifi else self.tr("log.paused"))
+            self.ids.progress_detail.text = self.t("wifi.paused") if wifi else self.tr("progress.paused")
+        else:
+            self.session.resume()
+            self.log(self.t("wifi.resumed") if wifi else self.tr("log.resumed"))
+        self._wifi_paused = paused and wifi
+        self.ids.btn_pause.icon = "play" if paused else "pause"
+        self._notify(force=True)
+
+    def _watch_network(self, *_):
+        """With Wi-Fi only on, hold a download while the phone is on mobile data."""
+        if self.job != "download" or self._cancelled or not self.settings.wifi_only or self._mobile_data_ok:
+            return
+        metered = android_env.is_metered()
+        if metered and not self.session.paused:
+            self._set_paused(True, wifi=True)
+            self.snack(self.t("wifi.paused"))
+        elif not metered and self._wifi_paused:
+            self._set_paused(False, wifi=True)
+            self.snack(self.t("wifi.resumed"))
 
     def _on_stage(self, text):
         self.ids.progress_detail.text = i18n.tr_message(text)
@@ -1549,6 +1599,8 @@ class UniversalDownloaderApp(MDApp):
                lambda v: self._save_settings(auto_analyze_shared=v), t("settings.auto_analyze_hint"))
         switch("cellphone-screenshot", t("settings.keep_screen"), s.keep_screen_on,
                lambda v: self._save_settings(keep_screen_on=v), t("settings.keep_screen_hint"))
+        switch("wifi", t("settings.wifi_only"), s.wifi_only,
+               lambda v: self._save_settings(wifi_only=v), t("settings.wifi_only_hint"))
         switch("history", t("settings.history"), s.save_history, self._change_save_history)
 
         # YouTube

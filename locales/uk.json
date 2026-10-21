@@ -247,5 +247,10 @@
  "signin.ask_title": "Вхід у {site}",
  "signin.ask_body": "{site} показує це лише користувачам, що увійшли.\n\nВикористати вхід із вашого Firefox чи Zen? Ці cookie отримають лише Reddit, Instagram, YouTube, Facebook, X і TikTok. Це можна вимкнути в налаштуваннях.",
  "signin.off": "{site} показує це лише користувачам, що увійшли. Увімкніть вхід із браузера в налаштуваннях і спробуйте ще раз",
- "signin.missing": "{site} показує це лише користувачам, що увійшли. Увійдіть у {site} у Firefox чи Zen і спробуйте ще раз"
+ "signin.missing": "{site} показує це лише користувачам, що увійшли. Увійдіть у {site} у Firefox чи Zen і спробуйте ще раз",
+ "action.pause": "Пауза",
+ "action.resume": "Продовжити",
+ "progress.paused": "На паузі",
+ "log.paused": "Завантаження призупинено",
+ "log.resumed": "Завантаження відновлено"
 }

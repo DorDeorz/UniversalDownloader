@@ -36,7 +36,7 @@ class FakeManager:
             raise self.raise_on_fetch
         return self.info
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None, pause_event=None):
         self.threads.add(threading.get_ident())
         progress_hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 2})
         if url in self.fail_urls:
@@ -180,7 +180,7 @@ class InfoManager(FakeManager):
         self.fail_first = fail_first
 
     def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
-                       cancel_event=None, info=None):
+                       cancel_event=None, info=None, pause_event=None):
         self.infos.append(info)
         if self.fail_first and len(self.infos) == 1:
             return ItemResult(url, title, ItemStatus.FAILED, error="HTTP Error 403")

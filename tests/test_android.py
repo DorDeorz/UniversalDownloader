@@ -208,7 +208,7 @@ class FakeManager:
         return self.info
 
     def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None,
-                       info=None):
+                       info=None, pause_event=None):
         self.calls.append((url, options))
         self.infos.append(info)
         progress_hook({"status": "downloading", "downloaded_bytes": 5, "total_bytes": 10})
@@ -309,7 +309,7 @@ def test_session_cancel_marks_remaining_items_cancelled():
 
     class SlowManager(FakeManager):
         def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
-                           cancel_event=None, info=None):
+                           cancel_event=None, info=None, pause_event=None):
             release.wait(5)
             status = ItemStatus.CANCELLED if cancel_event.is_set() else ItemStatus.COMPLETED
             return ItemResult(url, title, status)
@@ -365,7 +365,7 @@ def test_old_analysis_is_asked_again(monkeypatch):
 def test_failed_download_with_saved_info_is_retried_fresh():
     class ExpiredLinks(FakeManager):
         def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
-                           cancel_event=None, info=None):
+                           cancel_event=None, info=None, pause_event=None):
             self.infos.append(info)
             status = ItemStatus.FAILED if info is not None else ItemStatus.COMPLETED
             return ItemResult(url, title, status, error="HTTP Error 403")
@@ -484,6 +484,37 @@ def probe(*_):
     result["saved"] = app.settings.theme
     result["same_row"] = theme in app.ids.settings_list.children  # updated in place, not rebuilt
     result["new_hover_observers"] = len(Window.get_property_observers("mouse_pos")) - observers
+    # Pause, and Wi-Fi only pausing on mobile data (a stand-in session and network).
+    class Paused:
+        paused = False
+        def pause(self): self.paused = True
+        def resume(self): self.paused = False
+        busy = False
+    real_session, app.session = app.session, Paused()
+    app.job = "download"
+    app.set_busy(True)
+    result["pause_shown"] = (app.ids.btn_pause.opacity, app.ids.btn_pause.disabled, app.ids.btn_pause.icon)
+    app.toggle_pause()
+    result["paused"] = (app.session.paused, app.ids.btn_pause.icon, app.ids.progress_detail.text)
+    app.toggle_pause()
+    metered = [True]
+    main.android_env.is_metered = lambda: metered[0]
+    app.settings.wifi_only = True
+    app._watch_network()
+    result["wifi_paused"] = (app.session.paused, app.ids.progress_detail.text)
+    metered[0] = False
+    app._watch_network()
+    result["wifi_resumed"] = app.session.paused
+    app.toggle_pause()  # the user's own pause is not undone by Wi-Fi
+    app._watch_network()
+    result["user_pause_kept"] = app.session.paused
+    app.job = None
+    app.set_busy(False)
+    result["pause_hidden"] = (app.ids.btn_pause.opacity, app.ids.btn_pause.disabled)
+    app.session = real_session
+    app.settings.wifi_only = False
+    result["wifi_row"] = any(getattr(r, "headline", None) == app.t("settings.wifi_only")
+                             for r in app.ids.settings_list.children)
     app.go_to("history")
     result["history_built"] = len(app.ids.history_list.children) > 0
     print("UIPROBE " + json.dumps(result), flush=True)
@@ -522,7 +553,12 @@ def test_settings_choice_updates_its_row_in_place(tmp_path):
     assert result["widgets_per_choice"] <= 4  # row, icon, text box, one line (MDListItem: 10+)
     assert result["new_hover_observers"] == 0
     assert result["history_built"]
-    assert result["reddit_row"] and result["instagram_row"]
+    assert result["reddit_row"] and result["instagram_row"] and result["wifi_row"]
+    assert result["pause_shown"] == [1, False, "pause"]
+    assert result["paused"] == [True, "play", i18n.tr("progress.paused")]
+    assert result["wifi_paused"] == [True, texts.t("wifi.paused")]
+    assert result["wifi_resumed"] is False and result["user_pause_kept"] is True
+    assert result["pause_hidden"] == [0, True]
     assert "Reddit" in result["reddit_message"] and "--cookies" not in result["reddit_message"]
 
 
@@ -911,6 +947,34 @@ def test_an_instagram_refusal_points_to_the_in_app_sign_in():
     for key in ("signin.needed", "signin.not_here", "signin.ask_body", "signin.sign_in", "signin.signed_in",
                 "signin.ok", "signin.signed_out", "instagram.sign_in_hint"):
         assert texts.TEXTS["en"].get(key) and texts.TEXTS["tr"].get(key), key
+
+
+def test_session_download_can_be_paused_and_resumed():
+    queue = events.EventQueue()
+    seen, started, go = [], threading.Event(), threading.Event()
+
+    class PausingManager(FakeManager):
+        def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
+                           cancel_event=None, info=None, pause_event=None):
+            seen.append(pause_event)
+            started.set()
+            go.wait(5)
+            logic.wait_while_paused(pause_event, cancel_event)  # as at each progress update
+            return ItemResult(url, title, ItemStatus.COMPLETED, path="/x")
+
+    session = worker.Session(PausingManager(), queue)
+    analysis = AnalysisResult(title="A", items=[QueueItem(url="u1", title="One")])
+    session.pause()  # from a job before: a new download starts unpaused
+    session.download(analysis, worker.build_options(worker.VIDEO_AUDIO, "/dl"))
+    assert not session.paused
+    assert started.wait(5)
+    session.pause()
+    go.set()
+    session.wait(0.5)
+    assert session.busy and session.paused
+    session.resume()
+    session.wait(5)
+    assert not session.busy and seen and seen[0] is session._pause
 
 
 def test_reddit_sign_in_texts_exist_in_english_and_turkish():
@@ -1548,6 +1612,7 @@ def probe(*_):
     # Low free space is told before a download starts.
     started = []
     class Session:
+        paused = False
         def download(self, *args, **kwargs):
             started.append(True)
             return True
@@ -1562,6 +1627,19 @@ def probe(*_):
     app.download()
     result["low_space_logged"] = app.tr("folder.low_space", mb=300) in app._log_lines
     result["download_started"] = bool(started)
+    # Wi-Fi only: on mobile data a download asks first.
+    app.job = None
+    app.set_busy(False)
+    started.clear()
+    app.settings.wifi_only = True
+    main.android_env.is_metered = lambda: True
+    app.download()
+    result["wifi_asked"] = not started and bool(is_open())
+    for dialog in is_open():
+        dialog.dismiss()
+    app.download(mobile_data_ok=True)
+    result["wifi_anyway"] = bool(started) and app._mobile_data_ok
+    app.settings.wifi_only = False
     app.session = real_session
     app.job = None
     app.set_busy(False)
@@ -1624,5 +1702,6 @@ def test_back_key_shared_link_low_space_and_trim_hints(tmp_path):
     assert r["queue"] == ["https://example.com/shared"]
     assert r["field_kept"] == "https://example.com/typed"
     assert r["low_space_logged"] and r["download_started"]
+    assert r["wifi_asked"] and r["wifi_anyway"]
     assert r["hints"] == [["Bắt đầu"], ["Kết thúc"]]
     assert r["cancel_offered"] and r["analysis_cancelled"] and r["cancel_shown"] and r["late_dropped"]

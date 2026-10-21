@@ -247,5 +247,10 @@
  "signin.ask_title": "{site} oturumu",
  "signin.ask_body": "{site} bunu yalnızca giriş yapmış hesaplara gösteriyor.\n\nFirefox ya da Zen'deki oturumun kullanılsın mı? Bu çerezler yalnızca Reddit, Instagram, YouTube, Facebook, X ve TikTok'a gider. Ayarlar'dan kapatabilirsin.",
  "signin.off": "{site} bunu yalnızca giriş yapmış hesaplara gösteriyor. Ayarlar'dan tarayıcı oturumunu aç, sonra yeniden dene",
- "signin.missing": "{site} bunu yalnızca giriş yapmış hesaplara gösteriyor. Firefox ya da Zen'de {site}'a giriş yap, sonra yeniden dene"
+ "signin.missing": "{site} bunu yalnızca giriş yapmış hesaplara gösteriyor. Firefox ya da Zen'de {site}'a giriş yap, sonra yeniden dene",
+ "action.pause": "Duraklat",
+ "action.resume": "Devam et",
+ "progress.paused": "Duraklatıldı",
+ "log.paused": "İndirme duraklatıldı",
+ "log.resumed": "İndirme devam ediyor"
 }

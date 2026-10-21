@@ -247,5 +247,10 @@
  "signin.ask_title": "{site} のログイン",
  "signin.ask_body": "{site} はこれをログインしたアカウントにだけ表示します。\n\nFirefox や Zen のログインを使いますか? Cookie は Reddit、Instagram、YouTube、Facebook、X、TikTok だけに送られます。設定でオフにできます。",
  "signin.off": "{site} はこれをログインしたアカウントにだけ表示します。設定でブラウザーのログインをオンにして、もう一度お試しください",
- "signin.missing": "{site} はこれをログインしたアカウントにだけ表示します。Firefox か Zen で {site} にログインして、もう一度お試しください"
+ "signin.missing": "{site} はこれをログインしたアカウントにだけ表示します。Firefox か Zen で {site} にログインして、もう一度お試しください",
+ "action.pause": "一時停止",
+ "action.resume": "再開",
+ "progress.paused": "一時停止中",
+ "log.paused": "ダウンロードを一時停止しました",
+ "log.resumed": "ダウンロードを再開しました"
 }

@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import yt_dlp
 from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 from yt_dlp.postprocessor.sponsorblock import SponsorBlockPP
@@ -520,7 +521,7 @@ class DownloadManager:
             return info
 
     def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None,
-                       info=None):
+                       info=None, pause_event=None):
         """Download one item and return its :class:`results.ItemResult`.
 
         Never raises for download problems: yt-dlp, trim and postprocessor
@@ -536,6 +537,9 @@ class DownloadManager:
         Setting ``cancel_event`` stops the download at the next progress
         update; the item is then ``cancelled``. Partial files are removed
         for cancelled and failed items alike.
+
+        While ``pause_event`` is set the download waits at its next progress
+        update (see :func:`wait_while_paused`); Cancel still works.
 
         ``info`` is what :meth:`fetch_info` returned for this very video. The
         metadata pass then selects formats from it instead of asking the site
@@ -567,6 +571,7 @@ class DownloadManager:
         def check_cancel(d=None):
             if d is not None:
                 partial.track(d)
+            wait_while_paused(pause_event, cancel_event)
             if is_cancelled():
                 raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
 
@@ -580,6 +585,7 @@ class DownloadManager:
             if progress_hook:
                 progress_hook(d)
 
+        wait_while_paused(pause_event, cancel_event)
         if is_cancelled():
             return ItemResult(url, title, ItemStatus.CANCELLED, error='Cancelled by user')
 
@@ -765,6 +771,21 @@ class DownloadManager:
 
 
 PAGE_ATTEMPTS = 3
+PAUSE_POLL_SECONDS = 0.2
+
+
+def wait_while_paused(pause_event, cancel_event=None):
+    """Block while ``pause_event`` is set, until it is cleared or ``cancel_event`` is set.
+
+    Called from yt-dlp's progress hooks, so a paused download stops reading
+    from the site. If the site drops the idle connection meanwhile, yt-dlp
+    reconnects on resume and asks for the rest of the file (its ``.part``
+    is kept), or goes on with the next fragment of a stream.
+    """
+    while pause_event is not None and pause_event.is_set():
+        if cancel_event is not None and cancel_event.is_set():
+            return
+        time.sleep(PAUSE_POLL_SECONDS)
 
 
 def _read_page(url, ydl_opts, headers=None, data=None):

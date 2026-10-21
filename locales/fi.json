@@ -247,5 +247,10 @@
  "signin.ask_title": "Kirjautuminen: {site}",
  "signin.ask_body": "{site} näyttää tämän vain kirjautuneille.\n\nKäytetäänkö Firefoxin tai Zenin kirjautumista? Vain Reddit, Instagram, YouTube, Facebook, X ja TikTok saavat nämä evästeet. Voit poistaa sen käytöstä asetuksissa.",
  "signin.off": "{site} näyttää tämän vain kirjautuneille. Ota selaimen kirjautuminen käyttöön asetuksissa ja yritä uudelleen",
- "signin.missing": "{site} näyttää tämän vain kirjautuneille. Kirjaudu palveluun {site} Firefoxissa tai Zenissä ja yritä uudelleen"
+ "signin.missing": "{site} näyttää tämän vain kirjautuneille. Kirjaudu palveluun {site} Firefoxissa tai Zenissä ja yritä uudelleen",
+ "action.pause": "Keskeytä",
+ "action.resume": "Jatka",
+ "progress.paused": "Keskeytetty",
+ "log.paused": "Lataus keskeytetty",
+ "log.resumed": "Lataus jatkuu"
 }

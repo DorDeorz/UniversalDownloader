@@ -247,5 +247,10 @@
  "signin.ask_title": "Innlogging på {site}",
  "signin.ask_body": "{site} viser dette bare til innloggede kontoer.\n\nBruke innloggingen fra Firefox eller Zen? Bare Reddit, Instagram, YouTube, Facebook, X og TikTok får disse informasjonskapslene. Du kan slå det av under Innstillinger.",
  "signin.off": "{site} viser dette bare til innloggede kontoer. Slå på nettleserinnlogging under Innstillinger, og prøv igjen",
- "signin.missing": "{site} viser dette bare til innloggede kontoer. Logg inn på {site} i Firefox eller Zen, og prøv igjen"
+ "signin.missing": "{site} viser dette bare til innloggede kontoer. Logg inn på {site} i Firefox eller Zen, og prøv igjen",
+ "action.pause": "Pause",
+ "action.resume": "Fortsett",
+ "progress.paused": "Satt på pause",
+ "log.paused": "Nedlasting satt på pause",
+ "log.resumed": "Nedlasting fortsatt"
 }

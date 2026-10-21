@@ -247,5 +247,10 @@
  "signin.ask_title": "Login {site}",
  "signin.ask_body": "{site} hanya menampilkan ini ke akun yang sudah masuk.\n\nGunakan login Firefox atau Zen Anda? Hanya Reddit, Instagram, YouTube, Facebook, X, dan TikTok yang mendapat cookie itu. Anda bisa mematikannya di Pengaturan.",
  "signin.off": "{site} hanya menampilkan ini ke akun yang sudah masuk. Nyalakan login browser di Pengaturan, lalu coba lagi",
- "signin.missing": "{site} hanya menampilkan ini ke akun yang sudah masuk. Masuk ke {site} di Firefox atau Zen, lalu coba lagi"
+ "signin.missing": "{site} hanya menampilkan ini ke akun yang sudah masuk. Masuk ke {site} di Firefox atau Zen, lalu coba lagi",
+ "action.pause": "Jeda",
+ "action.resume": "Lanjutkan",
+ "progress.paused": "Dijeda",
+ "log.paused": "Unduhan dijeda",
+ "log.resumed": "Unduhan dilanjutkan"
 }

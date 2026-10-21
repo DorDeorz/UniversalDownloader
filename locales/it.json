@@ -247,5 +247,10 @@
  "signin.ask_title": "Accesso a {site}",
  "signin.ask_body": "{site} mostra questo solo agli account connessi.\n\nUsare l'accesso del tuo Firefox o Zen? Solo Reddit, Instagram, YouTube, Facebook, X e TikTok ricevono quei cookie. Puoi disattivarlo nelle Impostazioni.",
  "signin.off": "{site} mostra questo solo agli account connessi. Attiva l'accesso del browser nelle Impostazioni, poi riprova",
- "signin.missing": "{site} mostra questo solo agli account connessi. Accedi a {site} in Firefox o Zen, poi riprova"
+ "signin.missing": "{site} mostra questo solo agli account connessi. Accedi a {site} in Firefox o Zen, poi riprova",
+ "action.pause": "Pausa",
+ "action.resume": "Riprendi",
+ "progress.paused": "In pausa",
+ "log.paused": "Download in pausa",
+ "log.resumed": "Download ripreso"
 }

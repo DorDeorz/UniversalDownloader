@@ -48,6 +48,7 @@ class AppSettings:
     auto_paste: bool = True           # take a link from the clipboard when the app opens
     auto_analyze_shared: bool = True  # analyze links shared from other apps at once
     keep_screen_on: bool = True       # while a download runs
+    wifi_only: bool = False           # ask before downloading on mobile data; pause until Wi-Fi is back
     save_history: bool = True
     check_updates: bool = True        # look for a new version on GitHub at start-up
 

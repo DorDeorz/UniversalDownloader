@@ -247,5 +247,10 @@
  "signin.ask_title": "Logowanie do {site}",
  "signin.ask_body": "{site} pokazuje to tylko zalogowanym kontom.\n\nUżyć logowania z Firefoksa lub Zen? Tylko Reddit, Instagram, YouTube, Facebook, X i TikTok dostaną te ciasteczka. Możesz to wyłączyć w Ustawieniach.",
  "signin.off": "{site} pokazuje to tylko zalogowanym kontom. Włącz logowanie z przeglądarki w Ustawieniach i spróbuj ponownie",
- "signin.missing": "{site} pokazuje to tylko zalogowanym kontom. Zaloguj się do {site} w Firefoksie lub Zen i spróbuj ponownie"
+ "signin.missing": "{site} pokazuje to tylko zalogowanym kontom. Zaloguj się do {site} w Firefoksie lub Zen i spróbuj ponownie",
+ "action.pause": "Wstrzymaj",
+ "action.resume": "Wznów",
+ "progress.paused": "Wstrzymano",
+ "log.paused": "Pobieranie wstrzymane",
+ "log.resumed": "Pobieranie wznowione"
 }

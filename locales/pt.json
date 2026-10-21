@@ -247,5 +247,10 @@
  "signin.ask_title": "Login no {site}",
  "signin.ask_body": "O {site} mostra isto só para contas conectadas.\n\nUsar o login do seu Firefox ou Zen? Só Reddit, Instagram, YouTube, Facebook, X e TikTok recebem esses cookies. Você pode desativar em Configurações.",
  "signin.off": "O {site} mostra isto só para contas conectadas. Ative o login do navegador em Configurações e tente de novo",
- "signin.missing": "O {site} mostra isto só para contas conectadas. Faça login no {site} no Firefox ou Zen e tente de novo"
+ "signin.missing": "O {site} mostra isto só para contas conectadas. Faça login no {site} no Firefox ou Zen e tente de novo",
+ "action.pause": "Pausar",
+ "action.resume": "Retomar",
+ "progress.paused": "Pausado",
+ "log.paused": "Download pausado",
+ "log.resumed": "Download retomado"
 }

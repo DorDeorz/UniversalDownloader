@@ -130,10 +130,11 @@ class SlowManager:
         self.block = block
         self.started = []
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None, pause_event=None):
         self.started.append(url)
         if url in self.fail:
             return ItemResult(url, title, ItemStatus.FAILED, error="HTTP 403")
+        self.pause_event = pause_event
         if self.block and cancel_event is not None and cancel_event.wait(5):
             return ItemResult(url, title, ItemStatus.CANCELLED, error="Cancelled by user")
         return ItemResult(url, title, ItemStatus.COMPLETED, path=f"/out/{url}")
@@ -201,6 +202,33 @@ def test_cancel_button_stops_download(app):
     assert pump(app, lambda: not app.is_busy())
     assert app.last_summary.headline() == "2 cancelled"
     assert app.btn_cancel.cget("state") == "disabled"
+
+
+@needs_display
+def test_the_download_button_pauses_and_resumes(app):
+    manager = SlowManager()
+    app.manager = manager
+    app.set_queue([{"url": "a", "title": "A"}])
+    app.start_download_queue()
+    assert pump(app, lambda: manager.started)
+    assert app.btn_download.cget("state") == "normal" and app.btn_download.cget("text") == "Pause"
+
+    app.start_download_queue()  # the same button, now Pause
+    assert manager.pause_event.is_set() and app.btn_download.cget("text") == "Resume"
+    assert app.lbl_detail.cget("text") == "Paused"
+    app._show_progress(0.5, "50%", "1 MB/s")  # a late update keeps saying Paused
+    assert app.lbl_detail.cget("text") == "Paused"
+
+    app.start_download_queue()
+    assert not manager.pause_event.is_set() and app.btn_download.cget("text") == "Pause"
+    log = app.console.get("1.0", "end")
+    assert "> Download paused" in log and "> Download resumed" in log
+
+    app.toggle_pause()
+    app.cancel_job()  # Cancel works while paused
+    assert app.btn_download.cget("state") == "disabled"
+    assert pump(app, lambda: not app.is_busy())
+    assert app.btn_download.cget("text") == "Download"
 
 
 @needs_display

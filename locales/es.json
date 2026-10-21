@@ -247,5 +247,10 @@
  "signin.ask_title": "Sesión de {site}",
  "signin.ask_body": "{site} muestra esto solo a cuentas con sesión iniciada.\n\n¿Usar la sesión de tu Firefox o Zen? Solo Reddit, Instagram, YouTube, Facebook, X y TikTok reciben esas cookies. Puedes desactivarlo en Ajustes.",
  "signin.off": "{site} muestra esto solo a cuentas con sesión iniciada. Activa la sesión del navegador en Ajustes y vuelve a intentarlo",
- "signin.missing": "{site} muestra esto solo a cuentas con sesión iniciada. Inicia sesión en {site} en Firefox o Zen y vuelve a intentarlo"
+ "signin.missing": "{site} muestra esto solo a cuentas con sesión iniciada. Inicia sesión en {site} en Firefox o Zen y vuelve a intentarlo",
+ "action.pause": "Pausar",
+ "action.resume": "Reanudar",
+ "progress.paused": "En pausa",
+ "log.paused": "Descarga en pausa",
+ "log.resumed": "Descarga reanudada"
 }

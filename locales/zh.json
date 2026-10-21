@@ -247,5 +247,10 @@
  "signin.ask_title": "{site} 登录",
  "signin.ask_body": "{site} 只向已登录的账户显示此内容。\n\n使用你 Firefox 或 Zen 的登录吗？只有 Reddit、Instagram、YouTube、Facebook、X 和 TikTok 会收到这些 Cookie。可在设置中关闭。",
  "signin.off": "{site} 只向已登录的账户显示此内容。请在设置中开启浏览器登录，然后重试",
- "signin.missing": "{site} 只向已登录的账户显示此内容。请在 Firefox 或 Zen 中登录 {site}，然后重试"
+ "signin.missing": "{site} 只向已登录的账户显示此内容。请在 Firefox 或 Zen 中登录 {site}，然后重试",
+ "action.pause": "暂停",
+ "action.resume": "继续",
+ "progress.paused": "已暂停",
+ "log.paused": "下载已暂停",
+ "log.resumed": "下载已继续"
 }

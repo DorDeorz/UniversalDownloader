@@ -323,6 +323,13 @@ KV = r"""
                                     Hint:
                                         id: progress_detail
                                         text: ""
+                                MDIconButton:
+                                    id: btn_pause
+                                    icon: "pause"
+                                    pos_hint: {"center_y": .5}
+                                    opacity: 0
+                                    disabled: True
+                                    on_release: app.toggle_pause()
 
                         MDBoxLayout:
                             id: week_row

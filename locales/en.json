@@ -247,5 +247,10 @@
  "signin.ask_title": "{site} sign-in",
  "signin.ask_body": "{site} shows this only to signed-in accounts.\n\nUse the sign-in of your Firefox or Zen? Only Reddit, Instagram, YouTube, Facebook, X and TikTok get those cookies. You can turn it off under Settings.",
  "signin.off": "{site} shows this only to signed-in accounts. Turn on the browser sign-in in Settings, then try again",
- "signin.missing": "{site} shows this only to signed-in accounts. Sign in to {site} in Firefox or Zen, then try again"
+ "signin.missing": "{site} shows this only to signed-in accounts. Sign in to {site} in Firefox or Zen, then try again",
+ "action.pause": "Pause",
+ "action.resume": "Resume",
+ "progress.paused": "Paused",
+ "log.paused": "Download paused",
+ "log.resumed": "Download resumed"
 }

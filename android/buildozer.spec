@@ -30,7 +30,7 @@ fullscreen = 0
 # are yt-dlp and the pure-Python parts of its extras, pinned like
 # requirements.txt; brotli, websockets and pycryptodomex need native builds
 # and yt-dlp works without them.
-requirements = python3,kivy==2.3.1,pyjnius,android,udtools,charset_normalizer,materialyoucolor,kivymd,asyncgui==0.6.3,asynckivy==0.6.4,cffi,curl_cffi,yt-dlp==2026.8.19,yt-dlp-ejs==0.8.0,certifi==2026.7.22,mutagen==1.48.1
+requirements = python3,kivy==2.3.1,pyjnius,android,udtools,charset_normalizer,materialyoucolor,kivymd,asyncgui==0.6.3,asynckivy==0.6.4,cffi,curl_cffi,yt-dlp==2026.10.21,yt-dlp-ejs==0.8.0,certifi==2026.7.22,mutagen==1.48.1
 
 # Storage permission is only needed on Android 10 and older; newer versions
 # let the app write its own files to Download/ without it.

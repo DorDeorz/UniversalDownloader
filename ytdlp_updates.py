@@ -28,7 +28,7 @@ import zipimport
 _log = logging.getLogger(__name__)
 
 # The yt-dlp in requirements.txt and android/buildozer.spec (tests check this).
-BUNDLED_VERSION = "2026.08.19"
+BUNDLED_VERSION = "2026.10.21"
 RELEASES = "https://github.com/yt-dlp/yt-dlp/releases"
 LATEST_API = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
 DOWNLOAD = RELEASES + "/download/{version}/{name}"

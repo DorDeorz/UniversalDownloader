@@ -801,7 +801,13 @@ class SettingsView(ctk.CTkFrame):
         self.cmb_accent = option_menu(look, list(settings_store.ACCENTS), lambda v: self.on_change("accent", v),
                                       width=200, label=lambda a: tr(f"accent.{a}"))
         self.cmb_accent.set(settings.accent)
-        self._setting_row(look, 7, tr("settings.accent"), tr("settings.accent_hint"), self.cmb_accent, last=True)
+        has_tray = tray.supported()
+        self._setting_row(look, 7, tr("settings.accent"), tr("settings.accent_hint"), self.cmb_accent,
+                          last=not has_tray)
+        if has_tray:
+            # Here rather than under Downloads, whose column is the taller one (the page must not scroll).
+            self.sw_tray = self._switch(look, 9, tr("settings.tray"), settings.close_to_tray, "close_to_tray")
+            self._spacing[-1] = (self._spacing[-1][0], (0, 14), (0, 10))
 
         # Downloads: how they connect, then what happens around them
         self.card_finish = after = self._section(body, tr("settings.downloads"))
@@ -838,8 +844,6 @@ class SettingsView(ctk.CTkFrame):
         self.sw_summary = self._switch(after, 10, tr("settings.summary"), settings.show_summary, "show_summary")
         self.sw_open = self._switch(after, 11, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
-        if tray.supported():
-            self.sw_tray = self._switch(after, 12, tr("settings.tray"), settings.close_to_tray, "close_to_tray")
         self._spacing[-1] = (self._spacing[-1][0], (0, 14), (0, 10))
 
         # Updates

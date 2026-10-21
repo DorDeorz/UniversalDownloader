@@ -153,3 +153,11 @@ def test_release_workflow_builds_with_real_tools():
     assert 'gh release create "orbida-v$VERSION"' in workflow
     assert '"release/Orbida-Setup-$VERSION.exe" "release/Orbida-$VERSION.apk"' in workflow
     assert "/RELAUNCH=1" in workflow
+
+
+def test_pyproject_version_matches_the_app():
+    import tomllib
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "pyproject.toml"), "rb") as f:
+        project = tomllib.load(f)["project"]
+    assert project["version"] == version.__version__

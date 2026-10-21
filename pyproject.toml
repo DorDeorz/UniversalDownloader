@@ -1,7 +1,7 @@
 [project]
-name = "universaldownloader"
-version = "0.1.0"
-description = "Windows desktop media downloader built on CustomTkinter, yt-dlp and FFmpeg"
+name = "orbida"
+version = "1.2.2"  # keep equal to version.py (tests/test_build.py checks)
+description = "Orbida: a video and audio downloader for Windows and Android built on yt-dlp and FFmpeg"
 requires-python = ">=3.11"
 # Exact pins live in requirements.txt / requirements-dev.txt.
 

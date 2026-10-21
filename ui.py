@@ -991,7 +991,7 @@ class SettingsView(ctk.CTkFrame):
             pass  # page closed
 
     def open_logs(self):
-        open_path(app_setup.data_dir())
+        open_path(app_setup.log_dir())
 
     def _save_proxy(self):
         """Save the proxy field once it holds a valid address (or is empty)."""
@@ -1419,6 +1419,15 @@ class App(ctk.CTk):
             self.events.dispatch_pending()
         finally:
             self._poll_id = self.after(self.POLL_INTERVAL_MS, self._poll_events)
+
+    def report_callback_exception(self, kind, value, tb):
+        """An error in a button, key or timer callback: log it and keep running.
+
+        Tk would print it to the console, which the installed app does not have.
+        """
+        _log.error("Error in a window callback", exc_info=(kind, value, tb))
+        if sys.stderr is not None:
+            super().report_callback_exception(kind, value, tb)
 
     def destroy(self):
         for call in getattr(self, "_startup_calls", ()):
@@ -2763,6 +2772,8 @@ class App(ctk.CTk):
             flags = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0  # detached, own process group
             subprocess.Popen(updates.installer_command(path), creationflags=flags, close_fds=True)
         except OSError as e:
+            if self.instance is not None:
+                self.instance.acquire()  # the app stays open: keep a second copy out again
             self._on_update_failed(str(e))
             return
         self._closing = True

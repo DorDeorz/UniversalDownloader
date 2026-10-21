@@ -7,6 +7,7 @@ from version import DISPLAY_NAME
 
 def main():
     app_setup.configure_logging()
+    app_setup.log_uncaught_errors()
     app_setup.set_app_user_model_id()
     instance = app_setup.SingleInstance()
     # A link from the browser extension (orbida://download?url=...) or a command line.

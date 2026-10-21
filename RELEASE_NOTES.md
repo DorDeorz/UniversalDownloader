@@ -1,13 +1,23 @@
-**Orbida 1.2.0** brings a browser extension for Windows, Spotify songs with
-their real names and album covers, subtitles, a speed limit and a proxy. This
-release holds both apps:
+**Orbida 1.2.1** makes the browser extension stay in Firefox. This release
+holds both apps and the Firefox add-on:
 
-- **Windows:** `Orbida-Setup-1.2.0.exe`, for Windows 10 or 11 (64-bit).
-- **Android:** `Orbida-1.2.0.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Windows:** `Orbida-Setup-1.2.1.exe`, for Windows 10 or 11 (64-bit).
+- **Android:** `Orbida-1.2.1.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Firefox:** `Orbida-Firefox-1.2.1.xpi`, the browser extension signed by Mozilla.
 
 Orbida 1.0 updates itself to this version: on Windows click **Update to
-1.2.0** in the top bar; on Android open Settings › About › Check for
+1.2.1** in the top bar; on Android open Settings › About › Check for
 updates.
+
+## New in 1.2.1
+
+**Windows:**
+- **Firefox add-on that stays.** The extension is now signed by Mozilla, so
+  Firefox keeps it after it closes (Firefox 140 or newer). In Settings ›
+  Browser extension click **Add to Firefox**, then **Add** in Firefox. The
+  `.xpi` above can also be dragged into a Firefox window.
+
+**Android:** no changes.
 
 ## New in 1.2.0 (both apps)
 
@@ -91,7 +101,7 @@ Before this version, the Windows app was called Universal Video Downloader.
 - New downloads go to `Downloads\Orbida` by default. A folder you chose
   before stays the same.
 
-**Install:** run `Orbida-Setup-1.1.1.exe`. It installs for your user only,
+**Install:** run `Orbida-Setup-1.2.1.exe`. It installs for your user only,
 with no administrator password. FFmpeg, ffprobe and Deno are included.
 The setup is not code-signed, so SmartScreen may say "Windows protected
 your PC". Click **More info**, then **Run anyway**.
@@ -127,5 +137,5 @@ once first: 1.0 has a new app id and signing key.
 - lighter, faster lists;
 - the name Orbida.
 
-`SHA256SUMS.txt` lists the checksums of both files. `build-info.json` records
+`SHA256SUMS.txt` lists the checksums of all three files. `build-info.json` records
 the exact source commit and versions of the Windows build.

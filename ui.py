@@ -115,6 +115,9 @@ def card(parent, **kw):
     return ctk.CTkFrame(parent, fg_color=CARD, corner_radius=CARD_RADIUS, border_width=0, **kw)
 
 
+# Seconds between progress updates while bytes arrive.
+PROGRESS_INTERVAL = 0.1
+
 # Room for the title bar and frame, which geometry() sizes do not include.
 WINDOW_FRAME_PX = 48
 
@@ -1431,6 +1434,7 @@ class App(ctk.CTk):
             self._startup_calls.append(self.after(1500, self.check_for_updates))
 
     POLL_INTERVAL_MS = 50
+    LOG_LINES = 2000  # activity lines kept on screen
 
     def _poll_events(self):
         """Drain the event queue on the main thread, then reschedule."""
@@ -1700,7 +1704,8 @@ class App(ctk.CTk):
         log_card.grid_rowconfigure(1, weight=1)
         self._section_label(log_card, "activity.title").grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
         self.console = ctk.CTkTextbox(log_card, height=100, font=ctk.CTkFont(family="Consolas", size=12),
-                                      fg_color="transparent", text_color=TEXT, wrap="word")
+                                      fg_color="transparent", text_color=TEXT, wrap="word",
+                                      state="disabled")  # read-only; text can still be selected and copied
         self.console.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
         # Keep a gap between the cards and the (usually hidden) scrollbar.
         for card_widget in self.main_frame.grid_slaves():
@@ -1739,7 +1744,13 @@ class App(ctk.CTk):
         """Queue a console line; safe to call from any thread."""
         self.events.post(events.LOG, message=message)
     def _append_log(self, message):
+        self.console.configure(state="normal")
         self.console.insert("end", f"> {message}\n")
+        # A long playlist would otherwise grow the box without end.
+        lines = int(self.console.index("end-1c").split(".")[0])
+        if lines > self.LOG_LINES:
+            self.console.delete("1.0", f"{lines - self.LOG_LINES}.0")
+        self.console.configure(state="disabled")
         self.console.see("end")
     def _show_progress(self, fraction, text, detail=""):
         """``text`` and ``detail`` are strings, or functions for translated text."""
@@ -2656,8 +2667,13 @@ class App(ctk.CTk):
         if stage is not None:
             self.events.post(events.STAGE, text=stage)
             return
+        # yt-dlp calls the hook for every few kilobytes; a few redraws a second are enough.
+        now, last = time.monotonic(), getattr(self, "_last_progress", None)
+        if d.get("status") == "downloading" and last is not None and now - last < PROGRESS_INTERVAL:
+            return
         progress = events.progress_from_hook(d)
         if progress is not None:
+            self._last_progress = now
             fraction, text = progress
             self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=events.detail_from_hook(d, left=tr("progress.left", time="{time}")))
 

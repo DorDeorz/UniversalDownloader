@@ -208,3 +208,28 @@ def test_stale_information_is_retried_fresh():
     assert side._analysed is None
     done = [e.payload["result"] for e in side.drain() if e.kind == events.ITEM_DONE]
     assert [r.status for r in done] == [ItemStatus.COMPLETED]
+
+
+def test_progress_updates_are_throttled():
+    worker = WorkerSide(FakeManager())
+    for done in range(1, 51):  # 50 hook calls in a moment
+        worker.progress_hook({"status": "downloading", "downloaded_bytes": done, "total_bytes": 100})
+    worker.progress_hook({"status": "finished", "downloaded_bytes": 100, "total_bytes": 100})
+    progress = [e for e in worker.drain() if e.kind == events.PROGRESS]
+    assert len(progress) == 2  # the first update and the finish
+    assert progress[-1].payload["fraction"] == 1
+
+
+def test_activity_log_is_read_only_and_capped(monkeypatch):
+    isolate_settings(monkeypatch)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    monkeypatch.setattr(ui.App, "LOG_LINES", 5)
+    app = new_app()
+    try:
+        for n in range(12):
+            app._append_log(f"line {n}")
+        assert app.console.cget("state") == "disabled"
+        lines = app.console.get("1.0", "end").strip().splitlines()
+        assert lines == [f"> line {n}" for n in range(7, 12)]
+    finally:
+        app.destroy()

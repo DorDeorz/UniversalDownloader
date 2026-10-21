@@ -5,6 +5,7 @@ import re
 import shutil
 import yt_dlp
 from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
+from yt_dlp.postprocessor.sponsorblock import SponsorBlockPP
 
 import filenames
 import formats
@@ -563,8 +564,19 @@ class DownloadManager:
                 # yt-dlp (start, end) çiftleri bekler
                 ydl_opts['download_ranges'] = yt_dlp.utils.download_range_func(None, [trim_range])
                 ydl_opts['force_keyframes_at_cuts'] = True
+            sponsorblock = bool(options.get('sponsorblock'))
+            if sponsorblock and trim_requested:
+                # The segments are times in the whole video, not in the trimmed part.
+                sponsorblock = False
+                if log_callback:
+                    log_callback("SponsorBlock: skipped for a trimmed download")
+            if sponsorblock:
+                ydl_opts['postprocessors'] = formats.with_sponsor_cuts(ydl_opts['postprocessors'])
             selected = reusable_info(info) if options.get('subtitles') and mode != formats.AUDIO_ONLY else None
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                if sponsorblock:
+                    ydl.add_post_processor(
+                        QuietSponsorBlockPP(ydl, categories=formats.SPONSORBLOCK_CATEGORIES), when='after_filter')
                 if plan.strip_audio:
                     ydl.add_post_processor(StripAudioPP(ydl), when='post_process')
                 info = ydl.process_ie_result(info, download=True)
@@ -742,6 +754,21 @@ def explain_format_error(message, mode, quality):
     if quality and quality != 'Best':
         return f'No {quality} or lower version of this video is available; try a higher quality'
     return 'No downloadable video format is available for this media'
+
+
+class QuietSponsorBlockPP(SponsorBlockPP):
+    """Looks up a YouTube video's SponsorBlock segments (cut later by ModifyChapters).
+
+    The segments come from sponsor.ajay.app; when that site cannot be
+    reached the video is saved uncut instead of failing.
+    """
+
+    def run(self, info):
+        try:
+            return super().run(info)
+        except Exception as e:
+            self.report_warning(f"SponsorBlock is unavailable, the video is not cut: {e}")
+            return [], info
 
 
 class StripAudioPP(FFmpegPostProcessor):

@@ -1265,6 +1265,27 @@ class Notice:
 
 def probe(*_):
     notice = app._notice = Notice()
+    # A song opened inside a YouTube Mix: only the song is analyzed, the Mix is offered.
+    seen = []
+    class Session:
+        def analyze(self, text, keep_mix=False):
+            seen.append([text, keep_mix])
+            return True
+    real_session, app.session = app.session, Session()
+    mix = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ"
+    app.ids.url.text = mix
+    app.analyze()
+    song = QueueItem(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ", title="Song")
+    app._on_analysis_done(AnalysisResult(title="Song", items=[song], is_playlist=False), "")
+    result["mix_shown"] = app.ids.btn_mix.parent is not None
+    result["mix_text"] = app.ids.media_sub.text == app.tr("mix.offer")
+    app.download_mix()
+    result["mix_seen"] = seen
+    result["mix_hidden"] = app.ids.btn_mix.parent is None
+    app.job = None
+    app._on_analysis_done(AnalysisResult(title="Mix", items=[song, song], is_playlist=True), "")
+    result["mix_after_list"] = app.ids.btn_mix.parent is None
+    app.session = real_session
     # A playlist with one video downloaded before.
     app.history.add("Old", os.path.join(os.getcwd(), "old.mp4"), url="https://www.youtube.com/watch?v=aaaaaaaaaaa")
     items = [QueueItem(url=f"https://www.youtube.com/watch?v={{c * 11}}", title=f"Video {{c}}") for c in "abc"]
@@ -1342,6 +1363,9 @@ def test_playlist_picker_queue_and_background_service(tmp_path):
     line = next((x for x in out.stdout.splitlines() if x.startswith("UIPROBE ")), None)
     assert line, out.stdout[-3000:] + out.stderr[-3000:]
     r = json.loads(line[len("UIPROBE "):])
+    mix = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ"
+    assert r["mix_shown"] and r["mix_text"] and r["mix_hidden"] and r["mix_after_list"]
+    assert r["mix_seen"] == [[mix, False], [mix, True]]
     assert r["chosen"] == ["Video b", "Video c"]  # Video a was downloaded before
     assert r["pick_shown"]
     assert r["rows"][0].startswith("Video a") and len(r["rows"]) == 3

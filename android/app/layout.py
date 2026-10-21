@@ -196,6 +196,16 @@ KV = r"""
                                 id: pick_text
                                 text: app.tr("playlist.title", app.lang)
 
+                        # A song opened inside a YouTube Mix: offer the whole Mix.
+                        MDButton:
+                            id: btn_mix
+                            style: "tonal"
+                            on_release: app.download_mix()
+                            MDButtonIcon:
+                                icon: "playlist-music"
+                            MDButtonText:
+                                text: app.tr("mix.download", app.lang)
+
                         MDLabel:
                             text: app.t("home.mode", app.lang)
                             font_style: "Label"

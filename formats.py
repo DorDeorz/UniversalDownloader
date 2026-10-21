@@ -186,6 +186,24 @@ def fits_container(fmt, info):
     return True
 
 
+# SponsorBlock categories cut from YouTube videos (https://wiki.sponsor.ajay.app/w/Types):
+# paid and unpaid promotion, "subscribe" reminders, intro and end card
+# animations, and the talking in music videos.
+SPONSORBLOCK_CATEGORIES = ("sponsor", "selfpromo", "interaction", "intro", "outro", "music_offtopic")
+
+
+def with_sponsor_cuts(postprocessors):
+    """``postprocessors`` with the SponsorBlock segments cut out first.
+
+    The cut runs before the metadata is written, so the file's chapters
+    match the shortened video (the order yt-dlp itself uses).
+    """
+    cut = {"key": "ModifyChapters", "remove_sponsor_segments": list(SPONSORBLOCK_CATEGORIES)}
+    keys = [pp["key"] for pp in postprocessors]
+    at = keys.index("FFmpegMetadata") if "FFmpegMetadata" in keys else len(postprocessors)
+    return postprocessors[:at] + [cut] + postprocessors[at:]
+
+
 def postprocessors_for(plan, info):
     """The plan's postprocessors, re-encoding instead of remuxing when needed."""
     if plan.mode == AUDIO_ONLY or fits_container(plan.ext, info):

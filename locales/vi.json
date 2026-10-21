@@ -201,7 +201,10 @@
  "clipboard.copied": "Đã sao chép: {link}",
  "clipboard.copied_many": "Đã sao chép {count} liên kết",
  "clipboard.download": "Tải xuống",
+ "mix.offer": "Bài hát này được mở trong một Mix của YouTube; chỉ tải bài hát.",
+ "mix.download": "Tải Mix",
  "settings.subtitles": "Lưu phụ đề (.srt) cùng video",
+ "settings.sponsorblock": "Cắt quảng cáo tài trợ và phần mở đầu khỏi video YouTube (SponsorBlock)",
  "settings.connection": "Kết nối",
  "settings.speed_limit": "Giới hạn tốc độ",
  "speed.unlimited": "Không giới hạn",
@@ -225,5 +228,6 @@
  "extension.description": "Gửi video bạn đang xem, hoặc bất kỳ liên kết nào, tới ứng dụng Orbida.",
  "log.batch": "Đã thêm {count} liên kết vào hàng đợi",
  "log.from_browser": "Đã nhận liên kết từ trình duyệt",
- "options.subtitles": "Phụ đề"
+ "options.subtitles": "Phụ đề",
+ "options.sponsorblock": "Bỏ qua tài trợ"
 }

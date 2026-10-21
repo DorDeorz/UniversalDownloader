@@ -1,7 +1,7 @@
 """Basic URL checks before any network request (ISSUES.md #32)."""
 
 import re
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 class UrlError(ValueError):
@@ -13,11 +13,12 @@ class UrlError(ValueError):
         self.values = values
 
 
-def normalize_url(text):
+def normalize_url(text, keep_mix=False):
     """Return a cleaned http(s) URL, or raise UrlError with a readable reason.
 
     Adds ``https://`` when the scheme is missing (``youtu.be/abc``), so a
-    pasted link without it still works.
+    pasted link without it still works. A song opened inside a YouTube Mix
+    loses the Mix unless ``keep_mix`` (the user asked for the whole Mix).
     """
     text = (text or "").strip()
     if not text:
@@ -33,7 +34,45 @@ def normalize_url(text):
     host = parts.hostname or ""
     if "." not in host and host != "localhost":
         raise UrlError("url.invalid", "This does not look like a web link")
-    return text
+    return text if keep_mix else without_youtube_mix(text)
+
+
+# Query parameters that only place a video inside a YouTube list.
+_LIST_PARAMS = ("list", "index", "start_radio", "pp")
+
+
+def without_youtube_mix(url):
+    """A YouTube video link without the Mix it was opened in.
+
+    YouTube often plays a song inside a Mix ("&list=RD..."): an endless list
+    it makes up from the video. Copying that link would offer the whole Mix,
+    so the link is reduced to the video. Playlists someone made (PL...,
+    OLAK5uy... albums) stay, as does a link to a Mix alone (no v=).
+    """
+    if not youtube_mix(url):
+        return url
+    parts = urlsplit(url)
+    kept = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            if key not in _LIST_PARAMS]
+    return urlunsplit(parts._replace(query=urlencode(kept)))
+
+
+def youtube_mix(text):
+    """The link itself when it is a YouTube video opened inside a Mix, else None.
+
+    Analyzing this link as it is (without normalize_url) reads the whole Mix.
+    """
+    text = (text or "").strip()
+    if text and "://" not in text:
+        text = "https://" + text
+    parts = urlsplit(text)
+    host = (parts.hostname or "").lower()
+    if not (host == "youtube.com" or host.endswith(".youtube.com")):
+        return None
+    values = dict(parse_qsl(parts.query, keep_blank_values=True))
+    if values.get("v") and values.get("list", "").startswith("RD"):
+        return text
+    return None
 
 
 def split_links(text):

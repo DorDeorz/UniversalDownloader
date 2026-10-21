@@ -44,6 +44,7 @@ class Settings:
     auto_paste: bool = True      # take a link from the clipboard when the app opens
     watch_clipboard: bool = False  # offer every link copied while the app runs
     subtitles: bool = False      # save a video's subtitles as .srt files next to it
+    sponsorblock: bool = False   # cut SponsorBlock segments (sponsors, intros) from YouTube videos
     speed_limit: int = 0         # MB/s, one of SPEED_LIMITS; 0 means no limit
     proxy: str = ""              # urls.proxy_url address; empty for a direct connection
     keep_awake: bool = True      # keep the PC from sleeping while a download runs

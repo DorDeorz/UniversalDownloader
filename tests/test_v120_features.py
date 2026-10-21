@@ -360,6 +360,19 @@ def test_subtitles_switch_is_off_for_audio_and_remembered(app):
 
 
 @needs_display
+def test_sponsorblock_switch_is_remembered_and_sent_with_downloads(app, monkeypatch):
+    jobs = []
+    monkeypatch.setattr(app, "_start_job", lambda kind, func, *args: jobs.append(args) or False)
+    app.download_queue = [{"url": "https://www.youtube.com/watch?v=aaaaaaaaaaa", "title": "A"}]
+    app.start_download_queue()
+    assert "sponsorblock" not in jobs[-1][1]
+    app.chk_sponsorblock.toggle()
+    assert app.settings.sponsorblock
+    app.start_download_queue()
+    assert jobs[-1][1]["sponsorblock"] is True
+
+
+@needs_display
 def test_the_proxy_field_saves_only_valid_addresses(app):
     app.open_settings()
     view = app.settings_view

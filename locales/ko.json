@@ -201,7 +201,10 @@
  "clipboard.copied": "복사됨: {link}",
  "clipboard.copied_many": "링크 {count}개 복사됨",
  "clipboard.download": "다운로드",
+ "mix.offer": "이 곡은 YouTube 믹스에서 열렸습니다. 곡만 다운로드합니다.",
+ "mix.download": "믹스 다운로드",
  "settings.subtitles": "동영상과 함께 자막(.srt) 저장",
+ "settings.sponsorblock": "YouTube 동영상의 스폰서와 인트로 잘라내기 (SponsorBlock)",
  "settings.connection": "연결",
  "settings.speed_limit": "속도 제한",
  "speed.unlimited": "제한 없음",
@@ -225,5 +228,6 @@
  "extension.description": "보고 있는 동영상이나 아무 링크를 Orbida 앱으로 보냅니다.",
  "log.batch": "링크 {count}개를 대기열에 추가했습니다",
  "log.from_browser": "브라우저에서 링크를 받았습니다",
- "options.subtitles": "자막"
+ "options.subtitles": "자막",
+ "options.sponsorblock": "스폰서 건너뛰기"
 }

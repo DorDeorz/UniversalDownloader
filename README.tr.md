@@ -86,6 +86,14 @@ Windows tarafının ayrıntıları için:
   kapağıyla kaydedilir. SoundCloud ve Bandcamp doğrudan iner.
 - **Altyazı** videoların yanına .srt dosyası olarak, uygulamanın dilinde ve
   İngilizce kaydedilebilir.
+- **Sponsorları atla.** SponsorBlock açıkken, SponsorBlock topluluğunun
+  işaretlediği sponsor, "abone ol" ve intro kısımları YouTube videolarından
+  kesilir (müzik videolarındaki konuşmalar da). Kırpılan indirmelerde
+  kullanılmaz.
+- **YouTube Mix linkleri.** Mix içinde açılmış bir şarkı tek başına iner;
+  **Mix'i indir** düğmesi listenin tamamını sunar.
+- **Bildirim:** Başka bir pencerede çalışırken indirmeler bitince haber
+  verir.
 - **Birden çok bağlantı.** Bir bağlantı listesi yapıştırıp Analiz et'e
   basın: her biri sırayla iner.
 - **Kuyruk.** İndirme sürerken eklenen bağlantılar kuyrukta bekler ve
@@ -159,8 +167,10 @@ Eklenti Chrome Web Mağazası'nda olmadığı için elle eklenir:
    `edge://extensions`) sayfasını açıp **Geliştirici modu**'nu açın.
 3. **Paketlenmemiş öğe yükle**'ye tıklayıp açılan klasörü seçin.
 
-**Firefox** (140 ya da daha yeni): aynı pencerede **Firefox'a ekle**'ye,
-ardından Firefox'ta **Ekle**'ye tıklayın. Bu kopya Mozilla tarafından
+**Firefox** (140 ya da daha yeni) ve onun üzerine kurulu Zen, LibreWolf,
+Floorp, Waterfox gibi tarayıcılar: aynı pencerede **Firefox'a ekle**'ye,
+ardından tarayıcıda **Ekle**'ye tıklayın. Varsayılan tarayıcınız bunlardan
+biriyse Orbida eklentiyi onda açar, değilse bulduğu ilkinde. Bu kopya Mozilla tarafından
 imzalıdır, bu yüzden Firefox kapanınca kaldırılmaz. addons.mozilla.org'da
 listelenmez; sürüm sayfasında da `Orbida-Firefox-<sürüm>.xpi` olarak durur
 ve bir Firefox penceresine sürüklenerek kurulabilir.

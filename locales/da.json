@@ -201,7 +201,10 @@
  "clipboard.copied": "Kopieret: {link}",
  "clipboard.copied_many": "{count} links kopieret",
  "clipboard.download": "Download",
+ "mix.offer": "Denne sang blev åbnet i et YouTube-mix; kun sangen hentes.",
+ "mix.download": "Hent mixet",
  "settings.subtitles": "Gem undertekster (.srt) med videoer",
+ "settings.sponsorblock": "Klip sponsorer og intros ud af YouTube-videoer (SponsorBlock)",
  "settings.connection": "Forbindelse",
  "settings.speed_limit": "Hastighedsgrænse",
  "speed.unlimited": "Ingen grænse",
@@ -225,5 +228,6 @@
  "extension.description": "Sender den video, du ser, eller et hvilket som helst link til Orbida-appen.",
  "log.batch": "{count} links føjet til køen",
  "log.from_browser": "Link modtaget fra browseren",
- "options.subtitles": "Undertekster"
+ "options.subtitles": "Undertekster",
+ "options.sponsorblock": "Spring sponsorer over"
 }

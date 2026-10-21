@@ -79,6 +79,13 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
   artist, album and album cover. SoundCloud and Bandcamp download directly.
 - **Subtitles** can be saved next to videos as .srt files, in the app's
   language and English.
+- **Skip sponsors.** With SponsorBlock on, the sponsor, "subscribe" and
+  intro parts the SponsorBlock community marked are cut out of YouTube
+  videos (also the talking in music videos). Not used for trimmed downloads.
+- **YouTube Mix links.** A song opened inside a Mix downloads alone; a
+  **Download the Mix** button offers the whole list.
+- **A notification** tells you when downloads finish while you work in
+  another window.
 - **Several links at once.** Paste a list of links and press Analyze: each
   one downloads in turn.
 - **Queue.** Links added while a download runs wait in a queue and start
@@ -139,8 +146,10 @@ The extension is not in the Chrome Web Store, so it is added by hand:
    `edge://extensions`) and turn on **Developer mode**.
 3. Click **Load unpacked** and choose the folder that opened.
 
-**Firefox** (140 or newer): in the same window click **Add to Firefox**, then
-**Add** in Firefox. This copy is signed by Mozilla, so Firefox keeps it after
+**Firefox** (140 or newer) and browsers built on it, such as Zen, LibreWolf,
+Floorp and Waterfox: in the same window click **Add to Firefox**, then **Add**
+in the browser. Orbida opens it in your default browser when that is one of
+them, otherwise in the first one it finds. This copy is signed by Mozilla, so Firefox keeps it after
 it closes. It is not listed on addons.mozilla.org; the release also has it as
 `Orbida-Firefox-<version>.xpi`, which can be dragged into a Firefox window.
 

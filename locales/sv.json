@@ -201,7 +201,10 @@
  "clipboard.copied": "Kopierad: {link}",
  "clipboard.copied_many": "{count} länkar kopierade",
  "clipboard.download": "Ladda ner",
+ "mix.offer": "Den här låten öppnades i en YouTube-mix; bara låten laddas ner.",
+ "mix.download": "Ladda ner mixen",
  "settings.subtitles": "Spara undertexter (.srt) med videor",
+ "settings.sponsorblock": "Klipp bort sponsorer och intron i YouTube-videor (SponsorBlock)",
  "settings.connection": "Anslutning",
  "settings.speed_limit": "Hastighetsgräns",
  "speed.unlimited": "Ingen gräns",
@@ -225,5 +228,6 @@
  "extension.description": "Skickar videon du tittar på, eller vilken länk som helst, till Orbida-appen.",
  "log.batch": "{count} länkar lades till i kön",
  "log.from_browser": "Länk mottagen från webbläsaren",
- "options.subtitles": "Undertexter"
+ "options.subtitles": "Undertexter",
+ "options.sponsorblock": "Hoppa över sponsorer"
 }

@@ -1370,6 +1370,8 @@ class App(ctk.CTk):
         self._clip_poll = None
         self._clip_seen = ""
         self._copied = []         # links offered by the clipboard banner
+        self._offer = self.use_copied  # what the banner's button does (copied links or a Mix)
+        self._mix = None          # the Mix the link being analyzed was opened in
         self._watch_clipboard()
         if link:
             self._startup_calls.append(self.after(350, lambda: self.open_link(link)))
@@ -1530,7 +1532,7 @@ class App(ctk.CTk):
         self.copied_row.grid_columnconfigure(0, weight=1)
         self.lbl_copied = ctk.CTkLabel(self.copied_row, text="", font=font(13), text_color=TEXT, anchor="w")
         self.lbl_copied.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=6)
-        self.btn_copied = primary_button(self.copied_row, "", self.use_copied, height=28)
+        self.btn_copied = primary_button(self.copied_row, "", lambda: self._offer(), height=28)
         self.btn_copied.grid(row=0, column=1, pady=6)
         self.btn_copied_close = secondary_button(self.copied_row, "\u2715", self._hide_copied, width=28, height=28)
         self.btn_copied_close.grid(row=0, column=2, padx=(6, 8), pady=6)
@@ -1544,12 +1546,20 @@ class App(ctk.CTk):
         self.cmb_mode = segmented(opt_card, list(formats.MODES), self._on_mode_changed,
                                   label=lambda m: tr(MODE_KEYS[m]))
         self.cmb_mode.grid(row=0, column=1, columnspan=2, sticky="w", pady=(16, 8))
+        toggles = ctk.CTkFrame(opt_card, fg_color="transparent")
+        toggles.grid(row=0, column=3, sticky="e", padx=(8, 16), pady=(16, 8))
         # Subtitles are saved next to videos (not in Audio Only mode); remembered in the settings.
-        self.chk_subtitles = switch(opt_card, "", self._on_subtitles_toggled)
+        self.chk_subtitles = switch(toggles, "", self._on_subtitles_toggled)
         self._live(self.chk_subtitles, lambda: tr("options.subtitles"))
         if self.settings.subtitles:
             self.chk_subtitles.select()
-        self.chk_subtitles.grid(row=0, column=3, sticky="e", padx=(8, 16), pady=(16, 8))
+        self.chk_subtitles.grid(row=0, column=0)
+        # SponsorBlock cuts sponsors and intros out of YouTube videos; remembered in the settings.
+        self.chk_sponsorblock = switch(toggles, "", self._on_sponsorblock_toggled)
+        self._live(self.chk_sponsorblock, lambda: tr("options.sponsorblock"))
+        if self.settings.sponsorblock:
+            self.chk_sponsorblock.select()
+        self.chk_sponsorblock.grid(row=0, column=1, padx=(16, 0))
         self._section_label(opt_card, "options.format").grid(row=1, column=0, sticky="w", padx=(16, 12), pady=8)
         self.cmb_format = option_menu(opt_card, ["mp4"], lambda _v: self._save_settings(), width=150)
         self.cmb_format.grid(row=1, column=1, sticky="w", pady=8)
@@ -1885,6 +1895,10 @@ class App(ctk.CTk):
         if save:
             self._save_settings()
 
+    def _on_sponsorblock_toggled(self):
+        self.settings.sponsorblock = bool(self.chk_sponsorblock.get())
+        self._save_settings()
+
     def _on_subtitles_toggled(self):
         self.settings.subtitles = bool(self.chk_subtitles.get())
         self._save_settings()
@@ -1979,7 +1993,8 @@ class App(ctk.CTk):
         queueing = busy and self._job_kind == "download"
         for widget in (self.url_entry, self.btn_paste):
             widget.configure(state="normal" if queueing else state)
-        for widget in (self.btn_dest, self.chk_trim, self.cmb_mode, self.cmb_format, self.cmb_quality):
+        for widget in (self.btn_dest, self.chk_trim, self.chk_sponsorblock, self.cmb_mode, self.cmb_format,
+                       self.cmb_quality):
             widget.configure(state=state)
         self.chk_subtitles.configure(
             state="disabled" if busy or self.cmb_mode.get() == formats.AUDIO_ONLY else "normal")
@@ -2092,6 +2107,13 @@ class App(ctk.CTk):
             key, values = e.key, e.values  # ``e`` is unbound after the except block
             self._show_media(lambda: tr(key, **values), DANGER)
             return
+        # A song opened in a YouTube Mix is analyzed alone; the Mix is offered after.
+        self._begin_analysis(url, mix=urls.youtube_mix(self.url_entry.get()))
+
+    def _begin_analysis(self, url, mix=None):
+        if self._offer == self.use_mix:
+            self._hide_copied()
+        self._mix = mix
         if url != self.url_entry.get().strip():
             self.url_entry.delete(0, "end")
             self.url_entry.insert(0, url)
@@ -2151,6 +2173,9 @@ class App(ctk.CTk):
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._end_job()
         self._describe_analysis(analysis)
+        mix, self._mix = self._mix, None
+        if mix and not analysis.is_playlist and analysis.items and not self._from_queue:
+            self._show_mix(mix)
         for item in analysis.skipped:
             self._append_log(tr("log.skipped_entry", title=item.title, reason=i18n.tr_message(item.skip_reason)))
         from_queue, self._from_queue = self._from_queue, False
@@ -2307,6 +2332,7 @@ class App(ctk.CTk):
 
     def _show_copied(self, links):
         self._copied = links
+        self._offer = self.use_copied
         if len(links) == 1:
             link = links[0]
             short = link if len(link) <= 60 else link[:57] + "\u2026"
@@ -2323,6 +2349,20 @@ class App(ctk.CTk):
             self.copied_row.grid_remove()
         except (AttributeError, tkinter.TclError):
             pass
+
+    def _show_mix(self, mix):
+        self._copied = [mix]
+        self._offer = self.use_mix
+        self._live(self.lbl_copied, lambda: tr("mix.offer"))
+        self._live(self.btn_copied, lambda: tr("mix.download"))
+        self.copied_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 14))
+
+    def use_mix(self):
+        """Analyze the whole Mix the last song was opened in (offered after its analysis)."""
+        links = self._copied
+        self._hide_copied()
+        if links and not self.is_busy():
+            self._begin_analysis(links[0])
 
     def use_copied(self):
         links, self._copied = self._copied, []
@@ -2401,6 +2441,8 @@ class App(ctk.CTk):
         }
         if self.settings.subtitles and opts['mode'] != formats.AUDIO_ONLY:
             opts.update(subtitles=True, subtitle_langs=logic.subtitle_languages(i18n.current()))
+        if self.settings.sponsorblock:
+            opts['sponsorblock'] = True
         self._job_mode = opts['mode']
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
             self._live(self.btn_download, lambda: tr("action.downloading"))
@@ -2493,6 +2535,9 @@ class App(ctk.CTk):
         if more:
             self._next_in_queue()
             return
+        if not self._in_front():
+            # The user is in another window: say that the downloads finished.
+            app_setup.notify(tr(summary.title_key()), headline(), window=self)
         if done and self.settings.open_folder_when_done:
             self.open_folder()
         if self.settings.show_summary:
@@ -2500,6 +2545,12 @@ class App(ctk.CTk):
             report = summary.report(label=lambda status: tr("status." + status.value),
                                     nothing=tr("summary.nothing"), more=tr("summary.more", count="{count}"))
             show(tr(summary.title_key()), report, parent=self)
+    def _in_front(self):
+        """True while Orbida is the window the user works in."""
+        try:
+            return self.state() != "iconic" and self.focus_get() is not None
+        except (KeyError, tkinter.TclError):  # focus in a closed or foreign Tk widget
+            return False
     def progress_hook(self, d):
         """yt-dlp progress and postprocessor hook; runs on the worker thread."""
         stage = events.stage_from_hook(d)

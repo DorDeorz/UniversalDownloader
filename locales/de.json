@@ -201,7 +201,10 @@
  "clipboard.copied": "Kopiert: {link}",
  "clipboard.copied_many": "{count} Links kopiert",
  "clipboard.download": "Herunterladen",
+ "mix.offer": "Dieser Song wurde in einem YouTube-Mix geöffnet; nur der Song wird heruntergeladen.",
+ "mix.download": "Mix herunterladen",
  "settings.subtitles": "Untertitel (.srt) mit Videos speichern",
+ "settings.sponsorblock": "Sponsoren und Intros aus YouTube-Videos schneiden (SponsorBlock)",
  "settings.connection": "Verbindung",
  "settings.speed_limit": "Tempolimit",
  "speed.unlimited": "Kein Limit",
@@ -225,5 +228,6 @@
  "extension.description": "Sendet das Video, das du ansiehst, oder einen beliebigen Link an die Orbida-App.",
  "log.batch": "{count} Links zur Warteschlange hinzugefügt",
  "log.from_browser": "Link vom Browser empfangen",
- "options.subtitles": "Untertitel"
+ "options.subtitles": "Untertitel",
+ "options.sponsorblock": "Sponsoren überspringen"
 }

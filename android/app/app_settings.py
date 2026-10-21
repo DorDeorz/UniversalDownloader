@@ -41,6 +41,7 @@ class AppSettings:
     audio_quality: str = "Best"
     fragments: int = 4                # parallel fragment downloads (HLS/DASH)
     subtitles: bool = False           # save a video's subtitles as .srt files next to it
+    sponsorblock: bool = False        # cut SponsorBlock segments (sponsors, intros) from YouTube videos
     speed_limit: int = 0              # MB/s, one of SPEED_LIMITS
     proxy: str = ""                   # urls.proxy_url address; empty for a direct connection
     # Behaviour

@@ -201,7 +201,10 @@
  "clipboard.copied": "Copié : {link}",
  "clipboard.copied_many": "{count} liens copiés",
  "clipboard.download": "Télécharger",
+ "mix.offer": "Ce titre a été ouvert dans un Mix YouTube ; seul le titre est téléchargé.",
+ "mix.download": "Télécharger le Mix",
  "settings.subtitles": "Enregistrer les sous-titres (.srt) avec les vidéos",
+ "settings.sponsorblock": "Couper sponsors et intros des vidéos YouTube (SponsorBlock)",
  "settings.connection": "Connexion",
  "settings.speed_limit": "Limite de vitesse",
  "speed.unlimited": "Aucune limite",
@@ -225,5 +228,6 @@
  "extension.description": "Envoie la vidéo que vous regardez, ou n'importe quel lien, à l'app Orbida.",
  "log.batch": "{count} liens ajoutés à la file d'attente",
  "log.from_browser": "Lien reçu du navigateur",
- "options.subtitles": "Sous-titres"
+ "options.subtitles": "Sous-titres",
+ "options.sponsorblock": "Sauter les sponsors"
 }

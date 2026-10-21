@@ -89,12 +89,13 @@ class Session:
 
     # --- Analysis -----------------------------------------------------------------
 
-    def analyze(self, text):
+    def analyze(self, text, keep_mix=False):
         """Check the link now; fetch its info in the background.
 
         Raises :class:`urls.UrlError` for a link that is not worth fetching.
+        ``keep_mix`` analyzes a YouTube Mix link as the whole Mix.
         """
-        url = urls.normalize_url(text)
+        url = urls.normalize_url(text, keep_mix=keep_mix)
         return self._start(self._analyze, url)
 
     def _analyze(self, url, cancel):

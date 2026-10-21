@@ -36,6 +36,7 @@
  "folder.change": "Wijzigen...",
  "folder.open": "Openen",
  "folder.error_title": "Downloadmap",
+ "folder.low_space": "Nog maar {mb} MB vrij in de downloadmap",
  "action.download": "Downloaden",
  "action.download_n": "{count} items downloaden",
  "action.downloading": "Downloaden...",

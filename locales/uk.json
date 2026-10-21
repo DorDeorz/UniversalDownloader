@@ -36,6 +36,7 @@
  "folder.change": "Змінити...",
  "folder.open": "Відкрити",
  "folder.error_title": "Папка завантажень",
+ "folder.low_space": "У теці завантажень вільно лише {mb} МБ",
  "action.download": "Завантажити",
  "action.download_n": "Завантажити ({count})",
  "action.downloading": "Завантаження...",

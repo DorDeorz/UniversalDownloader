@@ -36,6 +36,7 @@
  "folder.change": "Changer...",
  "folder.open": "Ouvrir",
  "folder.error_title": "Dossier de téléchargement",
+ "folder.low_space": "Seulement {mb} Mo libres dans le dossier de téléchargement",
  "action.download": "Télécharger",
  "action.download_n": "Télécharger {count} éléments",
  "action.downloading": "Téléchargement...",

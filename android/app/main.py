@@ -238,6 +238,9 @@ class UniversalDownloaderApp(MDApp):
     def tr(self, key, *_lang, **values):
         return i18n.tr(key, **values)
 
+    def tr_label(self, key, *_lang):
+        return i18n.tr_label(key)
+
     # --- Build --------------------------------------------------------------------
 
     def build(self):
@@ -306,9 +309,19 @@ class UniversalDownloaderApp(MDApp):
         return self.root_view
 
     def _on_key(self, _window, key, *_args):
-        """Back (Escape) closes the YouTube sign-in page instead of the app."""
-        if key == 27 and self._login is not None:
+        """Back (Escape) steps back before it closes the app: it closes an
+        open dialog, then the sign-in page, then returns to the Download tab."""
+        if key != 27:
+            return False
+        dialogs = [w for w in Window.children if isinstance(w, MDDialog) and w._is_open]  # not closing ones
+        if dialogs:
+            dialogs[0].dismiss()  # the topmost
+            return True
+        if self._login is not None:
             self._login.close()
+            return True
+        if self.ids.screens.current != "home":
+            self.go_to("home")
             return True
         return False
 
@@ -750,6 +763,10 @@ class UniversalDownloaderApp(MDApp):
 
     def _use_link(self, link, shared=False):
         self.pending_link = None
+        if self.job == "download":
+            # Shared while a download runs: it waits in the queue, as a typed link does.
+            self.queue_link(link)
+            return
         if self.job is not None:
             self.snack(self.tr("action.downloading"))
             return
@@ -867,6 +884,14 @@ class UniversalDownloaderApp(MDApp):
         if not self.download_dir:
             self.snack(self.tr("folder.error_title"))
             return
+        error, _warning = filenames.check_folder(self.download_dir)
+        if error:
+            self._dialog(self.tr("folder.error_title"), error)
+            return
+        free = filenames.low_space_mb(self.download_dir)
+        if free is not None:  # a warning only: the files may still fit
+            self.log(self.tr("folder.low_space", mb=free))
+            self.snack(self.tr("folder.low_space", mb=free))
         trim = self.ids.trim_switch.active
         start, end = (self.ids.trim_start.text, self.ids.trim_end.text) if trim else ("", "")
         if trim and self.analysis.is_playlist:
@@ -1193,16 +1218,21 @@ class UniversalDownloaderApp(MDApp):
 
     def add_to_queue(self):
         """Put the link in the field at the end of the queue (while a download runs)."""
+        if self.queue_link(self.ids.url.text):
+            self.ids.url.text = ""
+
+    def queue_link(self, text):
+        """Put one link at the end of the queue; False when it is not a link."""
         try:
-            url = urls.normalize_url(self.ids.url.text)
+            url = urls.normalize_url(text)
         except urls.UrlError as e:
             self.snack(self.tr(e.key, **e.values))
-            return
+            return False
         self.link_queue.append(url)
-        self.ids.url.text = ""
         self.log(self.tr("log.queue_added", url=url))
         self.snack(self.tr("log.queue_added", url=url))
         self._show_link_queue()
+        return True
 
     def queue_links(self, links):
         """Download ``links`` one after another, without questions (several pasted at once)."""

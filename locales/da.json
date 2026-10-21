@@ -36,6 +36,7 @@
  "folder.change": "Skift...",
  "folder.open": "Åbn",
  "folder.error_title": "Downloadmappe",
+ "folder.low_space": "Kun {mb} MB ledig plads i downloadmappen",
  "action.download": "Download",
  "action.download_n": "Download {count} elementer",
  "action.downloading": "Downloader...",

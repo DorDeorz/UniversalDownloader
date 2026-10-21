@@ -36,6 +36,7 @@
  "folder.change": "Zmień...",
  "folder.open": "Otwórz",
  "folder.error_title": "Folder pobierania",
+ "folder.low_space": "W folderze pobierania zostało tylko {mb} MB",
  "action.download": "Pobierz",
  "action.download_n": "Pobierz elementy: {count}",
  "action.downloading": "Pobieranie...",

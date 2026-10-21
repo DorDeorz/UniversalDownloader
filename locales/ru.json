@@ -36,6 +36,7 @@
  "folder.change": "Изменить...",
  "folder.open": "Открыть",
  "folder.error_title": "Папка загрузок",
+ "folder.low_space": "В папке загрузки свободно всего {mb} МБ",
  "action.download": "Скачать",
  "action.download_n": "Скачать ({count})",
  "action.downloading": "Скачивание...",

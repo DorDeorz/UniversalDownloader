@@ -36,6 +36,7 @@
  "folder.change": "Schimbă...",
  "folder.open": "Deschide",
  "folder.error_title": "Dosar de descărcare",
+ "folder.low_space": "Doar {mb} MB liberi în folderul de descărcare",
  "action.download": "Descarcă",
  "action.download_n": "Descarcă ({count})",
  "action.downloading": "Se descarcă...",

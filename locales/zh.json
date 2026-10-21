@@ -36,6 +36,7 @@
  "folder.change": "更改...",
  "folder.open": "打开",
  "folder.error_title": "下载文件夹",
+ "folder.low_space": "下载文件夹仅剩 {mb} MB 可用空间",
  "action.download": "下载",
  "action.download_n": "下载 {count} 项",
  "action.downloading": "下载中...",

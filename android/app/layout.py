@@ -264,7 +264,7 @@ KV = r"""
                                 mode: "outlined"
                                 multiline: False
                                 MDTextFieldHintText:
-                                    text: app.tr("trim.start", app.lang).split()[0]
+                                    text: app.tr_label("trim.start", app.lang)
                                 MDTextFieldHelperText:
                                     text: app.t("home.trim_hint", app.lang)
                                     mode: "persistent"
@@ -273,7 +273,7 @@ KV = r"""
                                 mode: "outlined"
                                 multiline: False
                                 MDTextFieldHintText:
-                                    text: app.tr("trim.end", app.lang).split()[0]
+                                    text: app.tr_label("trim.end", app.lang)
                                 MDTextFieldHelperText:
                                     text: app.t("home.trim_hint", app.lang)
                                     mode: "persistent"

@@ -36,6 +36,7 @@
  "folder.change": "Ändra...",
  "folder.open": "Öppna",
  "folder.error_title": "Nedladdningsmapp",
+ "folder.low_space": "Bara {mb} MB ledigt i nedladdningsmappen",
  "action.download": "Ladda ned",
  "action.download_n": "Ladda ned {count} objekt",
  "action.downloading": "Laddar ned...",

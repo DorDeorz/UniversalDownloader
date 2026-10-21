@@ -36,6 +36,7 @@
  "folder.change": "Módosítás...",
  "folder.open": "Megnyitás",
  "folder.error_title": "Letöltési mappa",
+ "folder.low_space": "Csak {mb} MB szabad hely van a letöltési mappában",
  "action.download": "Letöltés",
  "action.download_n": "{count} elem letöltése",
  "action.downloading": "Letöltés...",

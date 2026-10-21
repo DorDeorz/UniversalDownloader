@@ -36,6 +36,7 @@
  "folder.change": "Değiştir...",
  "folder.open": "Aç",
  "folder.error_title": "İndirme klasörü",
+ "folder.low_space": "İndirme klasöründe yalnızca {mb} MB boş yer var",
  "action.download": "İndir",
  "action.download_n": "{count} öğeyi indir",
  "action.downloading": "İndiriliyor...",

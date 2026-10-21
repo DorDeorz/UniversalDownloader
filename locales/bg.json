@@ -36,6 +36,7 @@
  "folder.change": "Промени...",
  "folder.open": "Отвори",
  "folder.error_title": "Папка за изтегляния",
+ "folder.low_space": "Само {mb} MB свободно място в папката за изтегляне",
  "action.download": "Изтегли",
  "action.download_n": "Изтегли ({count})",
  "action.downloading": "Изтегляне...",

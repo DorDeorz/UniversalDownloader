@@ -36,6 +36,7 @@
  "folder.change": "Cambiar...",
  "folder.open": "Abrir",
  "folder.error_title": "Carpeta de descargas",
+ "folder.low_space": "Solo quedan {mb} MB libres en la carpeta de descargas",
  "action.download": "Descargar",
  "action.download_n": "Descargar {count} elementos",
  "action.downloading": "Descargando...",

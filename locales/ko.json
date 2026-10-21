@@ -36,6 +36,7 @@
  "folder.change": "변경...",
  "folder.open": "열기",
  "folder.error_title": "다운로드 폴더",
+ "folder.low_space": "다운로드 폴더의 여유 공간이 {mb}MB밖에 없습니다",
  "action.download": "다운로드",
  "action.download_n": "{count}개 다운로드",
  "action.downloading": "다운로드 중...",

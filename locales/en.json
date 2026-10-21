@@ -36,6 +36,7 @@
  "folder.change": "Change...",
  "folder.open": "Open",
  "folder.error_title": "Download folder",
+ "folder.low_space": "Only {mb} MB free in the download folder",
  "action.download": "Download",
  "action.download_n": "Download {count} items",
  "action.downloading": "Downloading...",

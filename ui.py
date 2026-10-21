@@ -2537,7 +2537,9 @@ class App(ctk.CTk):
             messagebox.showerror(tr("folder.error_title"), error, parent=self)
             return
         if warning:
-            self._append_log(f"Warning: {warning}")
+            _log.warning(warning)
+            free = filenames.low_space_mb(self.download_folder)
+            self._append_log(tr("folder.low_space", mb=free) if free is not None else warning)
         self._show_progress(0, "0%")
         items = list(self.download_queue) + list(self.skipped_items)
         opts = {

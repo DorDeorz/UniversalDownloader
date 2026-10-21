@@ -36,6 +36,7 @@
  "folder.change": "Ubah...",
  "folder.open": "Buka",
  "folder.error_title": "Folder unduhan",
+ "folder.low_space": "Hanya tersisa {mb} MB di folder unduhan",
  "action.download": "Unduh",
  "action.download_n": "Unduh {count} item",
  "action.downloading": "Mengunduh...",

@@ -36,6 +36,7 @@
  "folder.change": "Alterar...",
  "folder.open": "Abrir",
  "folder.error_title": "Pasta de downloads",
+ "folder.low_space": "Apenas {mb} MB livres na pasta de downloads",
  "action.download": "Baixar",
  "action.download_n": "Baixar {count} itens",
  "action.downloading": "Baixando...",

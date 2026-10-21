@@ -36,6 +36,7 @@
  "folder.change": "Αλλαγή...",
  "folder.open": "Άνοιγμα",
  "folder.error_title": "Φάκελος λήψεων",
+ "folder.low_space": "Μόνο {mb} MB ελεύθερα στον φάκελο λήψεων",
  "action.download": "Λήψη",
  "action.download_n": "Λήψη ({count})",
  "action.downloading": "Λήψη...",

@@ -109,6 +109,13 @@ def test_check_folder_warns_on_low_space(tmp_path, monkeypatch):
     monkeypatch.setattr(filenames.shutil, "disk_usage", lambda p: type("U", (), {"free": 10 * 1024 ** 2})())
     error, warning = filenames.check_folder(str(tmp_path))
     assert error is None and "10 MB free" in warning
+    assert filenames.low_space_mb(str(tmp_path)) == 10
+
+
+def test_enough_space_gives_no_warning(tmp_path, monkeypatch):
+    monkeypatch.setattr(filenames.shutil, "disk_usage", lambda p: type("U", (), {"free": 50 * 1024 ** 3})())
+    assert filenames.check_folder(str(tmp_path)) == (None, None)
+    assert filenames.low_space_mb(str(tmp_path)) is None
 
 
 # --- through download_video ----------------------------------------------

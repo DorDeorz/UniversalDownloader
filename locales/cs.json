@@ -36,6 +36,7 @@
  "folder.change": "Změnit...",
  "folder.open": "Otevřít",
  "folder.error_title": "Složka pro stahování",
+ "folder.low_space": "Ve složce pro stahování zbývá jen {mb} MB",
  "action.download": "Stáhnout",
  "action.download_n": "Stáhnout položky: {count}",
  "action.downloading": "Stahování...",

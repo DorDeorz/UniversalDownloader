@@ -36,6 +36,7 @@
  "folder.change": "Cambia...",
  "folder.open": "Apri",
  "folder.error_title": "Cartella di download",
+ "folder.low_space": "Solo {mb} MB liberi nella cartella dei download",
  "action.download": "Scarica",
  "action.download_n": "Scarica {count} elementi",
  "action.downloading": "Download in corso...",

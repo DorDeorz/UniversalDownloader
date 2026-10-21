@@ -106,10 +106,16 @@ def check_folder(folder):
             pass
     except OSError as e:
         return f"Cannot write to {folder}: {e.strerror or e}", None
+    free = low_space_mb(folder)
+    if free is not None:
+        return None, f"Only {free} MB free in {folder}"
+    return None, None
+
+
+def low_space_mb(folder):
+    """Free megabytes in ``folder`` when below LOW_DISK_BYTES, else None."""
     try:
         free = shutil.disk_usage(folder).free
     except OSError:
-        return None, None
-    if free < LOW_DISK_BYTES:
-        return None, f"Only {free / 1024 ** 2:.0f} MB free in {folder}"
-    return None, None
+        return None
+    return round(free / 1024 ** 2) if free < LOW_DISK_BYTES else None

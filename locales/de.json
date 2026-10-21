@@ -36,6 +36,7 @@
  "folder.change": "Ändern...",
  "folder.open": "Öffnen",
  "folder.error_title": "Download-Ordner",
+ "folder.low_space": "Nur noch {mb} MB frei im Download-Ordner",
  "action.download": "Herunterladen",
  "action.download_n": "{count} Elemente laden",
  "action.downloading": "Lädt herunter...",

@@ -36,6 +36,7 @@
  "folder.change": "Vaihda...",
  "folder.open": "Avaa",
  "folder.error_title": "Latauskansio",
+ "folder.low_space": "Latauskansiossa on vapaana vain {mb} Mt",
  "action.download": "Lataa",
  "action.download_n": "Lataa ({count})",
  "action.downloading": "Ladataan...",

@@ -36,6 +36,7 @@
  "folder.change": "Endre...",
  "folder.open": "Åpne",
  "folder.error_title": "Nedlastingsmappe",
+ "folder.low_space": "Bare {mb} MB ledig i nedlastingsmappen",
  "action.download": "Last ned",
  "action.download_n": "Last ned {count} elementer",
  "action.downloading": "Laster ned...",

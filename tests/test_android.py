@@ -1445,3 +1445,108 @@ def test_playlist_picker_queue_and_background_service(tmp_path):
     assert r["analyzed"] == "https://example.com/next"
     assert r["calls"][-1] == ["stop", r["expected_done"]]
     assert ["update", 50] in r["calls"]
+
+
+_BACK_PROBE = """
+import json, os, sys
+sys.path[:0] = [{app!r}, {root!r}]
+from kivy.config import Config
+Config.set("graphics", "width", "412")
+Config.set("graphics", "height", "892")
+import md_patches
+md_patches.disable_hover()
+import filenames
+import main
+from kivy.clock import Clock
+from kivy.core.window import Window
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.textfield import MDTextFieldHintText
+from playlist import AnalysisResult, QueueItem
+
+app = main.UniversalDownloaderApp()
+result = {{}}
+
+def is_open():
+    return [w for w in Window.children if isinstance(w, MDDialog) and w._is_open]
+
+def probe(*_):
+    # Back: closes a dialog first, then returns to Download, then leaves.
+    app.go_to("settings")
+    app._dialog("Title", "Body")
+    result["dialog_closed"] = app._on_key(Window, 27) and not is_open()
+    result["still_settings"] = app.ids.screens.current == "settings"
+    result["to_home"] = app._on_key(Window, 27) and app.ids.screens.current == "home"
+    result["leaves_from_home"] = app._on_key(Window, 27)
+    # A link shared while a download runs waits in the queue.
+    app.job = "download"
+    app.set_busy(True)
+    app.ids.url.text = "https://example.com/typed"
+    app.tools_ready = True
+    app._on_shared_text("look https://example.com/shared")
+    result["queue"] = list(app.link_queue)
+    result["field_kept"] = app.ids.url.text
+    app.link_queue = []
+    app.job = None
+    app.set_busy(False)
+    # Low free space is told before a download starts.
+    started = []
+    class Session:
+        def download(self, *args, **kwargs):
+            started.append(True)
+            return True
+        def cancel(self):
+            pass
+    real_session, app.session = app.session, Session()
+    app.analysis = AnalysisResult(title="Clip", items=[QueueItem(url="https://e.com/c", title="Clip")])
+    app.chosen = list(app.analysis.items)
+    app.download_dir = os.getcwd()
+    filenames.low_space_mb = lambda folder: 300
+    app._log_lines.clear()
+    app.download()
+    result["low_space_logged"] = app.tr("folder.low_space", mb=300) in app._log_lines
+    result["download_started"] = bool(started)
+    app.session = real_session
+    app.job = None
+    app.set_busy(False)
+    # The trim fields' hints in Vietnamese keep both words.
+    app._change_language("vi")
+    Clock.schedule_once(hints, 0.5)
+
+def hints(*_):
+    result["hints"] = [sorted({{w.text for w in app.ids[name].walk(restrict=True) if isinstance(w, MDTextFieldHintText)}})
+                       for name in ("trim_start", "trim_end")]
+    print("UIPROBE " + json.dumps(result), flush=True)
+    app.stop()
+
+orig = app.on_start
+def on_start():
+    orig()
+    Clock.schedule_once(probe, 2)
+app.on_start = on_start
+app.run()
+"""
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not os.environ.get("DISPLAY"), reason="needs a Linux display")
+def test_back_key_shared_link_low_space_and_trim_hints(tmp_path):
+    import importlib.util
+    import json
+    import subprocess
+    if importlib.util.find_spec("kivymd") is None:
+        pytest.skip("KivyMD (the Android UI toolkit) is not installed")
+    script = tmp_path / "probe.py"
+    script.write_text(_BACK_PROBE.format(app=os.path.join(ROOT, "android", "app"), root=ROOT), encoding="utf-8")
+    (tmp_path / "config").mkdir()
+    env = dict(os.environ, KIVY_HOME=str(tmp_path / "kivy"), XDG_CONFIG_HOME=str(tmp_path / "config"),
+               HOME=str(tmp_path), KIVY_NO_ARGS="1")
+    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env,
+                         cwd=tmp_path)
+    line = next((x for x in out.stdout.splitlines() if x.startswith("UIPROBE ")), None)
+    assert line, out.stdout[-3000:] + out.stderr[-3000:]
+    r = json.loads(line[len("UIPROBE "):])
+    assert r["dialog_closed"] and r["still_settings"] and r["to_home"]
+    assert r["leaves_from_home"] is False  # Android's default: the app closes
+    assert r["queue"] == ["https://example.com/shared"]
+    assert r["field_kept"] == "https://example.com/typed"
+    assert r["low_space_logged"] and r["download_started"]
+    assert r["hints"] == [["Bắt đầu"], ["Kết thúc"]]

@@ -36,6 +36,7 @@
  "folder.change": "変更...",
  "folder.open": "開く",
  "folder.error_title": "ダウンロードフォルダー",
+ "folder.low_space": "ダウンロード先の空き容量は {mb} MB しかありません",
  "action.download": "ダウンロード",
  "action.download_n": "{count} 件をダウンロード",
  "action.downloading": "ダウンロード中...",

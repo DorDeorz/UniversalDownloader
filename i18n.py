@@ -128,6 +128,11 @@ def tr(key, **values):
     return text
 
 
+def tr_label(key):
+    """A text that ends with an example, without it: "Kết thúc  1:30" -> "Kết thúc"."""
+    return tr(key).rsplit(None, 1)[0]
+
+
 def tr_message(text):
     """Translate a fixed English message from another module (a skip
     reason, a processing step); unknown text is returned unchanged."""

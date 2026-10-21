@@ -36,6 +36,7 @@
  "folder.change": "Đổi...",
  "folder.open": "Mở",
  "folder.error_title": "Thư mục tải xuống",
+ "folder.low_space": "Thư mục tải xuống chỉ còn trống {mb} MB",
  "action.download": "Tải xuống",
  "action.download_n": "Tải {count} mục",
  "action.downloading": "Đang tải...",

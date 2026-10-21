@@ -1,7 +1,7 @@
 """Basic URL checks before any network request (ISSUES.md #32)."""
 
 import re
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 class UrlError(ValueError):
@@ -33,7 +33,31 @@ def normalize_url(text):
     host = parts.hostname or ""
     if "." not in host and host != "localhost":
         raise UrlError("url.invalid", "This does not look like a web link")
-    return text
+    return without_youtube_mix(text)
+
+
+# Query parameters that only place a video inside a YouTube list.
+_LIST_PARAMS = ("list", "index", "start_radio", "pp")
+
+
+def without_youtube_mix(url):
+    """A YouTube video link without the Mix it was opened in.
+
+    YouTube often plays a song inside a Mix ("&list=RD..."): an endless list
+    it makes up from the video. Copying that link would offer the whole Mix,
+    so the link is reduced to the video. Playlists someone made (PL...,
+    OLAK5uy... albums) stay, as does a link to a Mix alone (no v=).
+    """
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if not (host == "youtube.com" or host.endswith(".youtube.com")):
+        return url
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    values = dict(query)
+    if not values.get("v") or not values.get("list", "").startswith("RD"):
+        return url
+    kept = [(key, value) for key, value in query if key not in _LIST_PARAMS]
+    return urlunsplit(parts._replace(query=urlencode(kept)))
 
 
 def split_links(text):

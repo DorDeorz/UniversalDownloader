@@ -1,9 +1,11 @@
-"""Reddit NSFW posts: the opt-in that lends Reddit the browser's sign-in.
+"""Posts shown only to signed-in accounts: the opt-in that lends a few sites the browser's sign-in.
 
 Reddit answers "Account authentication is required" for NSFW posts when
-nobody is signed in. The desktop app can copy the reddit.com cookies of a
-Firefox-based browser (Firefox, Zen, ...) and hand only those to yt-dlp;
-the Android app keeps its own sign-in (a WebView).
+nobody is signed in, Instagram "login required", YouTube "Sign in to
+confirm your age". The desktop app can copy those sites' cookies
+(browser_cookies.SITES) from a Firefox-based browser (Firefox, Zen, ...)
+and hand only those to yt-dlp; the Android app keeps its own sign-in (a
+WebView).
 """
 
 import os
@@ -19,6 +21,11 @@ import logic
 REDDIT_ERROR = ("ERROR: [Reddit] 1xbqytb: Account authentication is required. Use --cookies-from-browser or "
                 "--cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-"
                 "cookies-to-yt-dlp  for how to manually pass cookies")
+INSTAGRAM_ERROR = ("ERROR: [Instagram] DQ1abc: Requested content is not available, rate-limit reached or login "
+                   "required. Use --cookies, --cookies-from-browser, --username and --password, --netrc-cmd, or "
+                   "--netrc (instagram) to provide account credentials")
+AGE_ERROR = ("ERROR: [youtube] abcdefghijk: Sign in to confirm your age. This video may be inappropriate for some "
+             "users. Use --cookies-from-browser or --cookies for the authentication.")
 
 needs_display = pytest.mark.skipif(
     not (sys.platform.startswith("win") or sys.platform == "darwin" or os.environ.get("DISPLAY")),
@@ -61,7 +68,7 @@ def no_sign_in():
     logic.set_reddit_sign_in(None)
 
 
-def test_only_reddit_cookies_are_copied_even_from_the_write_ahead_log(tmp_path):
+def test_only_the_sites_cookies_are_copied_even_from_the_write_ahead_log(tmp_path):
     profile, db = make_profile(str(tmp_path / "zen"), "abc.Default (release)", SIGNED_IN, keep_open=True)
     source = os.path.join(profile, browser_cookies.DATABASE)
     assert os.path.getsize(source + "-wal") > 0  # the rows are still in the log
@@ -73,7 +80,19 @@ def test_only_reddit_cookies_are_copied_even_from_the_write_ahead_log(tmp_path):
     assert sorted(os.listdir(copy)) == [browser_cookies.DATABASE]  # the log is folded in
     with sqlite3.connect(os.path.join(copy, browser_cookies.DATABASE)) as check:
         hosts = {row[0] for row in check.execute("SELECT host FROM moz_cookies")}
-    assert hosts == {".reddit.com", "www.reddit.com"}
+    assert hosts == {".reddit.com", "www.reddit.com", ".youtube.com"}  # not Google's own
+
+
+def test_the_sites_signed_in_are_named(tmp_path):
+    cookies = SIGNED_IN + [(".instagram.com", "sessionid", "s"), (".x.com", "guest_id", "g"),
+                           (".evil-instagram.com", "sessionid", "s"), (".tiktok.com", "sessionid", "")]
+    profile, _ = make_profile(str(tmp_path), "p", cookies)
+    copy = str(tmp_path / "c")
+    assert browser_cookies.copy_site_cookies(os.path.join(profile, "cookies.sqlite"), copy) == \
+        ["Reddit", "Instagram", "YouTube"]
+    with sqlite3.connect(os.path.join(copy, browser_cookies.DATABASE)) as check:
+        hosts = {row[0] for row in check.execute("SELECT host FROM moz_cookies")}
+    assert ".evil-instagram.com" not in hosts and ".x.com" in hosts
 
 
 def test_a_profile_without_a_reddit_session_is_signed_out(tmp_path):
@@ -103,7 +122,7 @@ def test_browser_names_and_windows_folders(monkeypatch):
     assert os.path.join(os.path.abspath("Roaming"), "Mozilla", "Firefox", "Profiles") in roots
 
 
-def test_yt_dlp_reads_only_reddit_cookies_from_the_copy(tmp_path):
+def test_yt_dlp_reads_only_the_sites_cookies_from_the_copy(tmp_path):
     root = str(tmp_path / "profiles")
     make_profile(root, "p", SIGNED_IN)
     sign_in = browser_cookies.RedditSignIn(str(tmp_path / "copy"), roots=[root])
@@ -111,7 +130,10 @@ def test_yt_dlp_reads_only_reddit_cookies_from_the_copy(tmp_path):
     assert sign_in.status == browser_cookies.SIGNED_IN
     assert options == {"cookiesfrombrowser": ("firefox", str(tmp_path / "copy"), None, None)}
     jar = yt_dlp.cookies.extract_cookies_from_browser(*options["cookiesfrombrowser"][:2])
-    assert {(c.domain, c.name) for c in jar} == {(".reddit.com", "reddit_session"), ("www.reddit.com", "token_v2")}
+    assert {(c.domain, c.name) for c in jar} == {(".reddit.com", "reddit_session"), ("www.reddit.com", "token_v2"),
+                                                 (".youtube.com", "SAPISID")}
+    assert sign_in.sites == ["Reddit", "YouTube"] and sign_in.signed_in("YouTube")
+    assert not sign_in.signed_in("Instagram")
 
 
 def test_the_copy_is_refreshed_after_a_while_and_removed_when_turned_off(tmp_path):
@@ -157,6 +179,26 @@ def test_the_sign_in_error_says_what_to_do_in_the_app(tmp_path):
     assert logic.explain_site_error("[YouTube] abc: Private video") == "[YouTube] abc: Private video"
 
 
+def test_instagram_and_age_restricted_videos_say_what_to_do(tmp_path):
+    instagram = logic.describe_error(Exception(INSTAGRAM_ERROR))
+    age = logic.describe_error(Exception(AGE_ERROR))
+    assert logic.explain_site_error(instagram) == logic.SIGN_IN_OFF.format(site="Instagram")
+    assert logic.explain_site_error(age) == logic.SIGN_IN_OFF.format(site="YouTube")
+    assert logic.sign_in_offer(logic.explain_site_error(age)) == "YouTube"
+    assert logic.sign_in_offer(logic.REDDIT_SIGN_IN_OFF) == "Reddit"
+    assert logic.sign_in_offer("Private video") is None
+    bot = "ERROR: [youtube] abc: Sign in to confirm you're not a bot. Use --cookies-from-browser"
+    assert logic.explain_site_error(bot) == bot  # Orbida's own bot check handling, not a sign-in
+
+    root = str(tmp_path / "profiles")
+    make_profile(root, "p", SIGNED_IN)  # Reddit and YouTube, not Instagram
+    sign_in = browser_cookies.BrowserSignIn(str(tmp_path / "copy"), roots=[root])
+    sign_in.refresh()
+    logic.set_reddit_sign_in(sign_in)
+    assert logic.explain_site_error(instagram) == logic.SIGN_IN_MISSING.format(site="Instagram")
+    assert logic.explain_site_error(age) == age  # signed in and still refused: yt-dlp's words
+
+
 class RefusingYoutubeDL:
     def __init__(self, params):
         self.params = params
@@ -184,6 +226,12 @@ def test_the_messages_are_translated():
         for message in (logic.REDDIT_SIGN_IN_OFF, logic.REDDIT_SIGN_IN_MISSING):
             assert i18n.tr_message(message) != message
             assert "Reddit" in i18n.tr_message(message)
+        for template in (logic.SIGN_IN_OFF, logic.SIGN_IN_MISSING):
+            message = template.format(site="Instagram")
+            assert i18n.tr_message(message) != message and "Instagram" in i18n.tr_message(message)
+        # The English templates are the catalog's, so the message is found again.
+        assert logic.SIGN_IN_OFF == i18n.load_catalog("en")["signin.off"]
+        assert logic.SIGN_IN_MISSING == i18n.load_catalog("en")["signin.missing"]
     finally:
         i18n.set_language("en")
 
@@ -218,7 +266,7 @@ def test_the_settings_switch_turns_the_sign_in_on_and_off(app, monkeypatch):
     assert view.sw_reddit.cget("text") == ui.tr("settings.reddit_sign_in") and not view.sw_reddit.get()
     view.sw_reddit.toggle()  # on: says whether the browser is signed in
     assert app.settings.reddit_browser_sign_in
-    assert shown == [ui.tr("reddit.signed_in", browser="Firefox")]
+    assert shown == [ui.tr("reddit.signed_in", browser="Firefox", sites="Reddit, YouTube")]
     assert "cookiesfrombrowser" in logic.base_ydl_options()
     view.sw_reddit.toggle()
     assert not app.settings.reddit_browser_sign_in
@@ -240,3 +288,16 @@ def test_a_refused_post_offers_the_sign_in_and_tries_again(app, monkeypatch):
     asked.clear()
     app._on_analysis_failed("FAILED: ...", sign_in=True)  # already on: nothing to offer
     assert not asked
+
+
+@needs_display
+def test_an_instagram_refusal_offers_the_sign_in_for_instagram(app, monkeypatch):
+    import ui
+    make_profile(app.profiles, "p", SIGNED_IN)  # not signed in to Instagram
+    asked, shown, analysed = [], [], []
+    monkeypatch.setattr(ui.messagebox, "askyesno", lambda title, body, **k: asked.append(title) or True)
+    monkeypatch.setattr(ui.messagebox, "showinfo", lambda title, text, **k: shown.append(text))
+    monkeypatch.setattr(app, "start_analysis_thread", lambda: analysed.append(True))
+    app._on_analysis_failed("FAILED: ...", sign_in="Instagram")
+    assert asked == [ui.tr("signin.ask_title", site="Instagram")]
+    assert not analysed and shown == [ui.i18n.tr_message(logic.SIGN_IN_MISSING.format(site="Instagram"))]

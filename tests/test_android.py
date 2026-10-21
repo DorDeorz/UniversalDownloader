@@ -470,6 +470,7 @@ def probe(*_):
     theme = next(r for r in rows if r.headline == app.t("settings.theme"))
     result["theme_before"] = theme.supporting
     result["reddit_row"] = any(r.headline == app.t("reddit_login.sign_in") for r in rows)
+    result["instagram_row"] = any(r.headline == app.t("signin.sign_in", site="Instagram") for r in rows)
     app._on_analysis_failed(main.logic.REDDIT_SIGN_IN_OFF)  # off Android: no sign-in dialog
     result["reddit_message"] = app.ids.media_title.text
     observers = len(Window.get_property_observers("mouse_pos"))
@@ -521,7 +522,7 @@ def test_settings_choice_updates_its_row_in_place(tmp_path):
     assert result["widgets_per_choice"] <= 4  # row, icon, text box, one line (MDListItem: 10+)
     assert result["new_hover_observers"] == 0
     assert result["history_built"]
-    assert result["reddit_row"]
+    assert result["reddit_row"] and result["instagram_row"]
     assert "Reddit" in result["reddit_message"] and "--cookies" not in result["reddit_message"]
 
 
@@ -877,6 +878,39 @@ def test_reddit_refusal_points_to_the_sign_in_unless_signed_in():
         assert "cookiesfrombrowser" not in logic.base_ydl_options()  # the cookie file carries them
     finally:
         logic.set_reddit_sign_in(None)
+
+
+def test_instagram_is_signed_in_in_the_app_too(tmp_path):
+    import http.cookiejar
+    import youtube_login
+    folder = str(tmp_path)
+    assert youtube_login.site_named("Instagram") is youtube_login.INSTAGRAM
+    assert youtube_login.site_named("TikTok") is None
+    assert not youtube_login.save(folder, "csrftoken=x; mid=y", youtube_login.INSTAGRAM)
+    assert youtube_login.save(folder, "csrftoken=x; sessionid=s; ds_user_id=1", youtube_login.INSTAGRAM)
+    assert youtube_login.save(folder, REDDIT_SIGNED_IN, youtube_login.REDDIT)
+    jar = http.cookiejar.MozillaCookieJar(youtube_login.cookie_file(folder))
+    jar.load()
+    assert {c.domain for c in jar} == {".reddit.com", ".instagram.com"}
+
+
+def test_an_instagram_refusal_points_to_the_in_app_sign_in():
+    import browser_cookies
+    import texts
+    message = ("ERROR: [Instagram] DQ1abc: Requested content is not available, rate-limit reached or login "
+               "required. Use --cookies, --cookies-from-browser")
+    try:
+        explained = logic.explain_site_error(message)
+        assert logic.sign_in_offer(explained) == "Instagram"
+        logic.set_reddit_sign_in(browser_cookies.AppSignIn(["Reddit"]))  # signed in to Reddit only
+        assert logic.sign_in_offer(logic.explain_site_error(message)) == "Instagram"
+        logic.set_reddit_sign_in(browser_cookies.AppSignIn(["Reddit", "Instagram"]))
+        assert logic.explain_site_error(message) == message
+    finally:
+        logic.set_reddit_sign_in(None)
+    for key in ("signin.needed", "signin.not_here", "signin.ask_body", "signin.sign_in", "signin.signed_in",
+                "signin.ok", "signin.signed_out", "instagram.sign_in_hint"):
+        assert texts.TEXTS["en"].get(key) and texts.TEXTS["tr"].get(key), key
 
 
 def test_reddit_sign_in_texts_exist_in_english_and_turkish():

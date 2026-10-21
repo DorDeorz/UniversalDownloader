@@ -1,4 +1,4 @@
-"""Signing in to YouTube or Reddit inside the app, for yt-dlp to use the session.
+"""Signing in to YouTube, Reddit or Instagram inside the app, for yt-dlp to use the session.
 
 YouTube answers some networks (often mobile data) with "Sign in to confirm
 you're not a bot" whichever player client yt-dlp uses; the fix yt-dlp
@@ -9,8 +9,9 @@ yt-dlp reads through its ``cookiefile`` option.
 
 Reddit shows NSFW posts only to signed-in accounts ("Account
 authentication is required"); its sign-in works the same way and is just as
-optional. Each site's cookies have their own file; when both are signed in,
-yt-dlp gets one file holding both (:func:`cookie_file`).
+optional, as is Instagram's (most of Instagram needs a signed-in account).
+Each site's cookies have their own file; when more than one is signed in,
+yt-dlp gets one file holding them all (:func:`cookie_file`).
 
 The files stay in the app's private folder. Signing out deletes the site's
 file and the WebView's cookies.
@@ -30,7 +31,13 @@ YOUTUBE = Site(
     ("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID"))
 REDDIT = Site("Reddit", ".reddit.com", "reddit-cookies.txt", "https://www.reddit.com/login/",
               "https://www.reddit.com", ("reddit_session",))
-SITES = (YOUTUBE, REDDIT)
+INSTAGRAM = Site("Instagram", ".instagram.com", "instagram-cookies.txt", "https://www.instagram.com/accounts/login/",
+                 "https://www.instagram.com", ("sessionid",))
+SITES = (YOUTUBE, REDDIT, INSTAGRAM)
+
+
+def site_named(name):
+    return next((site for site in SITES if site.name == name), None)
 
 COOKIE_FILE = YOUTUBE.file
 LOGIN_URL = YOUTUBE.login_url
@@ -101,7 +108,7 @@ def saved(folder, site=YOUTUBE):
 
 
 def cookie_file(folder):
-    """The cookie file for yt-dlp: the one signed-in site's, both sites' together, or None."""
+    """The cookie file for yt-dlp: the one signed-in site's, all of them together, or None."""
     paths = [path for path in (saved(folder, site) for site in SITES) if path]
     if len(paths) < 2:
         return paths[0] if paths else None

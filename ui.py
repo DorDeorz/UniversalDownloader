@@ -1802,7 +1802,8 @@ class App(ctk.CTk):
         if sign_in is None:
             return tr("settings.reddit_sign_in_hint")
         sign_in.ydl_options()  # reads the browser again when the last look is old
-        return tr(f"reddit.{sign_in.status}", browser=browser_cookies.browser_name(sign_in.browser_database))
+        return tr(f"reddit.{sign_in.status}", browser=browser_cookies.browser_name(sign_in.browser_database),
+                  sites=", ".join(sign_in.sites))
 
     def _on_setting_changed(self, name, value):
         """Called by the settings page; applies and saves one setting."""
@@ -2278,10 +2279,10 @@ class App(ctk.CTk):
             if info is None:
                 post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
             elif 'error' in info:
-                # A Reddit post that needs a sign-in also offers the browser's (offer_reddit_sign_in).
-                sign_in = {'sign_in': True} if info['error'] == logic.REDDIT_SIGN_IN_OFF else {}
+                # A post that needs a sign-in also offers the browser's (offer_reddit_sign_in).
+                site = logic.sign_in_offer(info['error'])
                 post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
-                                 **sign_in)
+                     **({'sign_in': site} if site else {}))
             else:
                 analysis = playlist.analyze(info, url)
                 if cancel is not None and cancel.is_set():
@@ -2307,19 +2308,26 @@ class App(ctk.CTk):
             self._from_queue = False
             self._next_in_queue()
         elif sign_in and not self.settings.reddit_browser_sign_in:
-            self.offer_reddit_sign_in()
+            self.offer_reddit_sign_in("Reddit" if sign_in is True else sign_in)
 
-    def offer_reddit_sign_in(self):
-        """Reddit refused a post without sign-in: offer the browser's sign-in, then try again."""
-        if not messagebox.askyesno(tr("reddit.ask_title"), tr("reddit.ask_body"), parent=self):
+    def offer_reddit_sign_in(self, site="Reddit"):
+        """``site`` refused a post without sign-in: offer the browser's sign-in, then try again."""
+        if site == "Reddit":
+            title, body = tr("reddit.ask_title"), tr("reddit.ask_body")
+        else:
+            title, body = tr("signin.ask_title", site=site), tr("signin.ask_body", site=site)
+        if not messagebox.askyesno(title, body, parent=self):
             return
         self._on_setting_changed("reddit_browser_sign_in", True)
         status = self.reddit_status()
         self._append_log(status)
-        if self._reddit.status == browser_cookies.SIGNED_IN:
+        if self._reddit.signed_in(site):
             self.start_analysis_thread()
         else:
-            messagebox.showinfo(tr("reddit.ask_title"), status, parent=self)
+            if self._reddit.status == browser_cookies.SIGNED_IN:  # signed in elsewhere, not to this site
+                status = i18n.tr_message(logic.SIGN_IN_MISSING.format(site=site)) if site != "Reddit" \
+                    else i18n.tr_message(logic.REDDIT_SIGN_IN_MISSING)
+            messagebox.showinfo(title, status, parent=self)
     def _on_analysis_done(self, analysis, url, job=None):
         if self._stale(job):
             return

@@ -156,12 +156,12 @@ def open_through_proxy(url, headers=None, timeout=None):
     return _ProxiedResponse(ydl, response)
 
 
-# The browser's Reddit sign-in (browser_cookies.RedditSignIn) when the user
-# turned it on; see set_reddit_sign_in.
+# The browser's sign-in (browser_cookies.BrowserSignIn; on Android the app's
+# own, AppSignIn) when the user turned it on; see set_reddit_sign_in.
 _reddit_sign_in = None
 
 def set_reddit_sign_in(sign_in):
-    """Send the browser's Reddit cookies with every request (None: never)."""
+    """Send the browser's cookies of browser_cookies.SITES with every request (None: never)."""
     global _reddit_sign_in
     _reddit_sign_in = sign_in
 
@@ -177,7 +177,7 @@ def base_ydl_options(log_callback=None):
         # A copy, because yt-dlp may normalise nested option dicts in place.
         **copy.deepcopy(_platform_options),
         **_network_options,
-        # Only reddit.com cookies, so other sites see no sign-in.
+        # Only the cookies of browser_cookies.SITES, so other sites see no sign-in.
         **(_reddit_sign_in.ydl_options() if _reddit_sign_in else {}),
         'logger': YtDlpLogger(log_callback),
         'noprogress': True,
@@ -864,21 +864,57 @@ def _missing_folders(folder):
 # Shown instead of yt-dlp's "Account authentication is required ... --cookies"
 # for Reddit, which only shows NSFW posts to signed-in accounts.
 REDDIT_SIGN_IN_OFF = ('Reddit shows this post only to signed-in accounts (often NSFW). Turn on the '
-                      'Reddit sign-in in Settings, then try again')
+                      'browser sign-in in Settings, then try again')
 REDDIT_SIGN_IN_MISSING = ('Reddit shows this post only to signed-in accounts. Sign in to Reddit in '
                           'Firefox or Zen, allow mature content in your Reddit settings, then try again')
 
 
+# The same for the other sites of browser_cookies.SITES ("{site}" is filled in).
+SIGN_IN_OFF = ('{site} shows this only to signed-in accounts. Turn on the browser sign-in in Settings, '
+               'then try again')
+SIGN_IN_MISSING = '{site} shows this only to signed-in accounts. Sign in to {site} in Firefox or Zen, then try again'
+
+# yt-dlp's extractor tags and the words of a sign-in refusal on each site.
+_SIGN_IN_REFUSALS = (
+    ('Reddit', ('[reddit]',), ('account authentication is required',)),
+    ('Instagram', ('[instagram',), ('login required', 'log in', '--cookies')),
+    ('YouTube', ('[youtube]',), ('sign in to confirm your age', 'inappropriate for some users')),
+    ('Facebook', ('[facebook',), ('login', '--cookies')),
+    ('X', ('[twitter',), ('login', 'log in', '--cookies', 'nsfw')),
+    ('TikTok', ('[tiktok',), ('log in', 'login', '--cookies')),
+)
+
+
+def sign_in_site(message):
+    """The site (of browser_cookies.SITES) that refused ``message`` for want of a sign-in, or None."""
+    text = str(message or '').lower()
+    for site, tags, words in _SIGN_IN_REFUSALS:
+        if any(tag in text for tag in tags) and any(word in text for word in words):
+            return site
+    return None
+
+
+def sign_in_offer(message):
+    """The site a sign-in would help with for ``message`` (an explain_site_error text), or None."""
+    if message in (REDDIT_SIGN_IN_OFF, REDDIT_SIGN_IN_MISSING):
+        return 'Reddit'
+    for site in browser_cookies.SITES:
+        if message in (SIGN_IN_OFF.format(site=site), SIGN_IN_MISSING.format(site=site)):
+            return site
+    return None
+
+
 def explain_site_error(message):
     """Replace yt-dlp's command-line advice for a sign-in refusal with what to do in the app."""
-    if '[Reddit]' not in message or 'Account authentication is required' not in message:
+    site = sign_in_site(message)
+    if site is None:
         return message
-    _log.warning("Reddit refused without sign-in: %s", message)
-    if _reddit_sign_in is None:
-        return REDDIT_SIGN_IN_OFF
-    if _reddit_sign_in.status == browser_cookies.SIGNED_IN:
-        return message  # the browser is signed in and Reddit still refuses: keep yt-dlp's reason
-    return REDDIT_SIGN_IN_MISSING
+    _log.warning("%s refused without sign-in: %s", site, message)
+    if _reddit_sign_in is not None and _reddit_sign_in.signed_in(site):
+        return message  # signed in and still refused: keep yt-dlp's reason
+    if site == 'Reddit':
+        return REDDIT_SIGN_IN_OFF if _reddit_sign_in is None else REDDIT_SIGN_IN_MISSING
+    return (SIGN_IN_OFF if _reddit_sign_in is None else SIGN_IN_MISSING).format(site=site)
 
 
 def explain_format_error(message, mode, quality):

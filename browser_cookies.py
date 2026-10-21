@@ -1,16 +1,18 @@
-"""Use the Reddit sign-in of the user's Firefox-based browser (opt-in).
+"""Use the sign-ins of the user's Firefox-based browser (opt-in).
 
-Reddit shows NSFW posts only to signed-in accounts; without one yt-dlp
-fails with "Account authentication is required". When the user turns this
-on, downloads carry the reddit.com cookies of their Firefox, Zen,
-LibreWolf, Floorp or Waterfox profile, so Orbida never sees a password.
+Some posts are shown only to signed-in accounts: NSFW Reddit posts
+("Account authentication is required"), most of Instagram ("login
+required"), age-restricted YouTube videos ("Sign in to confirm your age"),
+and some Facebook, X and TikTok posts. When the user turns this on,
+downloads carry those sites' cookies from their Firefox, Zen, LibreWolf,
+Floorp or Waterfox profile, so Orbida never sees a password.
 
 yt-dlp can read Firefox cookies itself, but it only looks in Firefox's own
 folders and copies the main database file without its write-ahead log,
 where a recent sign-in may still be. So this module copies the most
 recently used profile's ``cookies.sqlite`` (with the log) into a private
-folder, deletes every cookie that is not Reddit's, and hands that folder to
-yt-dlp. No other site ever receives the browser's cookies.
+folder, deletes every cookie that is not one of :data:`SITES`, and hands
+that folder to yt-dlp. No other site ever receives the browser's cookies.
 """
 
 import glob
@@ -24,6 +26,15 @@ import time
 _log = logging.getLogger(__name__)
 
 DATABASE = "cookies.sqlite"
+# Sites whose cookies are lent to yt-dlp: name -> (domains, cookies of a signed-in session).
+SITES = {
+    "Reddit": (("reddit.com",), ("reddit_session",)),
+    "Instagram": (("instagram.com",), ("sessionid",)),
+    "YouTube": (("youtube.com",), ("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID")),
+    "Facebook": (("facebook.com",), ("c_user",)),
+    "X": (("x.com", "twitter.com"), ("auth_token",)),
+    "TikTok": (("tiktok.com",), ("sessionid",)),
+}
 # The cookie Reddit sets for a signed-in session.
 SESSION_COOKIE = "reddit_session"
 # A copy is reused this long before the browser's database is read again.
@@ -84,10 +95,23 @@ def newest_database(roots=None):
     return max(found, key=_last_used, default=None)
 
 
-def copy_reddit_cookies(database, folder):
-    """Copy ``database`` into ``folder`` keeping only Reddit's cookies.
+def _host_filter():
+    """SQL condition (and its values) matching the cookies of every site in SITES."""
+    hosts = [domain for domains, _cookies in SITES.values() for domain in domains]
+    condition = " OR ".join("host = ? OR host LIKE ?" for _ in hosts)
+    values = [v for domain in hosts for v in (domain, "%." + domain)]
+    return condition, values
 
-    Returns True when the copy holds a signed-in Reddit session.
+
+def _on_site(host, domains):
+    host = (host or "").lstrip(".").lower()
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
+def copy_site_cookies(database, folder):
+    """Copy ``database`` into ``folder`` keeping only the cookies of SITES.
+
+    Returns the names of the sites the copy holds a signed-in session for.
     """
     import sqlite3  # not in every Python build (Android); only needed here
 
@@ -103,25 +127,36 @@ def copy_reddit_cookies(database, folder):
         shutil.copyfile(database + "-wal", target + "-wal")
     connection = sqlite3.connect(target)
     try:
-        connection.execute("DELETE FROM moz_cookies WHERE NOT (host = 'reddit.com' OR host LIKE '%.reddit.com')")
+        condition, values = _host_filter()
+        connection.execute(f"DELETE FROM moz_cookies WHERE NOT ({condition})", values)
         connection.commit()
-        signed_in = connection.execute(
-            "SELECT 1 FROM moz_cookies WHERE name = ? AND value != ''", (SESSION_COOKIE,)).fetchone() is not None
+        rows = connection.execute("SELECT host, name FROM moz_cookies WHERE value != ''").fetchall()
         # Fold the copied log into the database file, which is all yt-dlp copies.
         connection.execute("PRAGMA journal_mode=DELETE")
     finally:
         connection.close()
-    return signed_in
+    return [site for site, (domains, session) in SITES.items()
+            if any(name in session and _on_site(host, domains) for host, name in rows)]
 
 
-class RedditSignIn:
-    """yt-dlp options that send the browser's Reddit cookies, refreshed as they change."""
+def copy_reddit_cookies(database, folder):
+    """:func:`copy_site_cookies`; True when the copy holds a signed-in Reddit session."""
+    return "Reddit" in copy_site_cookies(database, folder)
+
+
+class BrowserSignIn:
+    """yt-dlp options that send the browser's cookies for SITES, refreshed as they change.
+
+    ``status`` is SIGNED_IN when the browser is signed in to at least one
+    of them; ``sites`` names those.
+    """
 
     def __init__(self, folder, roots=None, clock=time.monotonic):
         self.folder = folder
         self.roots = roots
         self.clock = clock
         self.status = None
+        self.sites = []
         self.browser_database = None
         self._read_at = None
         self._lock = threading.Lock()
@@ -129,22 +164,28 @@ class RedditSignIn:
     def refresh(self):
         """Copy the browser's Reddit cookies again; returns the new status."""
         database = newest_database(self.roots)
+        sites = []
         if database is None:
             status = NO_BROWSER
         else:
             try:
-                status = SIGNED_IN if copy_reddit_cookies(database, self.folder) else SIGNED_OUT
+                sites = copy_site_cookies(database, self.folder)
+                status = SIGNED_IN if sites else SIGNED_OUT
             except Exception as e:  # OSError, sqlite3.Error, no sqlite3 module
                 _log.warning("Could not read the browser's cookies from %s: %s", database, e)
                 status = FAILED
-        if (status, database) != (self.status, self.browser_database):
-            _log.info("Reddit sign-in from the browser: %s (%s)", status, database or "no Firefox-based browser")
-        self.status, self.browser_database = status, database
+        if (status, sites, database) != (self.status, self.sites, self.browser_database):
+            _log.info("Sign-in from the browser: %s %s (%s)", status, ", ".join(sites),
+                      database or "no Firefox-based browser")
+        self.status, self.sites, self.browser_database = status, sites, database
         self._read_at = self.clock()
         return status
 
+    def signed_in(self, site):
+        return site in self.sites
+
     def ydl_options(self):
-        """``cookiesfrombrowser`` for the Reddit-only copy; empty when there is nothing to send."""
+        """``cookiesfrombrowser`` for the copy of SITES' cookies; empty when there is nothing to send."""
         with self._lock:
             if self._read_at is None or self.clock() - self._read_at >= REFRESH_SECONDS:
                 self.refresh()
@@ -157,13 +198,23 @@ class RedditSignIn:
         with self._lock:
             shutil.rmtree(self.folder, ignore_errors=True)
             self.status = self._read_at = None
+            self.sites = []
+
+
+RedditSignIn = BrowserSignIn  # its first site; the name settings and tests know
 
 
 class AppSignIn:
-    """A Reddit sign-in the app keeps itself (Android's WebView); its cookies
+    """Sign-ins the app keeps itself (Android's WebView); their cookies
     reach yt-dlp through the app's cookie file, so no options are added."""
 
     status = SIGNED_IN
+
+    def __init__(self, sites=("Reddit",)):
+        self.sites = list(sites)
+
+    def signed_in(self, site):
+        return site in self.sites
 
     @staticmethod
     def ydl_options():

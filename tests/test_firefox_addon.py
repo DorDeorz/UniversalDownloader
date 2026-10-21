@@ -140,7 +140,7 @@ def test_web_ext_leftovers_and_a_rewritten_manifest_pass(tmp_path):
     assert firefox_addon.check(xpi, source=str(source)) == []
     # A Windows checkout with core.autocrlf has CRLF line endings.
     script = source / "background.js"
-    script.write_bytes(script.read_bytes().replace(b"\n", b"\r\n"))
+    script.write_bytes(script.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
     assert firefox_addon.check(xpi, source=str(source)) == []
 
 

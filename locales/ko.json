@@ -229,5 +229,15 @@
  "log.batch": "링크 {count}개를 대기열에 추가했습니다",
  "log.from_browser": "브라우저에서 링크를 받았습니다",
  "options.subtitles": "자막",
- "options.sponsorblock": "스폰서 건너뛰기"
+ "options.sponsorblock": "스폰서 건너뛰기",
+ "settings.reddit_sign_in": "브라우저의 Reddit 로그인 사용",
+ "settings.reddit_sign_in_hint": "Reddit NSFW 게시물용입니다. Firefox 또는 Zen 로그인의 쿠키는 Reddit에만 전달되며 Orbida는 비밀번호를 보지 않습니다.",
+ "reddit.signed_in": "{browser}에서 Reddit에 로그인됨",
+ "reddit.signed_out": "{browser}에서 Reddit에 로그인되어 있지 않습니다. 먼저 거기서 로그인하세요",
+ "reddit.no_browser": "이 PC에서 Firefox 또는 Zen 프로필을 찾지 못했습니다",
+ "reddit.failed": "{browser}의 쿠키를 읽지 못했습니다. 로그를 확인하세요",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit은 이 게시물을 로그인한 계정에만 보여 줍니다(주로 NSFW). 설정에서 Reddit 로그인을 켠 뒤 다시 시도하세요",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit은 이 게시물을 로그인한 계정에만 보여 줍니다. Firefox 또는 Zen에서 Reddit에 로그인하고 Reddit 설정에서 성인 콘텐츠를 허용한 뒤 다시 시도하세요",
+ "reddit.ask_title": "Reddit 로그인",
+ "reddit.ask_body": "Reddit은 이 게시물을 로그인한 계정에만 보여 줍니다(주로 NSFW).\n\nFirefox 또는 Zen의 Reddit 로그인을 사용할까요? 이 쿠키는 Reddit에만 전달됩니다. 설정에서 끌 수 있습니다."
 }

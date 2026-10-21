@@ -229,5 +229,15 @@
  "log.batch": "{count} bağlantı kuyruğa eklendi",
  "log.from_browser": "Tarayıcıdan bağlantı geldi",
  "options.subtitles": "Altyazı",
- "options.sponsorblock": "Sponsorları atla"
+ "options.sponsorblock": "Sponsorları atla",
+ "settings.reddit_sign_in": "Tarayıcımdaki Reddit oturumunu kullan",
+ "settings.reddit_sign_in_hint": "NSFW Reddit gönderileri için. Firefox ya da Zen oturumunun çerezleri yalnızca Reddit'e gider; Orbida şifreni hiç görmez.",
+ "reddit.signed_in": "{browser} üzerinden Reddit'e giriş yapılmış",
+ "reddit.signed_out": "{browser} üzerinde Reddit'e giriş yapılmamış; önce orada giriş yap",
+ "reddit.no_browser": "Bu bilgisayarda Firefox ya da Zen profili bulunamadı",
+ "reddit.failed": "{browser} çerezleri okunamadı; günlüğe bak",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit bu gönderiyi yalnızca giriş yapmış hesaplara gösteriyor (çoğunlukla NSFW). Ayarlar'dan Reddit oturumunu aç ve yeniden dene",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit bu gönderiyi yalnızca giriş yapmış hesaplara gösteriyor. Firefox ya da Zen'de Reddit'e giriş yap, Reddit ayarlarından yetişkin içeriğe izin ver ve yeniden dene",
+ "reddit.ask_title": "Reddit oturumu",
+ "reddit.ask_body": "Reddit bu gönderiyi yalnızca giriş yapmış hesaplara gösteriyor (çoğunlukla NSFW).\n\nFirefox ya da Zen'deki Reddit oturumun kullanılsın mı? Bu çerezler yalnızca Reddit'e gider. Ayarlar'dan kapatabilirsin."
 }

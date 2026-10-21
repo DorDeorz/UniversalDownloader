@@ -109,6 +109,11 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
 ### Windows
 
 - **Browser extension** for Chrome, Edge, Brave, Opera and Firefox (see below).
+- **NSFW Reddit posts.** Reddit shows them only to signed-in accounts. Turn
+  on **Use my browser's Reddit sign-in** (Settings › Downloads, or answer
+  Yes when Orbida asks) and Orbida sends Reddit the reddit.com
+  cookies of your Firefox or Zen (also LibreWolf, Floorp, Waterfox). Off by
+  default; no other site gets them, and Orbida never sees a password.
 - **Clipboard watch:** with Settings › Copied links › Watch, every link
   you copy while Orbida runs is offered with a Download button.
 - Video Only mode, and the WebM and Opus formats.
@@ -167,6 +172,9 @@ address of the tab when you click it.
 - **YouTube without an account.** When YouTube asks you to "confirm you're
   not a bot", Orbida tries again through the phone's own browser engine.
   Signing in stays available but is optional.
+- **NSFW Reddit posts** need a signed-in account: Settings › Reddit › Sign
+  in to Reddit (optional; Orbida also offers it when Reddit refuses a post).
+  The sign-in stays on the phone.
 - Files are saved to `Download/Orbida` and show up in gallery and music
   apps. History has Open, Share and Remove.
 - Pick which playlist entries to download.

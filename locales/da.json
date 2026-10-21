@@ -229,5 +229,15 @@
  "log.batch": "{count} links føjet til køen",
  "log.from_browser": "Link modtaget fra browseren",
  "options.subtitles": "Undertekster",
- "options.sponsorblock": "Spring sponsorer over"
+ "options.sponsorblock": "Spring sponsorer over",
+ "settings.reddit_sign_in": "Brug min browsers Reddit-login",
+ "settings.reddit_sign_in_hint": "Til NSFW-opslag på Reddit. Kun Reddit får cookies fra dit login i Firefox eller Zen; Orbida ser aldrig en adgangskode.",
+ "reddit.signed_in": "Logget ind på Reddit i {browser}",
+ "reddit.signed_out": "{browser} er ikke logget ind på Reddit; log ind der først",
+ "reddit.no_browser": "Ingen Firefox- eller Zen-profil fundet på denne pc",
+ "reddit.failed": "Kunne ikke læse cookies fra {browser}; se loggen",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit viser kun dette opslag til konti, der er logget ind (ofte NSFW). Slå Reddit-login til under Indstillinger, og prøv igen",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit viser kun dette opslag til konti, der er logget ind. Log ind på Reddit i Firefox eller Zen, tillad voksenindhold i dine Reddit-indstillinger, og prøv igen",
+ "reddit.ask_title": "Reddit-login",
+ "reddit.ask_body": "Reddit viser kun dette opslag til konti, der er logget ind (ofte NSFW).\n\nBrug Reddit-login fra din Firefox eller Zen? Kun Reddit får de cookies. Du kan slå det fra under Indstillinger."
 }

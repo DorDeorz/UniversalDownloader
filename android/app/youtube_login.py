@@ -1,4 +1,4 @@
-"""Signing in to YouTube inside the app, for yt-dlp to use the session.
+"""Signing in to YouTube or Reddit inside the app, for yt-dlp to use the session.
 
 YouTube answers some networks (often mobile data) with "Sign in to confirm
 you're not a bot" whichever player client yt-dlp uses; the fix yt-dlp
@@ -7,17 +7,36 @@ YouTube's sign-in page in an Android WebView, and when the user is done it
 writes the WebView's youtube.com cookies to a Netscape cookie file, which
 yt-dlp reads through its ``cookiefile`` option.
 
-The file stays in the app's private folder. Signing out deletes it and the
-WebView's cookies.
+Reddit shows NSFW posts only to signed-in accounts ("Account
+authentication is required"); its sign-in works the same way and is just as
+optional. Each site's cookies have their own file; when both are signed in,
+yt-dlp gets one file holding both (:func:`cookie_file`).
+
+The files stay in the app's private folder. Signing out deletes the site's
+file and the WebView's cookies.
 """
 
 import os
 import time
+from collections import namedtuple
 
-COOKIE_FILE = "youtube-cookies.txt"
-LOGIN_URL = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fm.youtube.com%2F"
-# Cookies YouTube sets for a signed-in session; yt-dlp signs its requests with them.
-SESSION_COOKIES = ("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID")
+Site = namedtuple("Site", "name domain file login_url page session_cookies")
+
+YOUTUBE = Site(
+    "YouTube", ".youtube.com", "youtube-cookies.txt",
+    "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fm.youtube.com%2F",
+    "https://www.youtube.com",
+    # Cookies YouTube sets for a signed-in session; yt-dlp signs its requests with them.
+    ("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID"))
+REDDIT = Site("Reddit", ".reddit.com", "reddit-cookies.txt", "https://www.reddit.com/login/",
+              "https://www.reddit.com", ("reddit_session",))
+SITES = (YOUTUBE, REDDIT)
+
+COOKIE_FILE = YOUTUBE.file
+LOGIN_URL = YOUTUBE.login_url
+SESSION_COOKIES = YOUTUBE.session_cookies
+# yt-dlp's cookie file when more than one site is signed in.
+COMBINED_FILE = "cookies.txt"
 _YEAR = 365 * 24 * 60 * 60
 
 
@@ -31,56 +50,73 @@ def parse_cookie_header(header):
     return cookies
 
 
-def signed_in(cookies):
-    return any(name in cookies for name in SESSION_COOKIES)
+def signed_in(cookies, site=YOUTUBE):
+    return any(name in cookies for name in site.session_cookies)
 
 
-def netscape_file(cookies, now=None):
-    """The text of a Netscape cookie file with ``cookies`` for .youtube.com.
+def netscape_file(cookies, now=None, site=YOUTUBE):
+    """The text of a Netscape cookie file with ``cookies`` for the site's domain.
 
     The WebView only reports names and values, so every cookie is written
     for the whole domain, HTTPS only, valid for a year.
     """
     expires = int((time.time() if now is None else now) + _YEAR)
-    lines = ["# Netscape HTTP Cookie File", "# Written by Orbida from its YouTube sign-in", ""]
+    lines = ["# Netscape HTTP Cookie File", f"# Written by Orbida from its {site.name} sign-in", ""]
     for name, value in cookies.items():
-        lines.append("\t".join((".youtube.com", "TRUE", "/", "TRUE", str(expires), name, value)))
+        lines.append("\t".join((site.domain, "TRUE", "/", "TRUE", str(expires), name, value)))
     return "\n".join(lines) + "\n"
 
 
-def cookie_path(folder):
-    return os.path.join(folder, COOKIE_FILE)
+def cookie_path(folder, site=YOUTUBE):
+    return os.path.join(folder, site.file)
 
 
-def save(folder, cookie_header):
-    """Write the cookie file; returns True when it holds a signed-in session."""
-    cookies = parse_cookie_header(cookie_header)
-    if not signed_in(cookies):
-        return False
-    os.makedirs(folder, exist_ok=True)
-    path = cookie_path(folder)
+def _write(path, text):
     temp = path + ".tmp"
     with open(temp, "w", encoding="utf-8") as f:
-        f.write(netscape_file(cookies))
+        f.write(text)
     os.replace(temp, path)
+
+
+def save(folder, cookie_header, site=YOUTUBE):
+    """Write the site's cookie file; returns True when it holds a signed-in session."""
+    cookies = parse_cookie_header(cookie_header)
+    if not signed_in(cookies, site):
+        return False
+    os.makedirs(folder, exist_ok=True)
+    _write(cookie_path(folder, site), netscape_file(cookies, site=site))
     return True
 
 
-def saved(folder):
-    """The cookie file when a signed-in session is stored, else None."""
-    path = cookie_path(folder)
+def saved(folder, site=YOUTUBE):
+    """The site's cookie file when a signed-in session is stored, else None."""
+    path = cookie_path(folder, site)
     try:
         with open(path, encoding="utf-8") as f:
             text = f.read()
     except OSError:
         return None
     names = {line.split("\t")[5] for line in text.splitlines() if line.count("\t") >= 6}
-    return path if signed_in(names) else None
+    return path if signed_in(names, site) else None
 
 
-def forget(folder):
+def cookie_file(folder):
+    """The cookie file for yt-dlp: the one signed-in site's, both sites' together, or None."""
+    paths = [path for path in (saved(folder, site) for site in SITES) if path]
+    if len(paths) < 2:
+        return paths[0] if paths else None
+    lines = ["# Netscape HTTP Cookie File", "# Written by Orbida from its sign-ins", ""]
+    for path in paths:
+        with open(path, encoding="utf-8") as f:
+            lines.extend(line for line in f.read().splitlines() if line.count("\t") >= 6)
+    combined = os.path.join(folder, COMBINED_FILE)
+    _write(combined, "\n".join(lines) + "\n")
+    return combined
+
+
+def forget(folder, site=YOUTUBE):
     try:
-        os.remove(cookie_path(folder))
+        os.remove(cookie_path(folder, site))
     except OSError:
         pass
 
@@ -106,15 +142,16 @@ class LoginView:
     taps Done or Back; the caller hands it to Kivy's thread.
     """
 
-    def __init__(self, on_close, done_text="Done"):
+    def __init__(self, on_close, done_text="Done", site=YOUTUBE):
         self.on_close = on_close
         self.done_text = done_text
+        self.site = site
         self._layout = None
         self._keep = []  # Java listeners must outlive the call that made them
 
-    def open(self, url=LOGIN_URL):
+    def open(self, url=None):
         from android.runnable import run_on_ui_thread
-        run_on_ui_thread(self._open)(url)
+        run_on_ui_thread(self._open)(url or self.site.login_url)
 
     def close(self):
         from android.runnable import run_on_ui_thread
@@ -126,7 +163,7 @@ class LoginView:
             self._build(url)
         except Exception:
             import traceback
-            print("UDCRASH YouTube sign-in page:\n" + traceback.format_exc(), flush=True)
+            print(f"UDCRASH {self.site.name} sign-in page:\n" + traceback.format_exc(), flush=True)
             self._layout = None
             self.on_close("")
 
@@ -201,7 +238,7 @@ class LoginView:
             self._remove()
         except Exception:
             import traceback
-            print("UDCRASH YouTube sign-in page:\n" + traceback.format_exc(), flush=True)
+            print(f"UDCRASH {self.site.name} sign-in page:\n" + traceback.format_exc(), flush=True)
             self._layout = None
             self.on_close("")
 
@@ -211,7 +248,7 @@ class LoginView:
         from jnius import autoclass, cast
         manager = autoclass("android.webkit.CookieManager").getInstance()
         manager.flush()
-        header = manager.getCookie("https://www.youtube.com") or ""
+        header = manager.getCookie(self.site.page) or ""
         layout, web = self._layout, self._web
         self._layout = self._web = None
         cast("android.view.ViewGroup", layout.getParent()).removeView(layout)  # getParent() is a ViewParent

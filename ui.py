@@ -13,6 +13,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 import app_setup
+import browser_cookies
 import download_history
 import events
 import filenames
@@ -702,7 +703,8 @@ class SettingsView(ctk.CTkFrame):
     The page never scrolls: its cards sit in two columns, each setting on
     one line with a hint under its name. When the window is too short
     (large text on a small screen) the page first hides the hints, then
-    tightens the spacing, then leaves out the keyboard shortcuts card.
+    tightens the spacing, then leaves out the keyboard shortcuts card, and
+    last tightens the spacing further.
     Below ``TWO_COLUMNS`` units of width the cards stack in one column.
 
     Every change applies at once and is saved; ``on_change(name, value)``
@@ -803,11 +805,14 @@ class SettingsView(ctk.CTkFrame):
                                          label=lambda c: tr(f"clipboard.{c}"))
         self.cmb_clipboard.set(settings.clipboard)
         self._inline_row(after, 6, tr("settings.clipboard"), self.cmb_clipboard)
-        self.sw_awake = self._switch(after, 7, tr("settings.keep_awake"), settings.keep_awake, "keep_awake")
-        self.sw_history = self._switch(after, 8, tr("settings.save_history"), settings.save_history,
+        # Reddit shows NSFW posts only to signed-in accounts: lend it the browser's sign-in.
+        self.sw_reddit = self._switch(after, 7, tr("settings.reddit_sign_in"), settings.reddit_browser_sign_in,
+                                      "reddit_browser_sign_in")
+        self.sw_awake = self._switch(after, 8, tr("settings.keep_awake"), settings.keep_awake, "keep_awake")
+        self.sw_history = self._switch(after, 9, tr("settings.save_history"), settings.save_history,
                                        "save_history")
-        self.sw_summary = self._switch(after, 9, tr("settings.summary"), settings.show_summary, "show_summary")
-        self.sw_open = self._switch(after, 10, tr("settings.open_folder"), settings.open_folder_when_done,
+        self.sw_summary = self._switch(after, 10, tr("settings.summary"), settings.show_summary, "show_summary")
+        self.sw_open = self._switch(after, 11, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
         self._spacing[-1] = (self.sw_open, (0, 14), (0, 10))
 
@@ -908,8 +913,14 @@ class SettingsView(ctk.CTkFrame):
         if columns == 2:
             left.grid(row=0, column=0, columnspan=1, sticky="new", padx=(0, 8))
             right.grid(row=0, column=1, sticky="new", padx=(8, 0))
-            order = ((self.card_look, left), (self.card_updates, left), (self.card_finish, right),
-                     (self.card_keys, right))
+            # Balance the columns: the shortcuts card goes under Appearance while it shows;
+            # without it, Updates does.
+            if self.shortcuts_shown:
+                order = ((self.card_look, left), (self.card_keys, left), (self.card_finish, right),
+                         (self.card_updates, right))
+            else:
+                order = ((self.card_look, left), (self.card_updates, left), (self.card_finish, right),
+                         (self.card_keys, right))
         else:
             left.grid(row=0, column=0, columnspan=2, sticky="new", padx=0)
             right.grid_remove()
@@ -923,10 +934,17 @@ class SettingsView(ctk.CTkFrame):
         if not self.shortcuts_shown:
             self.card_keys.grid_remove()
 
+    # Spacing taken off every tight gap at the tightest level (TIGHTEST).
+    TIGHTEST_TRIM = 4
+    TIGHTEST = 2
+
     def _set_tight(self, tight):
+        """Spacing level: 0 (False) normal, 1 (True) tight, TIGHTEST tight with less between rows."""
         self.tight = tight
+        trim = self.TIGHTEST_TRIM if tight == self.TIGHTEST else 0
         for widget, normal, small in self._spacing:
-            widget.grid_configure(pady=small if tight else normal)
+            widget.grid_configure(pady=tuple(max(0, v - trim) for v in small) if tight else normal)
+        self.body.grid_configure(pady=(0, 4 if trim else 16))
 
     def _show_hints(self, show):
         self.hints_shown = show
@@ -935,18 +953,22 @@ class SettingsView(ctk.CTkFrame):
 
     def _show_shortcuts(self, show):
         self.shortcuts_shown = show
-        self.card_keys.grid() if show else self.card_keys.grid_remove()
+        if self._columns == 2:
+            self._layout(2)  # the cards change columns (see _layout)
+        else:
+            self.card_keys.grid() if show else self.card_keys.grid_remove()
 
     def _schedule_fit(self, _event=None):
         if not self._fit_pending:
             self._fit_pending = True
             self.after_idle(self._fit)
 
-    FIT_STEPS = ((True, False, True), (False, False, True), (False, True, True), (False, True, False))
+    FIT_STEPS = ((True, False, True), (False, False, True), (False, True, True), (False, True, False),
+                 (False, TIGHTEST, False))
 
     def _fit(self):
         """Choose the columns for the width, then the roomiest layout that fits:
-        hints and normal spacing, no hints, tight spacing, then no shortcuts card."""
+        hints and normal spacing, no hints, tight spacing, no shortcuts card, then even less spacing."""
         self._fit_pending = False
         try:
             scale = ctk.ScalingTracker.get_widget_scaling(self)
@@ -1223,7 +1245,7 @@ class UpdateDialog(ctk.CTkToplevel):
         self.progress = ctk.CTkProgressBar(self, height=8, progress_color=ACCENT, fg_color=SECONDARY)
         self.progress.set(0)
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=4, column=0, sticky="e", padx=20, pady=(12, 18))
+        buttons.grid(row=3, column=0, sticky="e", padx=20, pady=(12, 18))
         self.btn_page = secondary_button(buttons, tr("update.page"), lambda: webbrowser.open(release.page))
         if can_install:  # otherwise the main button opens the page
             self.btn_page.pack(side="left", padx=(0, 8))
@@ -1300,6 +1322,8 @@ class App(ctk.CTk):
         self.settings_path = os.path.join(app_setup.data_dir(), "settings.json")
         self.settings = settings_store.load(self.settings_path, default_download_dir())
         logic.set_network_options(self.settings.proxy)
+        self._reddit = None  # browser_cookies.RedditSignIn while the setting is on
+        self._apply_reddit_sign_in()
         ctk.set_appearance_mode(appearance_mode(self.settings.theme))
         ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
         i18n.set_language(self.settings.language)
@@ -1718,6 +1742,27 @@ class App(ctk.CTk):
         self.settings.theme = theme
         self._refresh_logo_bg()
         self._save_settings()
+    def _apply_reddit_sign_in(self):
+        """Send Reddit the browser's sign-in while the setting is on (Settings › Downloads)."""
+        if self.settings.reddit_browser_sign_in:
+            if self._reddit is None:
+                self._reddit = browser_cookies.RedditSignIn(os.path.join(app_setup.data_dir(), "reddit-cookies"))
+            self._reddit.refresh()
+            logic.set_reddit_sign_in(self._reddit)
+        else:
+            logic.set_reddit_sign_in(None)
+            if self._reddit is not None:
+                self._reddit.remove_copy()
+                self._reddit = None
+
+    def reddit_status(self):
+        """The translated state of the Reddit sign-in, or its description while it is off."""
+        sign_in = self._reddit
+        if sign_in is None:
+            return tr("settings.reddit_sign_in_hint")
+        sign_in.ydl_options()  # reads the browser again when the last look is old
+        return tr(f"reddit.{sign_in.status}", browser=browser_cookies.browser_name(sign_in.browser_database))
+
     def _on_setting_changed(self, name, value):
         """Called by the settings page; applies and saves one setting."""
         if name == "theme":
@@ -1731,6 +1776,11 @@ class App(ctk.CTk):
         setattr(self.settings, name, value)
         if name == "proxy":
             logic.set_network_options(value)
+        if name == "reddit_browser_sign_in":
+            self._apply_reddit_sign_in()
+            if value and self.settings_view is not None:
+                # Turned on in Settings: say whether the browser is signed in to Reddit.
+                messagebox.showinfo(tr("reddit.ask_title"), self.reddit_status(), parent=self)
         if name == "accent":
             recolor(self, apply_accent(value))
 
@@ -2152,7 +2202,10 @@ class App(ctk.CTk):
             if info is None:
                 self.events.post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
             elif 'error' in info:
-                self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {info['error']}")
+                # A Reddit post that needs a sign-in also offers the browser's (offer_reddit_sign_in).
+                sign_in = {'sign_in': True} if info['error'] == logic.REDDIT_SIGN_IN_OFF else {}
+                self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
+                                 **sign_in)
             else:
                 analysis = playlist.analyze(info, url)
                 if not analysis.is_playlist and analysis.items and info.get('formats'):
@@ -2161,7 +2214,7 @@ class App(ctk.CTk):
                 self.events.post(events.ANALYSIS_DONE, analysis=analysis, url=url)
         except Exception as e:
             self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
-    def _on_analysis_failed(self, message):
+    def _on_analysis_failed(self, message, sign_in=False):
         self._append_log(message)
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._show_media(lambda: message, DANGER)
@@ -2169,6 +2222,20 @@ class App(ctk.CTk):
         if self._from_queue:
             self._from_queue = False
             self._next_in_queue()
+        elif sign_in and not self.settings.reddit_browser_sign_in:
+            self.offer_reddit_sign_in()
+
+    def offer_reddit_sign_in(self):
+        """Reddit refused a post without sign-in: offer the browser's sign-in, then try again."""
+        if not messagebox.askyesno(tr("reddit.ask_title"), tr("reddit.ask_body"), parent=self):
+            return
+        self._on_setting_changed("reddit_browser_sign_in", True)
+        status = self.reddit_status()
+        self._append_log(status)
+        if self._reddit.status == browser_cookies.SIGNED_IN:
+            self.start_analysis_thread()
+        else:
+            messagebox.showinfo(tr("reddit.ask_title"), status, parent=self)
     def _on_analysis_done(self, analysis, url):
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._end_job()

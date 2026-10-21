@@ -41,6 +41,7 @@ from kivymd.uix.textfield import MDTextField, MDTextFieldHelperText, MDTextField
 
 import android_env
 import app_settings
+import browser_cookies
 import browser_route
 import crash_report
 import events
@@ -67,7 +68,7 @@ if android_env.on_android():
     md_patches.disable_hover()
 
 APP_NAME = "Orbida"    # the Android app's name; keep in step with title in android/buildozer.spec
-APP_VERSION = "1.2.1"  # keep in step with android/buildozer.spec
+APP_VERSION = "1.2.2"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
@@ -281,6 +282,7 @@ class UniversalDownloaderApp(MDApp):
         self._stale = {"settings": True, "history": True}
         self._dark = None
         self._login = None           # youtube_login.LoginView while it is open
+        self._retry_after_sign_in = False  # analyse again once the Reddit sign-in is done
         self._browser = None         # browser_route.AndroidBridge, made on Android at start
         self._update_checking = False
         self._update_cancelled = False
@@ -993,10 +995,13 @@ class UniversalDownloaderApp(MDApp):
 
     def _set_platform_options(self):
         options = {**getattr(self, "_js_options", {}), **app_settings.download_speed_options(self.settings)}
-        cookies = youtube_login.saved(self.user_data_dir)
+        cookies = youtube_login.cookie_file(self.user_data_dir)
         if cookies:
             options["cookiefile"] = cookies
         logic.set_platform_options(options)
+        # Reddit's cookies come in the cookie file; this only tells logic the app is signed in.
+        reddit = youtube_login.saved(self.user_data_dir, youtube_login.REDDIT)
+        logic.set_reddit_sign_in(browser_cookies.AppSignIn() if reddit else None)
         logic.set_network_options(self.settings.proxy)
 
     def _keep_awake(self, on):
@@ -1090,12 +1095,15 @@ class UniversalDownloaderApp(MDApp):
         self._mix = None
         self.set_busy(False)
         self.ids.btn_download.disabled = True
-        self._show_media(self.tr("link.nothing_reason", reason=message), "", "alert-circle-outline")
-        self.log(message)
+        self._show_media(self.tr("link.nothing_reason", reason=i18n.tr_message(message)), "", "alert-circle-outline")
+        self.log(i18n.tr_message(message))
         if self._from_queue:
             self._from_queue = False
             Clock.schedule_once(lambda *_: self._next_in_queue(), 0)
         selftest(f"analysis failed: {message} browser_requests={browser_route.request_count()}")
+        if message == logic.REDDIT_SIGN_IN_OFF and android_env.on_android():
+            self._offer_reddit_sign_in()
+            return
         if not logic.is_bot_check(message) or not android_env.on_android():
             return
         if self._browser is not None and not browser_route.enabled():
@@ -1106,6 +1114,15 @@ class UniversalDownloaderApp(MDApp):
         else:
             self._dialog(self.t("youtube.bot_title"), self.t("youtube.bot_body"),
                          buttons=[(self.t("youtube.ok_button"), None)])
+
+    def _offer_reddit_sign_in(self):
+        """Reddit refused a post without sign-in: offer the in-app sign-in, then analyse again."""
+        def sign_in():
+            self._retry_after_sign_in = True
+            self.sign_in_reddit()
+
+        self._dialog(self.t("reddit_login.ask_title"), self.t("reddit_login.ask_body"),
+                     buttons=[(self.t("common.cancel"), None), (self.t("reddit_login.sign_in"), sign_in)])
 
     def _on_item_started(self, position, total, title):
         self._stderr.clear()
@@ -1301,23 +1318,37 @@ class UniversalDownloaderApp(MDApp):
             browser_route.enable(self._browser)
 
     def sign_in_youtube(self, url=None):
+        self._sign_in(youtube_login.YOUTUBE, url)
+
+    def sign_in_reddit(self, url=None):
+        self._sign_in(youtube_login.REDDIT, url)
+
+    def _sign_in(self, site, url=None):
         if not android_env.on_android() or self._login is not None:
             return
         self._login = youtube_login.LoginView(
-            lambda header: self.events.post("youtube_login", header=header), done_text=self.t("youtube.done"))
+            lambda header: self.events.post("youtube_login", header=header, site=site.name),
+            done_text=self.t("youtube.done"), site=site)
         try:
-            self._login.open(url or youtube_login.LOGIN_URL)
+            self._login.open(url)
         except Exception as e:
             self._login = None
             self.snack(self.t("crash.error", error=e))
 
-    def _on_youtube_login(self, header):
+    def _on_youtube_login(self, header, site="YouTube"):
         self._login = None
-        ok = youtube_login.save(self.user_data_dir, header)
+        reddit = site == youtube_login.REDDIT.name
+        ok = youtube_login.save(self.user_data_dir, header, youtube_login.REDDIT if reddit else youtube_login.YOUTUBE)
         selftest(f"login closed signed_in={ok}")
         self._set_platform_options()
         self._refresh("settings")
-        self.snack(self.t("youtube.ok" if ok else "youtube.failed"))
+        if reddit:
+            self.snack(self.t("reddit_login.ok" if ok else "youtube.failed"))
+            if ok and self._retry_after_sign_in:
+                self.analyze()  # the post that needed the sign-in
+            self._retry_after_sign_in = False
+        else:
+            self.snack(self.t("youtube.ok" if ok else "youtube.failed"))
 
     def sign_out_youtube(self):
         def sign_out():
@@ -1332,6 +1363,20 @@ class UniversalDownloaderApp(MDApp):
 
         self._dialog(self.t("youtube.signed_in"), buttons=[(self.t("common.cancel"), None),
                                                           (self.t("youtube.sign_out"), sign_out)])
+
+    def sign_out_reddit(self):
+        def sign_out():
+            youtube_login.forget(self.user_data_dir, youtube_login.REDDIT)
+            try:
+                youtube_login.clear_webview_cookies()
+            except Exception as e:
+                _log.warning("Clear WebView cookies: %s", e)
+            self._set_platform_options()
+            self._refresh("settings")
+            self.snack(self.t("reddit_login.signed_out"))
+
+        self._dialog(self.t("reddit_login.signed_in"), buttons=[(self.t("common.cancel"), None),
+                                                               (self.t("youtube.sign_out"), sign_out)])
 
     # --- Settings -----------------------------------------------------------------
 
@@ -1441,6 +1486,15 @@ class UniversalDownloaderApp(MDApp):
         else:
             info("account-outline", t("youtube.sign_in"), t("youtube.sign_in_hint"),
                  on_release=self.sign_in_youtube)
+
+        # Reddit (NSFW posts need a signed-in account)
+        section(t("reddit_login.section"))
+        if youtube_login.saved(self.user_data_dir, youtube_login.REDDIT):
+            info("account-check-outline", t("reddit_login.signed_in"), t("youtube.sign_out_hint"),
+                 on_release=self.sign_out_reddit)
+        else:
+            info("account-outline", t("reddit_login.sign_in"), t("reddit_login.sign_in_hint"),
+                 on_release=lambda *_: self.sign_in_reddit())
 
         # About
         section(t("settings.about"))

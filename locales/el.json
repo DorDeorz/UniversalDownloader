@@ -229,5 +229,15 @@
  "log.batch": "Προστέθηκαν {count} σύνδεσμοι στην ουρά",
  "log.from_browser": "Λήφθηκε σύνδεσμος από το πρόγραμμα περιήγησης",
  "options.subtitles": "Υπότιτλοι",
- "options.sponsorblock": "Χωρίς χορηγίες"
+ "options.sponsorblock": "Χωρίς χορηγίες",
+ "settings.reddit_sign_in": "Χρήση της σύνδεσης Reddit του προγράμματος περιήγησής μου",
+ "settings.reddit_sign_in_hint": "Για αναρτήσεις NSFW στο Reddit. Μόνο το Reddit λαμβάνει τα cookies της σύνδεσής σου στο Firefox ή στο Zen· το Orbida δεν βλέπει ποτέ κωδικό.",
+ "reddit.signed_in": "Συνδεδεμένος στο Reddit στο {browser}",
+ "reddit.signed_out": "Το {browser} δεν είναι συνδεδεμένο στο Reddit· συνδέσου εκεί πρώτα",
+ "reddit.no_browser": "Δεν βρέθηκε προφίλ Firefox ή Zen σε αυτόν τον υπολογιστή",
+ "reddit.failed": "Δεν ήταν δυνατή η ανάγνωση των cookies του {browser}· δες το αρχείο καταγραφής",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Το Reddit δείχνει αυτή την ανάρτηση μόνο σε συνδεδεμένους λογαριασμούς (συχνά NSFW). Ενεργοποίησε τη σύνδεση Reddit στις Ρυθμίσεις και δοκίμασε ξανά",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Το Reddit δείχνει αυτή την ανάρτηση μόνο σε συνδεδεμένους λογαριασμούς. Συνδέσου στο Reddit στο Firefox ή στο Zen, επίτρεψε περιεχόμενο για ενηλίκους στις ρυθμίσεις του Reddit και δοκίμασε ξανά",
+ "reddit.ask_title": "Σύνδεση Reddit",
+ "reddit.ask_body": "Το Reddit δείχνει αυτή την ανάρτηση μόνο σε συνδεδεμένους λογαριασμούς (συχνά NSFW).\n\nΝα χρησιμοποιηθεί η σύνδεση Reddit του Firefox ή του Zen σου; Μόνο το Reddit λαμβάνει αυτά τα cookies. Μπορείς να το απενεργοποιήσεις στις Ρυθμίσεις."
 }

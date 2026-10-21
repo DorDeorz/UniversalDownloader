@@ -229,5 +229,15 @@
  "log.batch": "{count} länkar lades till i kön",
  "log.from_browser": "Länk mottagen från webbläsaren",
  "options.subtitles": "Undertexter",
- "options.sponsorblock": "Hoppa över sponsorer"
+ "options.sponsorblock": "Hoppa över sponsorer",
+ "settings.reddit_sign_in": "Använd webbläsarens Reddit-inloggning",
+ "settings.reddit_sign_in_hint": "För NSFW-inlägg på Reddit. Bara Reddit får kakorna från din inloggning i Firefox eller Zen; Orbida ser aldrig något lösenord.",
+ "reddit.signed_in": "Inloggad på Reddit i {browser}",
+ "reddit.signed_out": "{browser} är inte inloggad på Reddit; logga in där först",
+ "reddit.no_browser": "Ingen Firefox- eller Zen-profil hittades på den här datorn",
+ "reddit.failed": "Kunde inte läsa kakorna från {browser}; se loggen",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit visar bara det här inlägget för inloggade konton (ofta NSFW). Slå på Reddit-inloggningen i Inställningar och försök igen",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit visar bara det här inlägget för inloggade konton. Logga in på Reddit i Firefox eller Zen, tillåt vuxeninnehåll i Reddit-inställningarna och försök igen",
+ "reddit.ask_title": "Reddit-inloggning",
+ "reddit.ask_body": "Reddit visar bara det här inlägget för inloggade konton (ofta NSFW).\n\nAnvända Reddit-inloggningen i din Firefox eller Zen? Bara Reddit får de kakorna. Du kan stänga av det under Inställningar."
 }

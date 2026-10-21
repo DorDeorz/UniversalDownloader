@@ -229,5 +229,15 @@
  "log.batch": "{count} links adicionados à fila",
  "log.from_browser": "Link recebido do navegador",
  "options.subtitles": "Legendas",
- "options.sponsorblock": "Pular patrocínios"
+ "options.sponsorblock": "Pular patrocínios",
+ "settings.reddit_sign_in": "Usar a sessão do Reddit do meu navegador",
+ "settings.reddit_sign_in_hint": "Para publicações NSFW do Reddit. Só o Reddit recebe os cookies da sua sessão do Firefox ou Zen; o Orbida nunca vê uma senha.",
+ "reddit.signed_in": "Sessão do Reddit iniciada no {browser}",
+ "reddit.signed_out": "O {browser} não tem sessão no Reddit; entre lá primeiro",
+ "reddit.no_browser": "Nenhum perfil do Firefox ou Zen encontrado neste PC",
+ "reddit.failed": "Não foi possível ler os cookies do {browser}; veja o registro",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "O Reddit só mostra esta publicação a contas com sessão iniciada (muitas vezes NSFW). Ative a sessão do Reddit nas Configurações e tente novamente",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "O Reddit só mostra esta publicação a contas com sessão iniciada. Entre no Reddit no Firefox ou Zen, permita conteúdo adulto nas configurações do Reddit e tente novamente",
+ "reddit.ask_title": "Sessão do Reddit",
+ "reddit.ask_body": "O Reddit só mostra esta publicação a contas com sessão iniciada (muitas vezes NSFW).\n\nUsar a sessão do Reddit do seu Firefox ou Zen? Só o Reddit recebe esses cookies. Você pode desativar em Configurações."
 }

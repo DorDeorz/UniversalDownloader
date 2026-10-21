@@ -229,5 +229,15 @@
  "log.batch": "Đã thêm {count} liên kết vào hàng đợi",
  "log.from_browser": "Đã nhận liên kết từ trình duyệt",
  "options.subtitles": "Phụ đề",
- "options.sponsorblock": "Bỏ qua tài trợ"
+ "options.sponsorblock": "Bỏ qua tài trợ",
+ "settings.reddit_sign_in": "Dùng phiên đăng nhập Reddit của trình duyệt",
+ "settings.reddit_sign_in_hint": "Dành cho bài đăng NSFW trên Reddit. Chỉ Reddit nhận cookie đăng nhập Firefox hoặc Zen của bạn; Orbida không bao giờ thấy mật khẩu.",
+ "reddit.signed_in": "Đã đăng nhập Reddit trong {browser}",
+ "reddit.signed_out": "{browser} chưa đăng nhập Reddit; hãy đăng nhập ở đó trước",
+ "reddit.no_browser": "Không tìm thấy hồ sơ Firefox hoặc Zen trên máy này",
+ "reddit.failed": "Không đọc được cookie của {browser}; xem nhật ký",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit chỉ hiển thị bài đăng này cho tài khoản đã đăng nhập (thường là NSFW). Hãy bật đăng nhập Reddit trong Cài đặt rồi thử lại",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit chỉ hiển thị bài đăng này cho tài khoản đã đăng nhập. Hãy đăng nhập Reddit trong Firefox hoặc Zen, cho phép nội dung người lớn trong cài đặt Reddit rồi thử lại",
+ "reddit.ask_title": "Đăng nhập Reddit",
+ "reddit.ask_body": "Reddit chỉ hiển thị bài đăng này cho tài khoản đã đăng nhập (thường là NSFW).\n\nDùng phiên đăng nhập Reddit trong Firefox hoặc Zen của bạn? Chỉ Reddit nhận các cookie đó. Bạn có thể tắt trong Cài đặt."
 }

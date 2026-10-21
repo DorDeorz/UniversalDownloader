@@ -229,5 +229,15 @@
  "log.batch": "{count} liens ajoutés à la file d'attente",
  "log.from_browser": "Lien reçu du navigateur",
  "options.subtitles": "Sous-titres",
- "options.sponsorblock": "Sauter les sponsors"
+ "options.sponsorblock": "Sauter les sponsors",
+ "settings.reddit_sign_in": "Utiliser la connexion Reddit de mon navigateur",
+ "settings.reddit_sign_in_hint": "Pour les publications NSFW de Reddit. Seul Reddit reçoit les cookies de ta connexion Firefox ou Zen ; Orbida ne voit jamais de mot de passe.",
+ "reddit.signed_in": "Connecté à Reddit dans {browser}",
+ "reddit.signed_out": "{browser} n'est pas connecté à Reddit ; connecte-toi d'abord là-bas",
+ "reddit.no_browser": "Aucun profil Firefox ou Zen trouvé sur ce PC",
+ "reddit.failed": "Impossible de lire les cookies de {browser} ; voir le journal",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit ne montre cette publication qu'aux comptes connectés (souvent NSFW). Active la connexion Reddit dans les Paramètres, puis réessaie",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit ne montre cette publication qu'aux comptes connectés. Connecte-toi à Reddit dans Firefox ou Zen, autorise le contenu pour adultes dans les paramètres Reddit, puis réessaie",
+ "reddit.ask_title": "Connexion Reddit",
+ "reddit.ask_body": "Reddit ne montre cette publication qu'aux comptes connectés (souvent NSFW).\n\nUtiliser la connexion Reddit de ton Firefox ou Zen ? Seul Reddit reçoit ces cookies. Tu peux la désactiver dans les Paramètres."
 }

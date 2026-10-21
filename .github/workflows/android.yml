@@ -30,6 +30,7 @@ on:
     paths:
       - ".github/workflows/android.yml"
       - "android/**"
+      - "browser_cookies.py"
       - "events.py"
       - "filenames.py"
       - "formats.py"
@@ -46,6 +47,7 @@ on:
     paths:
       - ".github/workflows/android.yml"
       - "android/**"
+      - "browser_cookies.py"
       - "events.py"
       - "filenames.py"
       - "formats.py"

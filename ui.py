@@ -122,17 +122,36 @@ WINDOW_FRAME_PX = 48
 def work_area(window):
     """(left, top, right, bottom) of the usable screen in pixels.
 
-    On Windows this is the monitor minus the taskbar; elsewhere the screen
-    minus room for a panel.
+    On Windows this is the monitor the window is on (the nearest one)
+    minus the taskbar, so a window on a second monitor stays there;
+    elsewhere the screen minus room for a panel.
     """
     if sys.platform == "win32":
         try:
             import ctypes
             from ctypes import wintypes
-            rect = wintypes.RECT()
-            if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):  # SPI_GETWORKAREA
+
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                            ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+            # Own function prototypes: handles are 64-bit, ctypes' default int is not.
+            user32 = ctypes.WinDLL("user32")
+            user32.GetParent.argtypes = [wintypes.HWND]
+            user32.GetParent.restype = wintypes.HWND
+            user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+            user32.MonitorFromWindow.restype = wintypes.HMONITOR
+            user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
+            hwnd = user32.GetParent(window.winfo_id()) or window.winfo_id()
+            monitor = user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+            info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+            if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                rect = info.rcWork
                 return rect.left, rect.top, rect.right, rect.bottom
-        except (AttributeError, OSError):
+            rect = wintypes.RECT()
+            if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):  # SPI_GETWORKAREA
+                return rect.left, rect.top, rect.right, rect.bottom
+        except (AttributeError, OSError, tkinter.TclError):
             pass
     return 0, 0, window.winfo_screenwidth(), window.winfo_screenheight() - 48
 

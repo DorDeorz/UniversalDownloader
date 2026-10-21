@@ -594,3 +594,16 @@ def test_progress_ring_follows_the_download(app):
     app._show_progress(0.42, "42%")
     assert app.progress_bar.get() == pytest.approx(0.42)
     assert app.progress_bar._label.cget("text") == "42%"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the monitor's work area is read from Windows")
+def test_work_area_is_the_windows_monitor():
+    root = tkinter.Tk()
+    try:
+        root.geometry("300x200+50+50")
+        root.update()
+        left, top, right, bottom = ui.work_area(root)
+        assert right - left >= 300 and bottom - top >= 200
+        assert left <= root.winfo_rootx() < right and top <= root.winfo_rooty() < bottom
+    finally:
+        root.destroy()

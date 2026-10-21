@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.2.1",
+    "date": "2026-10-21",
+    "en": [
+      "No changes in the Android app. This version adds a permanent Firefox add-on to the Windows app."
+    ],
+    "tr": [
+      "Android uygulamasında değişiklik yok. Bu sürüm Windows uygulamasına kalıcı bir Firefox eklentisi ekliyor."
+    ]
+  },
+  {
     "version": "1.2.0",
     "date": "2026-10-15",
     "en": [

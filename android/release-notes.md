@@ -1,6 +1,9 @@
-**Orbida for Android**, version 1.2.0 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
+**Orbida for Android**, version 1.2.1 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
 
 Coming from an Android preview (UniversalDownloader or Orbida 0.x)? Uninstall it once: 1.0 has a new app id and signing key. From 1.0 on, the app updates itself (Settings › About › Check for updates).
+
+**New in 1.2.1**
+- No changes in the Android app (the Windows app gets a permanent Firefox add-on).
 
 **New in 1.2.0**
 - Spotify songs are saved as "Artist - Song" with Spotify's title, artist, album and album cover.

@@ -568,7 +568,7 @@ def test_settings_choice_updates_its_row_in_place(tmp_path):
 def test_stage_copies_app_and_shared_modules(tmp_path):
     dest = stage.stage(str(tmp_path / "src"))
     names = set(os.listdir(dest))
-    assert {"main.py", "worker.py", "android_env.py", "layout.py", "whats_new.json",
+    assert {"main.py", "worker.py", "android_env.py", "layout.py", "whats_new.json", "texts_languages.json",
             "locales"} <= names
     assert set(stage.SHARED_MODULES) <= names
     assert "ui.py" not in names and "app_setup.py" not in names
@@ -704,11 +704,13 @@ def test_android_texts_exist_in_every_bundled_language():
         assert code in i18n.LANGUAGES
 
 
-def test_android_texts_fall_back_to_english_and_the_shared_catalog():
+def test_android_texts_fall_back_to_english_and_the_shared_catalog(monkeypatch):
     try:
         i18n.set_language("tr")
         assert texts.t("nav.settings") == "Ayarlar"
         i18n.set_language("de")
+        assert texts.t("nav.settings") == "Einstellungen"
+        monkeypatch.setattr(texts, "_more", {"de": {}})  # a text not translated yet
         assert texts.t("nav.settings") == "Settings"
         assert texts.t("link.analyze") == i18n.tr("link.analyze")  # shared key
         assert texts.t("settings.fragments_hint", count=3).startswith("3 ")
@@ -975,6 +977,28 @@ def test_session_download_can_be_paused_and_resumed():
     session.resume()
     session.wait(5)
     assert not session.busy and seen and seen[0] is session._pause
+
+
+def test_android_texts_exist_in_every_language():
+    import json
+    with open(texts.LANGUAGES_FILE, encoding="utf-8") as f:
+        more = json.load(f)
+    assert set(more) | {"en", "tr"} == set(i18n.LANGUAGES)
+    english = texts.TEXTS["en"]
+    assert set(texts.TEXTS["tr"]) == set(english)
+    for language, catalog in more.items():
+        assert list(catalog) == list(english), language  # same keys, same order
+        for key, text in catalog.items():
+            assert text.strip(), (language, key)
+            assert set(re.findall(r"\{\w+\}", text)) == set(re.findall(r"\{\w+\}", english[key])), (language, key)
+    try:
+        i18n.set_language("de")
+        assert texts.t("settings.wifi_only") == "Nur über WLAN herunterladen"
+        assert texts.t("signin.sign_in", site="Instagram") == "Bei Instagram anmelden"
+        i18n.set_language("ja")
+        assert texts.t("nav.settings") == i18n.tr("top.settings")
+    finally:
+        i18n.set_language("en")
 
 
 def test_reddit_sign_in_texts_exist_in_english_and_turkish():

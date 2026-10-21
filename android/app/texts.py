@@ -1,11 +1,21 @@
 """Texts only the Android app shows (settings, history, about).
 
 The download texts shared with the Windows app come from ``locales/`` via
-:func:`i18n.tr`. These Android-only texts exist in English and Turkish;
-every other language shows the English ones.
+:func:`i18n.tr`. These Android-only texts are written here in English and
+Turkish; the other languages of :data:`i18n.LANGUAGES` are in
+``texts_languages.json`` (read the first time one is shown). A text missing
+there shows in English.
 """
 
+import json
+import logging
+import os
+
 import i18n
+
+_log = logging.getLogger(__name__)
+LANGUAGES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "texts_languages.json")
+_more = None  # language -> {key: text} from LANGUAGES_FILE
 
 TEXTS = {
     "en": {
@@ -303,9 +313,24 @@ TEXTS = {
 }
 
 
+def texts_for(language):
+    """The Android-only texts of ``language`` ({} when there are none)."""
+    global _more
+    if language in TEXTS:
+        return TEXTS[language]
+    if _more is None:
+        try:
+            with open(LANGUAGES_FILE, encoding="utf-8") as f:
+                _more = json.load(f)
+        except (OSError, ValueError) as e:
+            _log.warning("Cannot read %s: %s", LANGUAGES_FILE, e)
+            _more = {}
+    return _more.get(language, {})
+
+
 def t(key, **values):
     """Android-only text in the current language, else English, else the shared catalog."""
-    text = TEXTS.get(i18n.current(), {}).get(key) or TEXTS["en"].get(key)
+    text = texts_for(i18n.current()).get(key) or TEXTS["en"].get(key)
     if text is None:
         return i18n.tr(key, **values)
     return text.format(**values) if values else text

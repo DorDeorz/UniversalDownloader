@@ -73,6 +73,8 @@ jobs:
         id: sign
         if: github.event_name != 'pull_request' && env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != ''
         run: |
+          # A key pasted with a space or a line break is refused (HTTP 401); the real values have none.
+          export AMO_JWT_ISSUER="${AMO_JWT_ISSUER//[[:space:]]/}" AMO_JWT_SECRET="${AMO_JWT_SECRET//[[:space:]]/}"
           set +e
           python firefox_addon.py fetch firefox/Orbida.xpi
           code=$?

@@ -113,6 +113,15 @@ def test_main_needs_the_api_key(monkeypatch, capsys):
     assert "AMO_JWT_ISSUER" in capsys.readouterr().out
 
 
+def test_main_ignores_spaces_around_the_pasted_key(monkeypatch, tmp_path):
+    seen = []
+    monkeypatch.setenv("AMO_JWT_ISSUER", " user:1:2\n")
+    monkeypatch.setenv("AMO_JWT_SECRET", "  abc123 \n")
+    monkeypatch.setattr(firefox_addon, "fetch", lambda path, issuer, secret: seen.append((issuer, secret)))
+    assert firefox_addon.main(["fetch", str(tmp_path / "x.xpi")]) == firefox_addon.NOT_SIGNED
+    assert seen == [("user:1:2", "abc123")]
+
+
 def test_a_signed_copy_of_these_files_passes(tmp_path):
     assert firefox_addon.check(signed_xpi(tmp_path / "a.xpi")) == []
     # The newer COSE signature alone is enough too.

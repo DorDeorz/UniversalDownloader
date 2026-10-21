@@ -140,7 +140,8 @@ def main(argv=None):
         if not problems:
             print(f"{path}: signed by Mozilla, version {__version__}, same files as browser_extension/")
         return 1 if problems else 0
-    issuer, secret = os.environ.get("AMO_JWT_ISSUER"), os.environ.get("AMO_JWT_SECRET")
+    # Keys are often pasted with a stray space or line break; AMO then answers 401.
+    issuer, secret = (os.environ.get(name, "").strip() for name in ("AMO_JWT_ISSUER", "AMO_JWT_SECRET"))
     if not issuer or not secret:
         print("::error::AMO_JWT_ISSUER and AMO_JWT_SECRET are not set")
         return 1

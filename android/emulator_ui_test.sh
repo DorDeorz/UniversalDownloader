@@ -79,7 +79,7 @@ if [ $status -eq 0 ]; then
   done
   login=$(adb logcat -d 2>/dev/null | grep -a -E "UDSELFTEST login|UDCRASH")
   adb logcat -d 2>/dev/null | grep -a -E " python |chromium|WebView|AndroidRuntime" | tail -n 120
-  if grep -a -q "UDSELFTEST login closed signed_in=False" <<<"$login" && ! grep -a -q UDCRASH <<<"$login"; then
+  if grep -a -q "UDSELFTEST login closed site=YouTube signed_in=False" <<<"$login" && ! grep -a -q UDCRASH <<<"$login"; then
     alive "YouTube sign-in page opened and closed"
   else
     echo "FAIL: the YouTube sign-in page did not open and close cleanly"

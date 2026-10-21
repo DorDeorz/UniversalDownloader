@@ -56,6 +56,32 @@ def test_cancel_during_download_removes_partial_files(manager, fake_ydl, tmp_pat
     assert "Removed 3 partial file(s)" in lines
 
 
+def test_failed_download_removes_partial_files(manager, fake_ydl, tmp_path, monkeypatch):
+    part = tmp_path / "Other" / "clip.f137.mp4"  # no extractor_key: "Other"
+    part.parent.mkdir()
+    keep = part.parent / "other.mp4"
+    keep.write_bytes(b"done earlier")
+
+    def process(self, info, download=True):
+        # What yt-dlp leaves when a merge or conversion fails half way.
+        for name in ("clip.f137.mp4.part", "clip.f137.mp4.ytdl", "clip.f251.webm", "clip.temp.mp4"):
+            (part.parent / name).write_bytes(b"x")
+        for hook in self.params["progress_hooks"]:
+            hook({"status": "downloading", "filename": str(part), "tmpfilename": str(part) + ".part",
+                  "downloaded_bytes": 1, "total_bytes": 10})
+        raise RuntimeError("Postprocessing: Conversion failed!")
+
+    monkeypatch.setattr(fake_ydl, "process_ie_result", process)
+    lines = []
+
+    result = manager.download_video("https://youtu.be/abc", {"save_path": str(tmp_path)},
+                                    log_callback=lines.append, cancel_event=threading.Event())
+
+    assert result.status is ItemStatus.FAILED
+    assert sorted(os.listdir(part.parent)) == ["other.mp4"]
+    assert "Removed 4 partial file(s)" in lines
+
+
 def test_cancel_during_postprocessing(manager, fake_ydl, tmp_path, monkeypatch):
     ev = threading.Event()
 

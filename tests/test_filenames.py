@@ -39,6 +39,12 @@ def test_unique_base_avoids_any_extension(tmp_path):
     assert filenames.unique_base(str(tmp_path / "Clip.webm"), "mp3") == str(tmp_path / "Clip (2)")
 
 
+def test_unique_base_ignores_case(tmp_path):
+    # Windows treats title.mp4 and Title.mp4 as the same file.
+    (tmp_path / "clip.mp4").write_bytes(b"x")
+    assert filenames.unique_base(str(tmp_path / "Clip.webm"), "mp4") == str(tmp_path / "Clip (2)")
+
+
 def test_unique_base_ignores_similar_names(tmp_path):
     (tmp_path / "Clip extended.mp4").write_bytes(b"x")
     assert filenames.unique_base(str(tmp_path / "Clip.webm"), "mp4") == str(tmp_path / "Clip")

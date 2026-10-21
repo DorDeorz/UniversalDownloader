@@ -175,7 +175,7 @@ def reusable_info(info):
 
 
 class PartialFiles:
-    """Remembers the files a download touched so a cancel can remove them.
+    """Remembers the files a download touched so a cancel or failure can remove them.
 
     yt-dlp reports its working names through progress hooks; it also leaves
     ``.part``, ``.ytdl`` and ``.part-FragN`` files next to them.
@@ -439,7 +439,8 @@ class DownloadManager:
         container can be reached by remuxing or needs re-encoding.
 
         Setting ``cancel_event`` stops the download at the next progress
-        update; the item is then ``cancelled`` and its partial files removed.
+        update; the item is then ``cancelled``. Partial files are removed
+        for cancelled and failed items alike.
 
         ``info`` is what :meth:`fetch_info` returned for this very video. The
         metadata pass then selects formats from it instead of asking the site
@@ -449,13 +450,20 @@ class DownloadManager:
         title = title or url
         partial = PartialFiles()
 
-        def failed(error):
-            return ItemResult(url, title, ItemStatus.FAILED, error=error)
-
-        def cancelled():
+        def remove_partial_files():
             removed = partial.cleanup()
             if removed and log_callback:
                 log_callback(f"Removed {len(removed)} partial file(s)")
+
+        def failed(error):
+            # A failed item leaves nothing behind either: half-downloaded
+            # parts would only fill the disk, and a retry picks a free name
+            # anyway (filenames.unique_base).
+            remove_partial_files()
+            return ItemResult(url, title, ItemStatus.FAILED, error=error)
+
+        def cancelled():
+            remove_partial_files()
             return ItemResult(url, title, ItemStatus.CANCELLED, error='Cancelled by user')
 
         def is_cancelled():

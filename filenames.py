@@ -77,12 +77,14 @@ def unique_base(prepared_path, final_ext=None):
     Any extension counts, not only the final one: yt-dlp first downloads to
     the source extension (and converts afterwards), and it would reuse an
     existing ``Title.mp4`` as "already downloaded" when making ``Title.mp3``.
+    Case is ignored, as Windows does.
     """
     folder, name = os.path.split(os.path.splitext(prepared_path)[0])
-    existing = _existing_names(folder)
+    # Windows file names ignore case: "title.mp4" is taken for "Title".
+    existing = {n.casefold() for n in _existing_names(folder)}
 
     def taken(stem):
-        prefix = stem + "."
+        prefix = stem.casefold() + "."
         return any(n.startswith(prefix) for n in existing)
 
     stem, n = name, 2

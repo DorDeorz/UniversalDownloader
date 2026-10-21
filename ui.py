@@ -2001,6 +2001,8 @@ class App(ctk.CTk):
         if len(links) > 1:
             self.queue_links(links)
             return
+        if len(links) == 1 and len(text.split()) > 1:
+            text = links[0]  # "Watch this: https://..." pastes only the link
         self.url_entry.delete(0, "end")
         self.url_entry.insert(0, text)
         self._on_url_changed()

@@ -52,6 +52,7 @@
  "activity.title": "アクティビティ",
  "activity.welcome": "ようこそ！リンクを貼り付けて「解析」を押してください。",
  "log.fetching": "情報を取得中...",
+ "log.analysis_cancelled": "解析をキャンセルしました",
  "log.video": "動画: {title}",
  "log.playlist": "プレイリスト: {title}（ダウンロード可能: {count}、スキップ: {skipped}）",
  "log.skipped_entry": "スキップ: {title}（{reason}）",

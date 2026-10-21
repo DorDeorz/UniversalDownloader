@@ -52,6 +52,7 @@
  "activity.title": "AKTIVITÄT",
  "activity.welcome": "Willkommen! Link einfügen und auf Analysieren klicken.",
  "log.fetching": "Informationen werden abgerufen...",
+ "log.analysis_cancelled": "Analyse abgebrochen",
  "log.video": "Video: {title}",
  "log.playlist": "Playlist: {title} (herunterladbar: {count}, übersprungen: {skipped})",
  "log.skipped_entry": "Übersprungen: {title} ({reason})",

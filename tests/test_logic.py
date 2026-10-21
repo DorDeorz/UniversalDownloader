@@ -32,6 +32,35 @@ def test_fetch_info_turns_exceptions_into_error_dict(manager, fake_ydl):
     assert manager.fetch_info("https://youtu.be/abc") == {"error": "boom", "error_type": "RuntimeError"}
 
 
+def test_cancelled_analysis_stops_at_the_next_page(manager, fake_ydl, monkeypatch):
+    import threading
+    cancel = threading.Event()
+    pages = []
+
+    def extract_info(self, url, download=False):
+        logger = self.params["logger"]
+        for page in range(1, 100):  # a long playlist, read page by page
+            pages.append(page)
+            if page == 3:
+                cancel.set()  # the user presses Cancel
+            logger.debug(f"[youtube:tab] Downloading page {page}")
+        return {"title": "never"}
+
+    monkeypatch.setattr(fake_ydl, "extract_info", extract_info)
+    result = manager.fetch_info("https://www.youtube.com/playlist?list=PL1", cancel_event=cancel)
+    assert result["cancelled"] and result["error"] == "Cancelled by user"
+    assert pages == [1, 2, 3]
+
+
+def test_cancelled_spotify_analysis_reads_no_more_pages(manager, monkeypatch):
+    import threading
+    cancel = threading.Event()
+    cancel.set()
+    monkeypatch.setattr(logic, "_read_page", lambda *a, **kw: pytest.fail("no page after Cancel"))
+    result = manager.fetch_info("https://open.spotify.com/track/abc", cancel_event=cancel)
+    assert result["cancelled"]
+
+
 # --- download_video -----------------------------------------------------
 
 def _download(manager, options, url="https://youtu.be/abc"):

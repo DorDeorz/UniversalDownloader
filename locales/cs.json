@@ -52,6 +52,7 @@
  "activity.title": "AKTIVITA",
  "activity.welcome": "Vítejte! Vložte odkaz a stiskněte Analyzovat.",
  "log.fetching": "Načítání informací...",
+ "log.analysis_cancelled": "Analýza zrušena",
  "log.video": "Video: {title}",
  "log.playlist": "Playlist: {title} (ke stažení: {count}, přeskočeno: {skipped})",
  "log.skipped_entry": "Přeskočeno: {title} ({reason})",

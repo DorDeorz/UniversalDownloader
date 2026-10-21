@@ -52,6 +52,7 @@
  "activity.title": "AKTIVITET",
  "activity.welcome": "Velkommen! Indsæt et link, og tryk på Analysér.",
  "log.fetching": "Henter oplysninger...",
+ "log.analysis_cancelled": "Analysen blev annulleret",
  "log.video": "Video: {title}",
  "log.playlist": "Playliste: {title} (kan downloades: {count}, sprunget over: {skipped})",
  "log.skipped_entry": "Sprunget over: {title} ({reason})",

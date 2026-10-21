@@ -52,6 +52,7 @@
  "activity.title": "ACTIVITEIT",
  "activity.welcome": "Welkom! Plak een link en klik op Analyseren.",
  "log.fetching": "Informatie ophalen...",
+ "log.analysis_cancelled": "Analyse geannuleerd",
  "log.video": "Video: {title}",
  "log.playlist": "Afspeellijst: {title} (downloadbaar: {count}, overgeslagen: {skipped})",
  "log.skipped_entry": "Overgeslagen: {title} ({reason})",

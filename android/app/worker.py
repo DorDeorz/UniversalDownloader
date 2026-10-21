@@ -83,6 +83,12 @@ class Session:
     def cancel(self):
         self._cancel.set()
 
+    def cancel_analysis(self):
+        """Drop the running analysis at once: it stops at the next page it
+        reads and posts nothing, and a new job can start right away."""
+        self._cancel.set()
+        self._thread = None
+
     def wait(self, timeout=None):
         if self._thread is not None:
             self._thread.join(timeout)
@@ -99,17 +105,24 @@ class Session:
         return self._start(self._analyze, url)
 
     def _analyze(self, url, cancel):
+        def post(kind, **payload):
+            if not cancel.is_set():  # a cancelled analysis posts nothing
+                self.events.post(kind, **payload)
         try:
-            info = self.manager.fetch_info(url, log_callback=self._log)
+            info = self.manager.fetch_info(url, log_callback=self._log, cancel_event=cancel)
+            if cancel.is_set():
+                return
             if info.get("error"):
-                self.events.post(events.ANALYSIS_FAILED, message=info["error"])
+                post(events.ANALYSIS_FAILED, message=info["error"])
                 return
             analysis = playlist.analyze(info, url)
+            if cancel.is_set():
+                return
             if not analysis.is_playlist and analysis.items and info.get("formats"):
                 self._analysed = (time.monotonic(), analysis.items[0].url, info)
-            self.events.post(events.ANALYSIS_DONE, analysis=analysis, url=url)
+            post(events.ANALYSIS_DONE, analysis=analysis, url=url)
         except Exception as e:  # never let the worker die silently
-            self.events.post(events.ANALYSIS_FAILED, message=describe_error(e))
+            post(events.ANALYSIS_FAILED, message=describe_error(e))
 
     # --- Download -----------------------------------------------------------------
 

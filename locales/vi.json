@@ -52,6 +52,7 @@
  "activity.title": "HOẠT ĐỘNG",
  "activity.welcome": "Xin chào! Dán liên kết rồi nhấn Phân tích.",
  "log.fetching": "Đang lấy thông tin...",
+ "log.analysis_cancelled": "Đã hủy phân tích",
  "log.video": "Video: {title}",
  "log.playlist": "Danh sách phát: {title} (có thể tải: {count}, bỏ qua: {skipped})",
  "log.skipped_entry": "Bỏ qua: {title} ({reason})",

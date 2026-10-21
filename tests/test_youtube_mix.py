@@ -34,7 +34,7 @@ def app(monkeypatch, tmp_path):
             super().__init__(tools)
             self.analyzed = []
 
-        def fetch_info(self, url, log_callback=None):
+        def fetch_info(self, url, log_callback=None, cancel_event=None):
             self.analyzed.append(url)
             if "list=RD" in url:
                 return {"_type": "playlist", "title": "Mix", "entries": [

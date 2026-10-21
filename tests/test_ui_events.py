@@ -30,7 +30,7 @@ class FakeManager:
         self.downloaded = []
         self.threads = set()
 
-    def fetch_info(self, url):
+    def fetch_info(self, url, cancel_event=None):
         self.threads.add(threading.get_ident())
         if self.raise_on_fetch:
             raise self.raise_on_fetch
@@ -190,7 +190,7 @@ class InfoManager(FakeManager):
 def test_download_reuses_what_analysis_fetched():
     info = {"title": "clip", "webpage_url": "https://youtu.be/a", "formats": [{"format_id": "18"}]}
     manager = InfoManager()
-    manager.fetch_info = lambda url: dict(info)
+    manager.fetch_info = lambda url, cancel_event=None: dict(info)
     side = WorkerSide(manager)
     run_in_thread(side.run_analysis, "https://youtu.be/a")
     run_in_thread(side.run_queue, [{"url": "https://youtu.be/a", "title": "clip"}], {})

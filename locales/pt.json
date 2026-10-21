@@ -52,6 +52,7 @@
  "activity.title": "ATIVIDADE",
  "activity.welcome": "Bem-vindo! Cole um link e clique em Analisar.",
  "log.fetching": "Obtendo informações...",
+ "log.analysis_cancelled": "Análise cancelada",
  "log.video": "Vídeo: {title}",
  "log.playlist": "Playlist: {title} (disponíveis para download: {count}, ignorados: {skipped})",
  "log.skipped_entry": "Ignorado: {title} ({reason})",

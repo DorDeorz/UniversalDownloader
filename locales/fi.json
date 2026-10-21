@@ -52,6 +52,7 @@
  "activity.title": "TAPAHTUMAT",
  "activity.welcome": "Tervetuloa! Liitä linkki ja paina Analysoi.",
  "log.fetching": "Haetaan tietoja...",
+ "log.analysis_cancelled": "Analyysi peruttiin",
  "log.video": "Video: {title}",
  "log.playlist": "Soittolista: {title} (ladattavissa: {count}, ohitettu: {skipped})",
  "log.skipped_entry": "Ohitettu: {title} ({reason})",

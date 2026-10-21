@@ -52,6 +52,7 @@
  "activity.title": "ACTIVITY",
  "activity.welcome": "Welcome! Paste a link and press Analyze.",
  "log.fetching": "Fetching info...",
+ "log.analysis_cancelled": "Analysis cancelled",
  "log.video": "Video: {title}",
  "log.playlist": "Playlist: {title} ({count} downloadable, {skipped} skipped)",
  "log.skipped_entry": "Skipped: {title} ({reason})",

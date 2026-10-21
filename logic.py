@@ -27,9 +27,15 @@ class YtDlpLogger:
     logger; debug/info chatter only goes to the module logger.
     """
 
-    def __init__(self, log_callback=None):
+    def __init__(self, log_callback=None, cancel_event=None):
         self.log_callback = log_callback
+        self.cancel_event = cancel_event
         self.errors = []
+
+    def _check_cancel(self):
+        # yt-dlp reports every page it reads; a cancelled analysis stops at the next one.
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
 
     def _emit(self, level, prefix, msg):
         msg = strip_ansi(msg)
@@ -40,9 +46,11 @@ class YtDlpLogger:
     def debug(self, msg):
         # yt-dlp routes its normal screen output through debug() as well.
         _log.debug(msg)
+        self._check_cancel()
 
     def info(self, msg):
         _log.info(msg)
+        self._check_cancel()
 
     def warning(self, msg):
         self._emit(logging.WARNING, "Warning: ", msg)
@@ -445,17 +453,34 @@ class DownloadManager:
                 _log.warning("curl_cffi is missing; TikTok and some other sites may refuse downloads")
         return self.tools
 
-    def fetch_info(self, url, log_callback=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None):
         """ 
         Playlist veya video bilgisini çeker.
         Hata olursa None döndürmez, 'error' ve 'error_type' anahtarları olan bir sözlük döndürür.
+
+        Setting ``cancel_event`` stops the analysis at the next page yt-dlp
+        (or the Spotify reader) asks for; the result is then
+        ``{'error': 'Cancelled by user', 'cancelled': True}``.
         """
+        cancelled = {'error': 'Cancelled by user', 'error_type': 'DownloadCancelled', 'cancelled': True}
+
+        def is_cancelled():
+            return cancel_event is not None and cancel_event.is_set()
+
+        def read_page(page, headers=None, data=None):
+            if is_cancelled():
+                raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
+            return _read_page(page, ydl_opts, headers, data)
+
         ydl_opts = base_ydl_options(log_callback)
         try:
-            info = spotify.fetch_info(
-                url, lambda page, headers=None, data=None: _read_page(page, ydl_opts, headers, data))
+            info = spotify.fetch_info(url, read_page)
         except Exception as e:
+            if is_cancelled():
+                return cancelled
             return {'error': describe_error(e), 'error_type': type(e).__name__}
+        if is_cancelled():
+            return cancelled
         if info is not None:  # a Spotify song or list: songs to search for on YouTube
             if info.get('partial'):
                 message = f"Spotify: only the first {spotify.EMBED_LIMIT} songs could be read ({info['partial']})"
@@ -470,16 +495,20 @@ class DownloadManager:
 
         attempts = self._client_attempts()
         for clients in attempts:
-            logger = YtDlpLogger(log_callback)
+            logger = YtDlpLogger(log_callback, cancel_event)
             ydl_opts['logger'] = logger
             try:
                 with yt_dlp.YoutubeDL(with_player_clients(ydl_opts, clients)) as ydl:
                     info = ydl.extract_info(url, download=False)
             except Exception as e:
+                if is_cancelled():
+                    return cancelled
                 if self._retry_bot_check(describe_error(e), clients, attempts, log_callback):
                     continue
                 return {'error': explain_site_error(describe_error(e)), 'error_type': type(e).__name__}
 
+            if is_cancelled():
+                return cancelled
             if info is None:
                 # ignoreerrors turned the failure into None; keep yt-dlp's reason.
                 reason = logger.errors[-1] if logger.errors else 'Content is private or unavailable'

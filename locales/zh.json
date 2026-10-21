@@ -52,6 +52,7 @@
  "activity.title": "活动",
  "activity.welcome": "欢迎！粘贴链接后点击“解析”。",
  "log.fetching": "正在获取信息...",
+ "log.analysis_cancelled": "已取消分析",
  "log.video": "视频：{title}",
  "log.playlist": "播放列表：{title}（可下载：{count}，已跳过：{skipped}）",
  "log.skipped_entry": "已跳过：{title}（{reason}）",

@@ -52,6 +52,7 @@
  "activity.title": "AKTIVITET",
  "activity.welcome": "Välkommen! Klistra in en länk och tryck på Analysera.",
  "log.fetching": "Hämtar information...",
+ "log.analysis_cancelled": "Analysen avbröts",
  "log.video": "Video: {title}",
  "log.playlist": "Spellista: {title} (nedladdningsbara: {count}, överhoppade: {skipped})",
  "log.skipped_entry": "Överhoppad: {title} ({reason})",

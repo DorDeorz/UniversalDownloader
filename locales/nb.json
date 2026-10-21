@@ -52,6 +52,7 @@
  "activity.title": "AKTIVITET",
  "activity.welcome": "Velkommen! Lim inn en lenke og trykk Analyser.",
  "log.fetching": "Henter informasjon...",
+ "log.analysis_cancelled": "Analysen ble avbrutt",
  "log.video": "Video: {title}",
  "log.playlist": "Spilleliste: {title} (kan lastes ned: {count}, hoppet over: {skipped})",
  "log.skipped_entry": "Hoppet over: {title} ({reason})",

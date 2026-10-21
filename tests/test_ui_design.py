@@ -51,7 +51,7 @@ def test_invalid_link_is_rejected_without_starting_a_job(app, text):
 @needs_display
 def test_link_without_scheme_is_completed(app, monkeypatch):
     started = []
-    monkeypatch.setattr(app, "_start_job", lambda kind, target, *args: started.append(args) or False)
+    monkeypatch.setattr(app, "_start_job", lambda kind, target, *args, **kw: started.append(args) or False)
     app.url_entry.insert(0, "youtube.com/watch?v=abc")
     app.start_analysis_thread()
     assert app.url_entry.get() == "https://youtube.com/watch?v=abc"

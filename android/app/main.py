@@ -266,6 +266,7 @@ class UniversalDownloaderApp(MDApp):
         self.chosen = []          # the playlist entries picked for download
         self.link_queue = []      # links added while a download runs
         self._from_queue = False  # the running analysis came from link_queue
+        self._analysis_dropped = False  # a cancelled analysis's late result is ignored
         self._mix = None  # the Mix link a song being analyzed was opened in
         self.mix_url = None  # offered on the "Download the Mix" button
         self._cancelled = False
@@ -799,6 +800,7 @@ class UniversalDownloaderApp(MDApp):
             self._show_media(self.tr(e.key, **e.values), "", "alert-circle-outline")
             return
         if started:
+            self._analysis_dropped = False
             self.job = "analyze"
             self.analysis = None
             # A song opened inside a YouTube Mix is analyzed alone; the Mix is offered afterwards.
@@ -806,8 +808,7 @@ class UniversalDownloaderApp(MDApp):
             self.mix_url = None
             _show(self.ids.btn_pick, False)
             _show(self.ids.btn_mix, False)
-            self.set_busy(True)
-            self.ids.btn_download.disabled = True
+            self.set_busy(True)  # Download turns into Cancel
             self._show_media(self.tr("link.reading"), "", "timer-sand")
             self.log(self.tr("log.fetching"))
 
@@ -865,14 +866,18 @@ class UniversalDownloaderApp(MDApp):
             self.ids[name].disabled = busy and not queueing
         self.ids.analyze_text.text = self.tr("queue.add" if queueing else "link.analyze")
         self.ids.analyze_icon.icon = "playlist-plus" if queueing else "magnify"
+        # Downloads and analyses can be cancelled (a long playlist takes a while to read).
+        cancellable = busy and self.job in ("download", "analyze")
         self.ids.download_icon.icon = "close" if busy else "download"
-        self.ids.download_text.text = self.tr("action.cancel" if busy and self.job == "download"
-                                              else "action.download")
+        self.ids.download_text.text = self.tr("action.cancel" if cancellable else "action.download")
         self.ids.btn_download.style = "tonal" if busy else "filled"
-        self.ids.btn_download.disabled = busy and self.job != "download"
+        self.ids.btn_download.disabled = busy and not cancellable
         self._sync_background()
 
     def download(self):
+        if self.job == "analyze":
+            self.cancel_analysis()
+            return
         if self.job == "download":
             self._cancelled = True
             self.session.cancel()
@@ -1042,7 +1047,26 @@ class UniversalDownloaderApp(MDApp):
 
     # --- Events (main thread) -----------------------------------------------------
 
+    def cancel_analysis(self):
+        """Stop waiting for the analysis; what it still sends is dropped."""
+        self.session.cancel_analysis()
+        self._analysis_dropped = True
+        self.job = None
+        self._mix = None
+        self._from_queue = False
+        self.clear_link_queue()  # Cancel stops the whole queue
+        self.set_busy(False)
+        self.ids.btn_download.disabled = True
+        self._show_media(self.tr("log.analysis_cancelled"), "", "close-circle-outline")
+        self.log(self.tr("log.analysis_cancelled"))
+
+    def _dropped(self):
+        """True for the result of a cancelled analysis that was already on its way."""
+        return self.job is None and self._analysis_dropped
+
     def _on_analysis_done(self, analysis, url):
+        if self._dropped():
+            return
         self.job = None
         mix, self._mix = self._mix, None
         self.analysis = analysis
@@ -1116,6 +1140,8 @@ class UniversalDownloaderApp(MDApp):
             self.analyze(keep_mix=True)
 
     def _on_analysis_failed(self, message):
+        if self._dropped():
+            return
         self.job = None
         self._mix = None
         self.set_busy(False)

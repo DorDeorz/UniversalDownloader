@@ -52,6 +52,7 @@
  "activity.title": "TEVÉKENYSÉG",
  "activity.welcome": "Üdvözöljük! Illesszen be egy linket, és nyomja meg az Elemzés gombot.",
  "log.fetching": "Információk lekérése...",
+ "log.analysis_cancelled": "Elemzés megszakítva",
  "log.video": "Videó: {title}",
  "log.playlist": "Lejátszási lista: {title} (letölthető: {count}, kihagyva: {skipped})",
  "log.skipped_entry": "Kihagyva: {title} ({reason})",

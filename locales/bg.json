@@ -52,6 +52,7 @@
  "activity.title": "ДЕЙНОСТ",
  "activity.welcome": "Добре дошли! Поставете връзка и натиснете „Анализ“.",
  "log.fetching": "Извличане на информация...",
+ "log.analysis_cancelled": "Анализът е отменен",
  "log.video": "Видео: {title}",
  "log.playlist": "Плейлист: {title} (за изтегляне: {count}, пропуснати: {skipped})",
  "log.skipped_entry": "Пропуснато: {title} ({reason})",

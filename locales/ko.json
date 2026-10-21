@@ -52,6 +52,7 @@
  "activity.title": "활동",
  "activity.welcome": "환영합니다! 링크를 붙여넣고 분석을 누르세요.",
  "log.fetching": "정보를 가져오는 중...",
+ "log.analysis_cancelled": "분석이 취소되었습니다",
  "log.video": "동영상: {title}",
  "log.playlist": "재생목록: {title} (다운로드 가능: {count}, 건너뜀: {skipped})",
  "log.skipped_entry": "건너뜀: {title} ({reason})",

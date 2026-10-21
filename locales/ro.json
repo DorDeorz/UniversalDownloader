@@ -52,6 +52,7 @@
  "activity.title": "ACTIVITATE",
  "activity.welcome": "Bun venit! Lipiți un link și apăsați Analizează.",
  "log.fetching": "Se obțin informațiile...",
+ "log.analysis_cancelled": "Analiză anulată",
  "log.video": "Videoclip: {title}",
  "log.playlist": "Playlist: {title} (descărcabile: {count}, omise: {skipped})",
  "log.skipped_entry": "Omis: {title} ({reason})",

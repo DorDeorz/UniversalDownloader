@@ -52,6 +52,7 @@
  "activity.title": "ATTIVITÀ",
  "activity.welcome": "Benvenuto! Incolla un link e premi Analizza.",
  "log.fetching": "Recupero informazioni...",
+ "log.analysis_cancelled": "Analisi annullata",
  "log.video": "Video: {title}",
  "log.playlist": "Playlist: {title} (scaricabili: {count}, saltati: {skipped})",
  "log.skipped_entry": "Saltato: {title} ({reason})",

@@ -52,6 +52,7 @@
  "activity.title": "ΔΡΑΣΤΗΡΙΟΤΗΤΑ",
  "activity.welcome": "Καλώς ορίσατε! Επικολλήστε έναν σύνδεσμο και πατήστε Ανάλυση.",
  "log.fetching": "Λήψη πληροφοριών...",
+ "log.analysis_cancelled": "Η ανάλυση ακυρώθηκε",
  "log.video": "Βίντεο: {title}",
  "log.playlist": "Λίστα αναπαραγωγής: {title} (διαθέσιμα για λήψη: {count}, παραλείφθηκαν: {skipped})",
  "log.skipped_entry": "Παραλείφθηκε: {title} ({reason})",

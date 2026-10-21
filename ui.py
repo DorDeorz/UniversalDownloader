@@ -2053,8 +2053,10 @@ class App(ctk.CTk):
     def is_busy(self):
         return self._job_kind is not None
 
-    def _start_job(self, kind, target, *args):
+    def _start_job(self, kind, target, *args, with_cancel=False):
         """Start a worker thread unless another job is running.
+
+        ``with_cancel`` passes the job's cancel event to ``target`` as its last argument.
 
         Returns False (and starts nothing) when a job is already active, so a
         second click cannot run two workers against the same state.
@@ -2064,6 +2066,8 @@ class App(ctk.CTk):
             return False
         self._job_kind = kind
         self._cancel_event = threading.Event()
+        if with_cancel:
+            args = (*args, self._cancel_event)
         self._set_controls_busy(True)
         if kind == "download" and self.settings.keep_awake:
             app_setup.keep_awake(True)
@@ -2092,9 +2096,9 @@ class App(ctk.CTk):
         trim_state = "normal" if (not busy and self.chk_trim.get()) else "disabled"
         self.ent_start.configure(state=trim_state)
         self.ent_end.configure(state=trim_state)
-        # Only downloads can be cancelled; analysis is a single request
-        # bounded by the network timeout.
-        self.btn_cancel.configure(state="normal" if busy and self._job_kind == "download" else "disabled")
+        # Downloads and analyses can be cancelled (a long playlist takes a while to read).
+        self.btn_cancel.configure(state="normal" if busy and self._job_kind in ("download", "analysis")
+                                  else "disabled")
         self._live(self.btn_cancel, lambda: tr("action.cancel"))
         set_primary_state(self.btn_analyze, "normal" if queueing else state)
         self._live(self.btn_analyze, lambda: tr("queue.add") if queueing else tr("link.analyze"))
@@ -2127,13 +2131,31 @@ class App(ctk.CTk):
         self._live(self.btn_retry, lambda: tr("action.retry_n", count=count) if count else tr("action.retry"))
 
     def cancel_job(self):
-        """Ask the running download to stop; results arrive via job_done."""
+        """Ask the running download to stop (results arrive via job_done), or drop the analysis."""
+        if self._job_kind == "analysis" and not self._cancel_event.is_set():
+            self._cancel_analysis()
+            return
         if self._job_kind != "download" or self._cancel_event.is_set():
             return
         self._cancel_event.set()
         self.btn_cancel.configure(state="disabled")
         self._live(self.btn_cancel, lambda: tr("action.cancelling"))
         self._append_log(tr("action.cancelling"))
+
+    def _cancel_analysis(self):
+        """Stop waiting for the analysis at once.
+
+        The worker stops at the next page it reads (logic.fetch_info); what
+        it still posts is dropped, so a new analysis can start right away.
+        """
+        self._cancel_event.set()
+        self._append_log(tr("log.analysis_cancelled"))
+        self._live(self.btn_analyze, lambda: tr("link.analyze"))
+        self._show_media(lambda: tr("log.analysis_cancelled"), MUTED)
+        self._mix = None
+        self._from_queue = False
+        self.clear_link_queue()  # Cancel stops the whole queue
+        self._end_job()
 
     def retry_failed(self):
         items = self._failed_items()
@@ -2213,7 +2235,7 @@ class App(ctk.CTk):
         self.set_queue([])
         self._show_progress(0, "0%")
         self._live(self.lbl_item, lambda: tr("progress.ready"))
-        if self._start_job("analysis", self.run_analysis, url):
+        if self._start_job("analysis", self.run_analysis, url, with_cancel=True):
             self._live(self.btn_analyze, lambda: tr("link.checking"))
             self._show_media(lambda: tr("link.reading"), MUTED)
     def run_tool_check(self):
@@ -2235,27 +2257,46 @@ class App(ctk.CTk):
         else:
             self._set_status(lambda: tr("top.ffmpeg_missing"), DANGER)
             messagebox.showerror(tr("top.ffmpeg_missing"), tr("ffmpeg.body", error=status.error), parent=self)
-    def run_analysis(self, url):
-        """Worker thread: fetch info and post the result; no widget access."""
+    def run_analysis(self, url, cancel=None):
+        """Worker thread: fetch info and post the result; no widget access.
+
+        ``cancel`` is the job's cancel event (set by Cancel); a cancelled
+        analysis posts nothing.
+        """
+        def post(kind, **payload):
+            if cancel is None:
+                self.events.post(kind, **payload)
+            elif not cancel.is_set():
+                self.events.post(kind, job=cancel, **payload)
         try:
             self.log(tr("log.fetching"))
-            info = self.manager.fetch_info(url)
+            info = self.manager.fetch_info(url, cancel_event=cancel)
+            if cancel is not None and cancel.is_set():
+                return
             if info is None:
-                self.events.post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
+                post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
             elif 'error' in info:
                 # A Reddit post that needs a sign-in also offers the browser's (offer_reddit_sign_in).
                 sign_in = {'sign_in': True} if info['error'] == logic.REDDIT_SIGN_IN_OFF else {}
-                self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
+                post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
                                  **sign_in)
             else:
                 analysis = playlist.analyze(info, url)
+                if cancel is not None and cancel.is_set():
+                    return
                 if not analysis.is_playlist and analysis.items and info.get('formats'):
                     # Its download starts from this information (see _known_info).
                     self._analysed = (time.monotonic(), analysis.items[0].url, info)
-                self.events.post(events.ANALYSIS_DONE, analysis=analysis, url=url)
+                post(events.ANALYSIS_DONE, analysis=analysis, url=url)
         except Exception as e:
-            self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
-    def _on_analysis_failed(self, message, sign_in=False):
+            post(events.ANALYSIS_FAILED, message=f"Error: {e}")
+    def _stale(self, job):
+        """True for an event of an analysis that was cancelled (or replaced)."""
+        return job is not None and (job.is_set() or job is not self._cancel_event)
+
+    def _on_analysis_failed(self, message, sign_in=False, job=None):
+        if self._stale(job):
+            return
         self._append_log(message)
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._show_media(lambda: message, DANGER)
@@ -2277,7 +2318,9 @@ class App(ctk.CTk):
             self.start_analysis_thread()
         else:
             messagebox.showinfo(tr("reddit.ask_title"), status, parent=self)
-    def _on_analysis_done(self, analysis, url):
+    def _on_analysis_done(self, analysis, url, job=None):
+        if self._stale(job):
+            return
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._end_job()
         self._describe_analysis(analysis)

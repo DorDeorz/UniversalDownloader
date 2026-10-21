@@ -52,6 +52,7 @@
  "activity.title": "ETKİNLİK",
  "activity.welcome": "Hoş geldiniz! Bir bağlantı yapıştırın ve Analiz et'e basın.",
  "log.fetching": "Bilgiler alınıyor...",
+ "log.analysis_cancelled": "Analiz iptal edildi",
  "log.video": "Video: {title}",
  "log.playlist": "Oynatma listesi: {title} (indirilebilir: {count}, atlanan: {skipped})",
  "log.skipped_entry": "Atlandı: {title} ({reason})",

@@ -52,6 +52,7 @@
  "activity.title": "ЖУРНАЛ",
  "activity.welcome": "Вітаємо! Вставте посилання й натисніть «Аналіз».",
  "log.fetching": "Отримання інформації...",
+ "log.analysis_cancelled": "Аналіз скасовано",
  "log.video": "Відео: {title}",
  "log.playlist": "Плейлист: {title} (доступно для завантаження: {count}, пропущено: {skipped})",
  "log.skipped_entry": "Пропущено: {title} ({reason})",

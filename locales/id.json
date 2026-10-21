@@ -52,6 +52,7 @@
  "activity.title": "AKTIVITAS",
  "activity.welcome": "Selamat datang! Tempel tautan lalu tekan Analisis.",
  "log.fetching": "Mengambil info...",
+ "log.analysis_cancelled": "Analisis dibatalkan",
  "log.video": "Video: {title}",
  "log.playlist": "Playlist: {title} (dapat diunduh: {count}, dilewati: {skipped})",
  "log.skipped_entry": "Dilewati: {title} ({reason})",

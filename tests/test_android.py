@@ -203,7 +203,7 @@ class FakeManager:
         self.calls = []
         self.infos = []
 
-    def fetch_info(self, url, log_callback=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None):
         log_callback("fetching")
         return self.info
 
@@ -246,6 +246,29 @@ def test_session_reports_analysis_errors():
     session.analyze("https://example.com/v")
     session.wait(5)
     assert _drain(queue)[-1] == (events.ANALYSIS_FAILED, {"message": "Private video"})
+
+
+def test_session_analysis_can_be_cancelled():
+    import threading
+    release = threading.Event()
+
+    class Slow(FakeManager):
+        def fetch_info(self, url, log_callback=None, cancel_event=None):
+            self.cancel_event = cancel_event
+            release.wait(5)
+            return self.info
+    queue = events.EventQueue()
+    manager = Slow()
+    session = worker.Session(manager, queue)
+    session.analyze("https://example.com/list")
+    session.cancel_analysis()
+    assert not session.busy  # a new job may start at once
+    assert session.analyze("https://example.com/next")
+    release.set()
+    session.wait(5)
+    assert manager.cancel_event is not None
+    done = [p for kind, p in _drain(queue) if kind == events.ANALYSIS_DONE]
+    assert [p["url"] for p in done] == ["https://example.com/next"]  # nothing from the cancelled one
 
 
 def test_session_rejects_bad_links_before_any_work():
@@ -1508,6 +1531,24 @@ def probe(*_):
     app.session = real_session
     app.job = None
     app.set_busy(False)
+    # An analysis is cancelled with the Download button (it reads Cancel meanwhile).
+    class Reading:
+        dropped = False
+        def analyze(self, text, keep_mix=False):
+            return True
+        def cancel_analysis(self):
+            self.dropped = True
+    real_session, app.session = app.session, Reading()
+    app.ids.url.text = "https://www.youtube.com/playlist?list=PLlong"
+    app.analyze()
+    result["cancel_offered"] = (app.ids.download_text.text == app.tr("action.cancel")
+                                and not app.ids.btn_download.disabled)
+    app.download()
+    result["analysis_cancelled"] = app.session.dropped and app.job is None
+    result["cancel_shown"] = app.ids.media_title.text == app.tr("log.analysis_cancelled")
+    app._on_analysis_done(AnalysisResult(title="Late", items=[QueueItem(url="https://e.com/l", title="Late")]), "")
+    result["late_dropped"] = app.analysis is None
+    app.session = real_session
     # The trim fields' hints in Vietnamese keep both words.
     app._change_language("vi")
     Clock.schedule_once(hints, 0.5)
@@ -1550,3 +1591,4 @@ def test_back_key_shared_link_low_space_and_trim_hints(tmp_path):
     assert r["field_kept"] == "https://example.com/typed"
     assert r["low_space_logged"] and r["download_started"]
     assert r["hints"] == [["Bắt đầu"], ["Kết thúc"]]
+    assert r["cancel_offered"] and r["analysis_cancelled"] and r["cancel_shown"] and r["late_dropped"]

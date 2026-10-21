@@ -52,6 +52,7 @@
  "activity.title": "АКТИВНОСТЬ",
  "activity.welcome": "Добро пожаловать! Вставьте ссылку и нажмите «Анализ».",
  "log.fetching": "Получение информации...",
+ "log.analysis_cancelled": "Анализ отменён",
  "log.video": "Видео: {title}",
  "log.playlist": "Плейлист: {title} (доступно для загрузки: {count}, пропущено: {skipped})",
  "log.skipped_entry": "Пропущено: {title} ({reason})",

@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.2.2",
+    "date": "2026-10-21",
+    "en": [
+      "NSFW Reddit posts: Reddit shows them only to signed-in accounts. Settings › Reddit › Sign in to Reddit (optional; also offered when Reddit refuses a post). The sign-in stays on this phone.",
+      "A song opened inside a YouTube Mix downloads alone; the \"Download the Mix\" button gets the whole Mix.",
+      "SponsorBlock: Settings can cut sponsor segments out of YouTube videos (off by default)."
+    ],
+    "tr": [
+      "NSFW Reddit gönderileri: Reddit bunları yalnızca giriş yapmış hesaplara gösterir. Ayarlar › Reddit › Reddit'e giriş yap (isteğe bağlı; Reddit bir gönderiyi reddettiğinde de önerilir). Giriş yalnızca bu telefonda kalır.",
+      "YouTube Mix'inde açılan bir şarkı tek başına iner; \"Mix'i indir\" düğmesi Mix'in tamamını indirir.",
+      "SponsorBlock: Ayarlar'dan YouTube videolarındaki sponsor bölümleri kesilebilir (varsayılan olarak kapalı)."
+    ]
+  },
+  {
     "version": "1.2.1",
     "date": "2026-10-21",
     "en": [

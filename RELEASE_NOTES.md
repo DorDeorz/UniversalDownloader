@@ -1,13 +1,39 @@
-**Orbida 1.2.1** makes the browser extension stay in Firefox. This release
-holds both apps and the Firefox add-on:
+**Orbida 1.2.2** downloads NSFW Reddit posts, handles YouTube Mix links,
+cuts sponsors with SponsorBlock and tells you when downloads finish. This
+release holds both apps and the Firefox add-on:
 
-- **Windows:** `Orbida-Setup-1.2.1.exe`, for Windows 10 or 11 (64-bit).
-- **Android:** `Orbida-1.2.1.apk`, for 64-bit ARM phones with Android 7 or newer.
-- **Firefox:** `Orbida-Firefox-1.2.1.xpi`, the browser extension signed by Mozilla.
+- **Windows:** `Orbida-Setup-1.2.2.exe`, for Windows 10 or 11 (64-bit).
+- **Android:** `Orbida-1.2.2.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Firefox:** `Orbida-Firefox-1.2.2.xpi`, the browser extension signed by Mozilla.
 
 Orbida 1.0 updates itself to this version: on Windows click **Update to
-1.2.1** in the top bar; on Android open Settings › About › Check for
+1.2.2** in the top bar; on Android open Settings › About › Check for
 updates.
+
+## New in 1.2.2
+
+**Both apps:**
+- **NSFW Reddit posts.** Reddit shows them only to signed-in accounts, and
+  they failed with "Account authentication is required". The sign-in is
+  optional and off by default:
+  - Windows: Settings › Downloads › **Use my browser's Reddit sign-in**.
+    Orbida sends Reddit the reddit.com cookies of your Firefox or Zen (also
+    LibreWolf, Floorp, Waterfox); no other site gets them, and Orbida never
+    sees a password.
+  - Android: Settings › Reddit › **Sign in to Reddit**. The sign-in stays on
+    the phone.
+  - Both apps offer it when Reddit refuses a post. Allow mature content in
+    your Reddit settings.
+- **YouTube Mix links.** A song opened inside a Mix (`&list=RD...`)
+  downloads alone; a **Download the Mix** button gets the whole Mix.
+- **SponsorBlock.** Sponsor and intro segments can be cut out of YouTube
+  videos (off by default; Windows: the switch on the options card; Android:
+  Settings). Trimmed downloads are not cut.
+
+**Windows:**
+- A Windows notification and a taskbar flash when downloads finish while
+  Orbida is in the background.
+- **Add to Firefox** also finds Zen, LibreWolf, Floorp and Waterfox.
 
 ## New in 1.2.1
 
@@ -101,7 +127,7 @@ Before this version, the Windows app was called Universal Video Downloader.
 - New downloads go to `Downloads\Orbida` by default. A folder you chose
   before stays the same.
 
-**Install:** run `Orbida-Setup-1.2.1.exe`. It installs for your user only,
+**Install:** run `Orbida-Setup-1.2.2.exe`. It installs for your user only,
 with no administrator password. FFmpeg, ffprobe and Deno are included.
 The setup is not code-signed, so SmartScreen may say "Windows protected
 your PC". Click **More info**, then **Run anyway**.

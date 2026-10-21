@@ -1,6 +1,11 @@
-**Orbida for Android**, version 1.2.1 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
+**Orbida for Android**, version 1.2.2 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
 
 Coming from an Android preview (UniversalDownloader or Orbida 0.x)? Uninstall it once: 1.0 has a new app id and signing key. From 1.0 on, the app updates itself (Settings › About › Check for updates).
+
+**New in 1.2.2**
+- NSFW Reddit posts: Reddit shows them only to signed-in accounts. Settings › Reddit › Sign in to Reddit (optional; the app also offers it when Reddit refuses a post). The sign-in stays on this phone.
+- A song opened inside a YouTube Mix downloads alone; a "Download the Mix" button gets the whole Mix.
+- SponsorBlock: Settings can cut sponsor segments out of YouTube videos (off by default).
 
 **New in 1.2.1**
 - No changes in the Android app (the Windows app gets a permanent Firefox add-on).

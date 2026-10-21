@@ -212,6 +212,55 @@ def test_firefox_opens_the_add_on_file(monkeypatch, tmp_path):
     assert not app_setup.open_in_firefox("Orbida.xpi")
 
 
+def fake_registry(values):
+    return lambda root, subkey, name=None: values.get((root, subkey, name))
+
+
+USER_CHOICE = ("HKCU", r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice", "ProgId")
+
+
+@pytest.fixture
+def browsers(tmp_path, monkeypatch):
+    """Firefox and Zen installed under a fake Program Files."""
+    for var in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("ProgramFiles", str(tmp_path))
+    paths = {}
+    for name, folder in (("firefox.exe", "Mozilla Firefox"), ("zen.exe", "Zen Browser")):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / name).write_bytes(b"MZ")
+        paths[name] = str(tmp_path / folder / name)
+    return paths
+
+
+def test_the_default_browser_wins_when_it_is_built_on_firefox(browsers):
+    registry = fake_registry({USER_CHOICE: "ZenHTML-1234",
+                              ("HKCR", r"ZenHTML-1234\shell\open\command", None):
+                                  f'"{browsers["zen.exe"]}" -osint -url "%1"'})
+    assert app_setup.firefox_path(registry) == browsers["zen.exe"]
+
+
+def test_firefox_is_found_when_the_default_browser_is_another(browsers):
+    registry = fake_registry({USER_CHOICE: "ChromeHTML",
+                              ("HKCR", r"ChromeHTML\shell\open\command", None):
+                                  '"C:\\Program Files\\Google\\Chrome\\chrome.exe" --single-argument %1'})
+    assert app_setup.firefox_path(registry) == browsers["firefox.exe"]
+
+
+def test_zen_alone_is_found_in_its_folder_or_app_paths(browsers, tmp_path):
+    os.remove(browsers["firefox.exe"])
+    assert app_setup.firefox_path(fake_registry({})) == browsers["zen.exe"]
+    elsewhere = tmp_path / "apps" / "zen.exe"
+    elsewhere.parent.mkdir()
+    elsewhere.write_bytes(b"MZ")
+    os.remove(browsers["zen.exe"])
+    registry = fake_registry({("HKLM", r"Software\Microsoft\Windows\CurrentVersion\App Paths\zen.exe", None):
+                              str(elsewhere)})
+    assert app_setup.firefox_path(registry) == str(elsewhere)
+    os.remove(elsewhere)
+    assert app_setup.firefox_path(registry) is None
+
+
 @pytest.fixture
 def dialog(monkeypatch):
     pytest.importorskip("customtkinter")

@@ -159,8 +159,10 @@ Eklenti Chrome Web Mağazası'nda olmadığı için elle eklenir:
    `edge://extensions`) sayfasını açıp **Geliştirici modu**'nu açın.
 3. **Paketlenmemiş öğe yükle**'ye tıklayıp açılan klasörü seçin.
 
-**Firefox** (140 ya da daha yeni): aynı pencerede **Firefox'a ekle**'ye,
-ardından Firefox'ta **Ekle**'ye tıklayın. Bu kopya Mozilla tarafından
+**Firefox** (140 ya da daha yeni) ve onun üzerine kurulu Zen, LibreWolf,
+Floorp, Waterfox gibi tarayıcılar: aynı pencerede **Firefox'a ekle**'ye,
+ardından tarayıcıda **Ekle**'ye tıklayın. Varsayılan tarayıcınız bunlardan
+biriyse Orbida eklentiyi onda açar, değilse bulduğu ilkinde. Bu kopya Mozilla tarafından
 imzalıdır, bu yüzden Firefox kapanınca kaldırılmaz. addons.mozilla.org'da
 listelenmez; sürüm sayfasında da `Orbida-Firefox-<sürüm>.xpi` olarak durur
 ve bir Firefox penceresine sürüklenerek kurulabilir.

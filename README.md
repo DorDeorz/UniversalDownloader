@@ -139,8 +139,10 @@ The extension is not in the Chrome Web Store, so it is added by hand:
    `edge://extensions`) and turn on **Developer mode**.
 3. Click **Load unpacked** and choose the folder that opened.
 
-**Firefox** (140 or newer): in the same window click **Add to Firefox**, then
-**Add** in Firefox. This copy is signed by Mozilla, so Firefox keeps it after
+**Firefox** (140 or newer) and browsers built on it, such as Zen, LibreWolf,
+Floorp and Waterfox: in the same window click **Add to Firefox**, then **Add**
+in the browser. Orbida opens it in your default browser when that is one of
+them, otherwise in the first one it finds. This copy is signed by Mozilla, so Firefox keeps it after
 it closes. It is not listed on addons.mozilla.org; the release also has it as
 `Orbida-Firefox-<version>.xpi`, which can be dragged into a Firefox window.
 

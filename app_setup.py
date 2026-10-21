@@ -236,30 +236,67 @@ def send_link(url, folder=None):
 # Firefox keeps only add-ons signed by Mozilla. The release workflow has the
 # extension signed on addons.mozilla.org (unlisted: not shown in the store)
 # and the installer ships the signed file as firefox\Orbida.xpi. Opening that
-# file with Firefox shows Firefox's own "Add Orbida?" prompt.
+# file with Firefox (or Zen, LibreWolf, ...) shows the browser's own
+# "Add Orbida?" prompt.
 
 FIREFOX_XPI = os.path.join("firefox", "Orbida.xpi")
 
 
-def firefox_path():
-    """firefox.exe as Windows records it (App Paths, current user first), or None."""
-    if sys.platform != "win32":
-        return None
+# Firefox and the browsers built on it, which take the same signed add-on:
+# (program, folder under Program Files).
+GECKO_BROWSERS = (("firefox.exe", "Mozilla Firefox"), ("zen.exe", "Zen Browser"), ("librewolf.exe", "LibreWolf"),
+                  ("floorp.exe", "Ablaze Floorp"), ("waterfox.exe", "Waterfox"))
+
+
+def _read_registry(root, subkey, name=None):
+    """A string value from the Windows registry ("HKCU", "HKLM" or "HKCR"), or None."""
     import winreg
-    key_name = r"Software\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe"
-    for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
-        try:
-            with winreg.OpenKey(root, key_name) as key:
-                path = winreg.QueryValue(key, None)
-        except OSError:
-            continue
-        path = path.strip().strip('"')
-        if os.path.isfile(path):
-            return path
-    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
-        path = os.path.join(base, "Mozilla Firefox", "firefox.exe") if base else ""
-        if path and os.path.isfile(path):
-            return path
+    hive = {"HKCU": winreg.HKEY_CURRENT_USER, "HKLM": winreg.HKEY_LOCAL_MACHINE,
+            "HKCR": winreg.HKEY_CLASSES_ROOT}[root]
+    try:
+        with winreg.OpenKey(hive, subkey) as key:
+            return winreg.QueryValueEx(key, name)[0] if name else winreg.QueryValue(key, None)
+    except OSError:
+        return None
+
+
+def _program(command):
+    """The program in a registry command line ('"C:\\x\\zen.exe" -osint -url "%1"')."""
+    command = (command or "").strip()
+    if command.startswith('"'):
+        return command[1:].split('"', 1)[0]
+    return command.split(" -", 1)[0].strip()
+
+
+def firefox_path(registry=None):
+    """Firefox, or a browser built on it, to open the add-on with; None if there is none.
+
+    The default web browser comes first when it is one of GECKO_BROWSERS (so
+    a Zen user gets Zen even with Firefox installed), then each of them as
+    Windows records it (App Paths) or in its usual folder.
+    """
+    if registry is None:
+        if sys.platform != "win32":
+            return None
+        registry = _read_registry
+    names = {name for name, _folder in GECKO_BROWSERS}
+    choice = registry("HKCU", r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
+                      "ProgId")
+    if choice:
+        default = _program(registry("HKCR", choice + r"\shell\open\command"))
+        if os.path.basename(default).lower() in names and os.path.isfile(default):
+            return default
+    for name, folder in GECKO_BROWSERS:
+        for root in ("HKCU", "HKLM"):
+            path = _program(registry(root, r"Software\Microsoft\Windows\CurrentVersion\App Paths" + "\\" + name))
+            if path and os.path.isfile(path):
+                return path
+        local = os.environ.get("LOCALAPPDATA")
+        for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"),
+                     os.path.join(local, "Programs") if local else None):
+            path = os.path.join(base, folder, name) if base else ""
+            if path and os.path.isfile(path):
+                return path
     return None
 
 

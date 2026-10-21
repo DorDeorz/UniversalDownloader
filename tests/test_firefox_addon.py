@@ -128,10 +128,26 @@ def test_a_signed_copy_of_these_files_passes(tmp_path):
     assert firefox_addon.check(signed_xpi(tmp_path / "b.xpi", signature=["META-INF/cose.sig"])) == []
 
 
+def test_web_ext_leftovers_and_a_rewritten_manifest_pass(tmp_path):
+    import shutil
+    source = tmp_path / "src"
+    shutil.copytree(EXTENSION, source)
+    (source / ".amo-upload-uuid").write_text("{}")  # what web-ext sign leaves in the source folder
+    with open(source / "manifest.json", encoding="utf-8") as f:
+        manifest = json.load(f)
+    xpi = signed_xpi(tmp_path / "a.xpi", source=EXTENSION,
+                     change={"manifest.json": json.dumps(manifest, indent=4).encode()})
+    assert firefox_addon.check(xpi, source=str(source)) == []
+
+
 def test_an_unsigned_old_or_different_copy_is_refused(tmp_path):
     assert "not signed" in firefox_addon.check(signed_xpi(tmp_path / "a.xpi", signature=[]))[0]
     old = signed_xpi(tmp_path / "b.xpi")
     assert "the app is 9.9.9" in firefox_addon.check(old, version="9.9.9")[0]
+    other = json.dumps({**json.load(open(os.path.join(EXTENSION, "manifest.json"), encoding="utf-8")),
+                        "permissions": ["tabs"]}).encode()
+    assert "manifest.json (permissions) differs" in firefox_addon.check(
+        signed_xpi(tmp_path / "e.xpi", change={"manifest.json": other}))[0]
     changed = signed_xpi(tmp_path / "c.xpi", change={"background.js": b"// other code"})
     assert any("background.js differs" in p for p in firefox_addon.check(changed))
     (tmp_path / "d.xpi").write_bytes(b"not a zip")

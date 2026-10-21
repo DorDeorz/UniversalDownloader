@@ -115,15 +115,24 @@ def check(path, version=__version__, source=SOURCE):
         if manifest.get("version") != version:
             problems.append(f"{path} is version {manifest.get('version')}, the app is {version}")
         # A version signed earlier with other files: AMO will not sign the number again.
+        stale = " differs from the signed add-on: raise the version in version.py and browser_extension/manifest.json"
+        with open(os.path.join(source, "manifest.json"), encoding="utf-8") as f:
+            ours = json.load(f)
+        # web-ext writes the manifest out again, so only its content is compared.
+        changed = sorted(key for key in ours.keys() | manifest.keys() if ours.get(key) != manifest.get(key))
+        if changed:
+            problems.append(f"manifest.json ({', '.join(changed)})" + stale)
         for folder, _dirs, files in os.walk(source):
             for name in files:
                 full = os.path.join(folder, name)
                 inside = os.path.relpath(full, source).replace(os.sep, "/")
+                # Dot files are left out of the add-on (web-ext keeps its .amo-upload-uuid there).
+                if inside == "manifest.json" or any(part.startswith(".") for part in inside.split("/")):
+                    continue
                 with open(full, "rb") as f:
-                    ours = f.read()
-                if inside not in names or archive.read(inside) != ours:
-                    problems.append(f"{inside} differs from the signed add-on: raise the version in version.py "
-                                    "and browser_extension/manifest.json")
+                    data = f.read()
+                if inside not in names or archive.read(inside) != data:
+                    problems.append(inside + stale)
     return problems
 
 

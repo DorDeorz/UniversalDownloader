@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit arată această postare doar conturilor autentificate (adesea NSFW). Activează autentificarea Reddit din Setări, apoi încearcă din nou",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit arată această postare doar conturilor autentificate. Autentifică-te pe Reddit în Firefox sau Zen, permite conținutul pentru adulți în setările Reddit, apoi încearcă din nou",
  "reddit.ask_title": "Autentificare Reddit",
- "reddit.ask_body": "Reddit arată această postare doar conturilor autentificate (adesea NSFW).\n\nFolosești autentificarea Reddit din Firefox sau Zen? Doar Reddit primește aceste cookie-uri. O poți dezactiva din Setări › Extensie de browser."
+ "reddit.ask_body": "Reddit arată această postare doar conturilor autentificate (adesea NSFW).\n\nFolosești autentificarea Reddit din Firefox sau Zen? Doar Reddit primește aceste cookie-uri. O poți dezactiva din Setări."
 }

@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit solo muestra esta publicación a cuentas con sesión iniciada (a menudo NSFW). Activa la sesión de Reddit en Ajustes y vuelve a intentarlo",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit solo muestra esta publicación a cuentas con sesión iniciada. Inicia sesión en Reddit en Firefox o Zen, permite el contenido para adultos en los ajustes de Reddit y vuelve a intentarlo",
  "reddit.ask_title": "Sesión de Reddit",
- "reddit.ask_body": "Reddit solo muestra esta publicación a cuentas con sesión iniciada (a menudo NSFW).\n\n¿Usar la sesión de Reddit de tu Firefox o Zen? Solo Reddit recibe esas cookies. Puedes desactivarlo en Ajustes › Extensión del navegador."
+ "reddit.ask_body": "Reddit solo muestra esta publicación a cuentas con sesión iniciada (a menudo NSFW).\n\n¿Usar la sesión de Reddit de tu Firefox o Zen? Solo Reddit recibe esas cookies. Puedes desactivarlo en Ajustes."
 }

@@ -125,7 +125,7 @@ Windows tarafının ayrıntıları için:
 - **Tarayıcı eklentisi:** Chrome, Edge, Brave ve Opera için (aşağıda).
 - **NSFW Reddit gönderileri:** Reddit bunları yalnızca giriş yapmış
   hesaplara gösterir. **Tarayıcımdaki Reddit oturumunu kullan** seçeneğini
-  açın (Ayarlar › Tarayıcı eklentisi ya da Orbida sorduğunda Evet). Orbida,
+  açın (Ayarlar › İndirmeler ya da Orbida sorduğunda Evet). Orbida,
   Firefox ya da Zen'in (LibreWolf, Floorp, Waterfox da olur) reddit.com
   çerezlerini Reddit'e gönderir. Varsayılan olarak kapalıdır; çerezler
   başka hiçbir siteye gitmez, Orbida şifrenizi hiç görmez.

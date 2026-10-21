@@ -703,7 +703,8 @@ class SettingsView(ctk.CTkFrame):
     The page never scrolls: its cards sit in two columns, each setting on
     one line with a hint under its name. When the window is too short
     (large text on a small screen) the page first hides the hints, then
-    tightens the spacing, then leaves out the keyboard shortcuts card.
+    tightens the spacing, then leaves out the keyboard shortcuts card, and
+    last tightens the spacing further.
     Below ``TWO_COLUMNS`` units of width the cards stack in one column.
 
     Every change applies at once and is saved; ``on_change(name, value)``
@@ -804,11 +805,14 @@ class SettingsView(ctk.CTkFrame):
                                          label=lambda c: tr(f"clipboard.{c}"))
         self.cmb_clipboard.set(settings.clipboard)
         self._inline_row(after, 6, tr("settings.clipboard"), self.cmb_clipboard)
-        self.sw_awake = self._switch(after, 7, tr("settings.keep_awake"), settings.keep_awake, "keep_awake")
-        self.sw_history = self._switch(after, 8, tr("settings.save_history"), settings.save_history,
+        # Reddit shows NSFW posts only to signed-in accounts: lend it the browser's sign-in.
+        self.sw_reddit = self._switch(after, 7, tr("settings.reddit_sign_in"), settings.reddit_browser_sign_in,
+                                      "reddit_browser_sign_in")
+        self.sw_awake = self._switch(after, 8, tr("settings.keep_awake"), settings.keep_awake, "keep_awake")
+        self.sw_history = self._switch(after, 9, tr("settings.save_history"), settings.save_history,
                                        "save_history")
-        self.sw_summary = self._switch(after, 9, tr("settings.summary"), settings.show_summary, "show_summary")
-        self.sw_open = self._switch(after, 10, tr("settings.open_folder"), settings.open_folder_when_done,
+        self.sw_summary = self._switch(after, 10, tr("settings.summary"), settings.show_summary, "show_summary")
+        self.sw_open = self._switch(after, 11, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
         self._spacing[-1] = (self.sw_open, (0, 14), (0, 10))
 
@@ -909,8 +913,14 @@ class SettingsView(ctk.CTkFrame):
         if columns == 2:
             left.grid(row=0, column=0, columnspan=1, sticky="new", padx=(0, 8))
             right.grid(row=0, column=1, sticky="new", padx=(8, 0))
-            order = ((self.card_look, left), (self.card_updates, left), (self.card_finish, right),
-                     (self.card_keys, right))
+            # Balance the columns: the shortcuts card goes under Appearance while it shows;
+            # without it, Updates does.
+            if self.shortcuts_shown:
+                order = ((self.card_look, left), (self.card_keys, left), (self.card_finish, right),
+                         (self.card_updates, right))
+            else:
+                order = ((self.card_look, left), (self.card_updates, left), (self.card_finish, right),
+                         (self.card_keys, right))
         else:
             left.grid(row=0, column=0, columnspan=2, sticky="new", padx=0)
             right.grid_remove()
@@ -924,10 +934,17 @@ class SettingsView(ctk.CTkFrame):
         if not self.shortcuts_shown:
             self.card_keys.grid_remove()
 
+    # Spacing taken off every tight gap at the tightest level (TIGHTEST).
+    TIGHTEST_TRIM = 4
+    TIGHTEST = 2
+
     def _set_tight(self, tight):
+        """Spacing level: 0 (False) normal, 1 (True) tight, TIGHTEST tight with less between rows."""
         self.tight = tight
+        trim = self.TIGHTEST_TRIM if tight == self.TIGHTEST else 0
         for widget, normal, small in self._spacing:
-            widget.grid_configure(pady=small if tight else normal)
+            widget.grid_configure(pady=tuple(max(0, v - trim) for v in small) if tight else normal)
+        self.body.grid_configure(pady=(0, 4 if trim else 16))
 
     def _show_hints(self, show):
         self.hints_shown = show
@@ -936,18 +953,22 @@ class SettingsView(ctk.CTkFrame):
 
     def _show_shortcuts(self, show):
         self.shortcuts_shown = show
-        self.card_keys.grid() if show else self.card_keys.grid_remove()
+        if self._columns == 2:
+            self._layout(2)  # the cards change columns (see _layout)
+        else:
+            self.card_keys.grid() if show else self.card_keys.grid_remove()
 
     def _schedule_fit(self, _event=None):
         if not self._fit_pending:
             self._fit_pending = True
             self.after_idle(self._fit)
 
-    FIT_STEPS = ((True, False, True), (False, False, True), (False, True, True), (False, True, False))
+    FIT_STEPS = ((True, False, True), (False, False, True), (False, True, True), (False, True, False),
+                 (False, TIGHTEST, False))
 
     def _fit(self):
         """Choose the columns for the width, then the roomiest layout that fits:
-        hints and normal spacing, no hints, tight spacing, then no shortcuts card."""
+        hints and normal spacing, no hints, tight spacing, no shortcuts card, then even less spacing."""
         self._fit_pending = False
         try:
             scale = ctk.ScalingTracker.get_widget_scaling(self)
@@ -1128,8 +1149,7 @@ def extension_folder():
 
 
 class ExtensionDialog(ctk.CTkToplevel):
-    """How to add the browser extension, and the switch that lends Reddit
-    the browser's sign-in (for NSFW posts).
+    """How to add the browser extension.
 
     Chromium browsers load it unpacked from the data folder (it is not in a
     store); Firefox installs the Mozilla-signed copy the installer ships
@@ -1156,19 +1176,8 @@ class ExtensionDialog(ctk.CTkToplevel):
         self.lbl_note = ctk.CTkLabel(self, text="", font=font(12), text_color=MUTED, anchor="w",
                                     justify="left", wraplength=620)
         self.lbl_note.grid(row=2, column=0, sticky="ew", padx=20, pady=(8, 0))
-        # Reddit shows NSFW posts only to signed-in accounts; this uses the browser's sign-in.
-        reddit = card(self)
-        reddit.grid(row=3, column=0, sticky="ew", padx=20, pady=(12, 0))
-        reddit.grid_columnconfigure(0, weight=1)
-        self.sw_reddit = switch(reddit, tr("settings.reddit_sign_in"), self._on_reddit_toggled)
-        if app.settings.reddit_browser_sign_in:
-            self.sw_reddit.select()
-        self.sw_reddit.grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
-        self.lbl_reddit = ctk.CTkLabel(reddit, text=app.reddit_status(), font=font(12), text_color=MUTED,
-                                       anchor="w", justify="left", wraplength=600)
-        self.lbl_reddit.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 12))
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=4, column=0, sticky="e", padx=20, pady=(12, 18))
+        buttons.grid(row=3, column=0, sticky="e", padx=20, pady=(12, 18))
         self.btn_copy = secondary_button(buttons, tr("extension.copy_address"), self.copy_address)
         self.btn_copy.pack(side="left", padx=(0, 8))
         self.btn_close = secondary_button(buttons, tr("extension.close"), self.destroy)
@@ -1179,13 +1188,9 @@ class ExtensionDialog(ctk.CTkToplevel):
         self.btn_folder.pack(side="left")
         set_window_icon(self)
         self.after(200, lambda: set_window_icon(self))
-        fit_dialog(self, (680, 560), (480, 400))
+        fit_dialog(self, (680, 460), (480, 320))
         self.lift()
         self.btn_folder.focus_set()
-
-    def _on_reddit_toggled(self):
-        self.app._on_setting_changed("reddit_browser_sign_in", bool(self.sw_reddit.get()))
-        self.lbl_reddit.configure(text=self.app.reddit_status())
 
     def open_folder(self):
         folder = extension_folder()
@@ -1240,7 +1245,7 @@ class UpdateDialog(ctk.CTkToplevel):
         self.progress = ctk.CTkProgressBar(self, height=8, progress_color=ACCENT, fg_color=SECONDARY)
         self.progress.set(0)
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=4, column=0, sticky="e", padx=20, pady=(12, 18))
+        buttons.grid(row=3, column=0, sticky="e", padx=20, pady=(12, 18))
         self.btn_page = secondary_button(buttons, tr("update.page"), lambda: webbrowser.open(release.page))
         if can_install:  # otherwise the main button opens the page
             self.btn_page.pack(side="left", padx=(0, 8))
@@ -1738,7 +1743,7 @@ class App(ctk.CTk):
         self._refresh_logo_bg()
         self._save_settings()
     def _apply_reddit_sign_in(self):
-        """Send Reddit the browser's sign-in while the setting is on (Browser extension dialog)."""
+        """Send Reddit the browser's sign-in while the setting is on (Settings › Downloads)."""
         if self.settings.reddit_browser_sign_in:
             if self._reddit is None:
                 self._reddit = browser_cookies.RedditSignIn(os.path.join(app_setup.data_dir(), "reddit-cookies"))
@@ -1773,6 +1778,9 @@ class App(ctk.CTk):
             logic.set_network_options(value)
         if name == "reddit_browser_sign_in":
             self._apply_reddit_sign_in()
+            if value and self.settings_view is not None:
+                # Turned on in Settings: say whether the browser is signed in to Reddit.
+                messagebox.showinfo(tr("reddit.ask_title"), self.reddit_status(), parent=self)
         if name == "accent":
             recolor(self, apply_accent(value))
 

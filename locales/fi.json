@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit näyttää tämän julkaisun vain kirjautuneille tileille (usein NSFW). Ota Reddit-kirjautuminen käyttöön asetuksissa ja yritä uudelleen",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit näyttää tämän julkaisun vain kirjautuneille tileille. Kirjaudu Redditiin Firefoxissa tai Zenissä, salli aikuissisältö Redditin asetuksissa ja yritä uudelleen",
  "reddit.ask_title": "Reddit-kirjautuminen",
- "reddit.ask_body": "Reddit näyttää tämän julkaisun vain kirjautuneille tileille (usein NSFW).\n\nKäytetäänkö Firefoxin tai Zenin Reddit-kirjautumista? Vain Reddit saa nämä evästeet. Voit poistaa sen käytöstä kohdassa Asetukset › Selainlaajennus."
+ "reddit.ask_body": "Reddit näyttää tämän julkaisun vain kirjautuneille tileille (usein NSFW).\n\nKäytetäänkö Firefoxin tai Zenin Reddit-kirjautumista? Vain Reddit saa nämä evästeet. Voit poistaa sen käytöstä kohdassa Asetukset."
 }

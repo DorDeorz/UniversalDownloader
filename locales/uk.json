@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit показує цей допис лише облікам, що увійшли (часто NSFW). Увімкніть вхід у Reddit у налаштуваннях і спробуйте ще раз",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit показує цей допис лише облікам, що увійшли. Увійдіть у Reddit у Firefox або Zen, дозвольте вміст для дорослих у налаштуваннях Reddit і спробуйте ще раз",
  "reddit.ask_title": "Вхід у Reddit",
- "reddit.ask_body": "Reddit показує цей допис лише облікам, що увійшли (часто NSFW).\n\nВикористати вхід у Reddit з вашого Firefox або Zen? Ці куки отримує лише Reddit. Вимкнути можна в Налаштування › Розширення для браузера."
+ "reddit.ask_body": "Reddit показує цей допис лише облікам, що увійшли (часто NSFW).\n\nВикористати вхід у Reddit з вашого Firefox або Zen? Ці куки отримує лише Reddit. Вимкнути можна в налаштуваннях."
 }

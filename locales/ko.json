@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit은 이 게시물을 로그인한 계정에만 보여 줍니다(주로 NSFW). 설정에서 Reddit 로그인을 켠 뒤 다시 시도하세요",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit은 이 게시물을 로그인한 계정에만 보여 줍니다. Firefox 또는 Zen에서 Reddit에 로그인하고 Reddit 설정에서 성인 콘텐츠를 허용한 뒤 다시 시도하세요",
  "reddit.ask_title": "Reddit 로그인",
- "reddit.ask_body": "Reddit은 이 게시물을 로그인한 계정에만 보여 줍니다(주로 NSFW).\n\nFirefox 또는 Zen의 Reddit 로그인을 사용할까요? 이 쿠키는 Reddit에만 전달됩니다. 설정 › 브라우저 확장 프로그램에서 끌 수 있습니다."
+ "reddit.ask_body": "Reddit은 이 게시물을 로그인한 계정에만 보여 줍니다(주로 NSFW).\n\nFirefox 또는 Zen의 Reddit 로그인을 사용할까요? 이 쿠키는 Reddit에만 전달됩니다. 설정에서 끌 수 있습니다."
 }

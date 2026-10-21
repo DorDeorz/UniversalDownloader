@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit zeigt diesen Beitrag nur angemeldeten Konten (oft NSFW). Schalte die Reddit-Anmeldung in den Einstellungen ein und versuche es erneut",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit zeigt diesen Beitrag nur angemeldeten Konten. Melde dich in Firefox oder Zen bei Reddit an, erlaube in den Reddit-Einstellungen Inhalte für Erwachsene und versuche es erneut",
  "reddit.ask_title": "Reddit-Anmeldung",
- "reddit.ask_body": "Reddit zeigt diesen Beitrag nur angemeldeten Konten (oft NSFW).\n\nDie Reddit-Anmeldung deines Firefox oder Zen verwenden? Nur Reddit erhält diese Cookies. Ausschalten kannst du es unter Einstellungen › Browser-Erweiterung."
+ "reddit.ask_body": "Reddit zeigt diesen Beitrag nur angemeldeten Konten (oft NSFW).\n\nDie Reddit-Anmeldung deines Firefox oder Zen verwenden? Nur Reddit erhält diese Cookies. Ausschalten kannst du es unter Einstellungen."
 }

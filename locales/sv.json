@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit visar bara det här inlägget för inloggade konton (ofta NSFW). Slå på Reddit-inloggningen i Inställningar och försök igen",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit visar bara det här inlägget för inloggade konton. Logga in på Reddit i Firefox eller Zen, tillåt vuxeninnehåll i Reddit-inställningarna och försök igen",
  "reddit.ask_title": "Reddit-inloggning",
- "reddit.ask_body": "Reddit visar bara det här inlägget för inloggade konton (ofta NSFW).\n\nAnvända Reddit-inloggningen i din Firefox eller Zen? Bara Reddit får de kakorna. Du kan stänga av det under Inställningar › Webbläsartillägg."
+ "reddit.ask_body": "Reddit visar bara det här inlägget för inloggade konton (ofta NSFW).\n\nAnvända Reddit-inloggningen i din Firefox eller Zen? Bara Reddit får de kakorna. Du kan stänga av det under Inställningar."
 }

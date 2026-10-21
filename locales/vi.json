@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit chỉ hiển thị bài đăng này cho tài khoản đã đăng nhập (thường là NSFW). Hãy bật đăng nhập Reddit trong Cài đặt rồi thử lại",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit chỉ hiển thị bài đăng này cho tài khoản đã đăng nhập. Hãy đăng nhập Reddit trong Firefox hoặc Zen, cho phép nội dung người lớn trong cài đặt Reddit rồi thử lại",
  "reddit.ask_title": "Đăng nhập Reddit",
- "reddit.ask_body": "Reddit chỉ hiển thị bài đăng này cho tài khoản đã đăng nhập (thường là NSFW).\n\nDùng phiên đăng nhập Reddit trong Firefox hoặc Zen của bạn? Chỉ Reddit nhận các cookie đó. Bạn có thể tắt trong Cài đặt › Tiện ích trình duyệt."
+ "reddit.ask_body": "Reddit chỉ hiển thị bài đăng này cho tài khoản đã đăng nhập (thường là NSFW).\n\nDùng phiên đăng nhập Reddit trong Firefox hoặc Zen của bạn? Chỉ Reddit nhận các cookie đó. Bạn có thể tắt trong Cài đặt."
 }

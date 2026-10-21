@@ -110,8 +110,8 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
 
 - **Browser extension** for Chrome, Edge, Brave, Opera and Firefox (see below).
 - **NSFW Reddit posts.** Reddit shows them only to signed-in accounts. Turn
-  on **Use my browser's Reddit sign-in** (Settings › Browser extension, or
-  answer Yes when Orbida asks) and Orbida sends Reddit the reddit.com
+  on **Use my browser's Reddit sign-in** (Settings › Downloads, or answer
+  Yes when Orbida asks) and Orbida sends Reddit the reddit.com
   cookies of your Firefox or Zen (also LibreWolf, Floorp, Waterfox). Off by
   default; no other site gets them, and Orbida never sees a password.
 - **Clipboard watch:** with Settings › Copied links › Watch, every link

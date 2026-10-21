@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit ne montre cette publication qu'aux comptes connectés (souvent NSFW). Active la connexion Reddit dans les Paramètres, puis réessaie",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit ne montre cette publication qu'aux comptes connectés. Connecte-toi à Reddit dans Firefox ou Zen, autorise le contenu pour adultes dans les paramètres Reddit, puis réessaie",
  "reddit.ask_title": "Connexion Reddit",
- "reddit.ask_body": "Reddit ne montre cette publication qu'aux comptes connectés (souvent NSFW).\n\nUtiliser la connexion Reddit de ton Firefox ou Zen ? Seul Reddit reçoit ces cookies. Tu peux la désactiver dans Paramètres › Extension de navigateur."
+ "reddit.ask_body": "Reddit ne montre cette publication qu'aux comptes connectés (souvent NSFW).\n\nUtiliser la connexion Reddit de ton Firefox ou Zen ? Seul Reddit reçoit ces cookies. Tu peux la désactiver dans les Paramètres."
 }

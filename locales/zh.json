@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit 只向已登录的账户显示此帖子(通常为 NSFW)。请在设置中开启 Reddit 登录,然后重试",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit 只向已登录的账户显示此帖子。请在 Firefox 或 Zen 中登录 Reddit,在 Reddit 设置中允许成人内容,然后重试",
  "reddit.ask_title": "Reddit 登录",
- "reddit.ask_body": "Reddit 只向已登录的账户显示此帖子(通常为 NSFW)。\n\n要使用 Firefox 或 Zen 中的 Reddit 登录吗?这些 Cookie 只发送给 Reddit。可在 设置 › 浏览器扩展 中关闭。"
+ "reddit.ask_body": "Reddit 只向已登录的账户显示此帖子(通常为 NSFW)。\n\n要使用 Firefox 或 Zen 中的 Reddit 登录吗?这些 Cookie 只发送给 Reddit。可在设置中关闭。"
 }

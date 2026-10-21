@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again",
  "reddit.ask_title": "Reddit sign-in",
- "reddit.ask_body": "Reddit shows this post only to signed-in accounts (often NSFW).\n\nUse the Reddit sign-in of your Firefox or Zen? Only Reddit gets those cookies. You can turn it off under Settings › Browser extension."
+ "reddit.ask_body": "Reddit shows this post only to signed-in accounts (often NSFW).\n\nUse the Reddit sign-in of your Firefox or Zen? Only Reddit gets those cookies. You can turn it off under Settings."
 }

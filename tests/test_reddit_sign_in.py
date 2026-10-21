@@ -206,23 +206,24 @@ def app(monkeypatch, tmp_path):
 
 
 @needs_display
-def test_the_extension_dialog_switch_turns_the_sign_in_on_and_off(app):
+def test_the_settings_switch_turns_the_sign_in_on_and_off(app, monkeypatch):
     import ui
+    from ui_helpers import pump
     make_profile(app.profiles, "abc.Default (release)", SIGNED_IN)
-    view = ui.ExtensionDialog(app)
-    try:
-        assert view.lbl_reddit.cget("text") == ui.tr("settings.reddit_sign_in_hint")
-        view.sw_reddit.select()
-        view._on_reddit_toggled()
-        assert app.settings.reddit_browser_sign_in
-        assert view.lbl_reddit.cget("text") == ui.tr("reddit.signed_in", browser="Firefox")
-        assert "cookiesfrombrowser" in logic.base_ydl_options()
-        view.sw_reddit.deselect()
-        view._on_reddit_toggled()
-        assert not app.settings.reddit_browser_sign_in
-        assert "cookiesfrombrowser" not in logic.base_ydl_options()
-    finally:
-        view.destroy()
+    shown = []
+    monkeypatch.setattr(ui.messagebox, "showinfo", lambda title, text, **k: shown.append(text))
+    app.open_settings()
+    pump(app, timeout=0.3)
+    view = app.settings_view
+    assert view.sw_reddit.cget("text") == ui.tr("settings.reddit_sign_in") and not view.sw_reddit.get()
+    view.sw_reddit.toggle()  # on: says whether the browser is signed in
+    assert app.settings.reddit_browser_sign_in
+    assert shown == [ui.tr("reddit.signed_in", browser="Firefox")]
+    assert "cookiesfrombrowser" in logic.base_ydl_options()
+    view.sw_reddit.toggle()
+    assert not app.settings.reddit_browser_sign_in
+    assert "cookiesfrombrowser" not in logic.base_ydl_options()
+    assert len(shown) == 1
 
 
 @needs_display

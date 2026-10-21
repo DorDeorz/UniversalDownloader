@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit hanya menampilkan postingan ini ke akun yang sudah masuk (sering NSFW). Aktifkan login Reddit di Pengaturan, lalu coba lagi",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit hanya menampilkan postingan ini ke akun yang sudah masuk. Masuk ke Reddit di Firefox atau Zen, izinkan konten dewasa di pengaturan Reddit, lalu coba lagi",
  "reddit.ask_title": "Login Reddit",
- "reddit.ask_body": "Reddit hanya menampilkan postingan ini ke akun yang sudah masuk (sering NSFW).\n\nGunakan login Reddit dari Firefox atau Zen Anda? Hanya Reddit yang menerima cookie tersebut. Anda bisa mematikannya di Pengaturan › Ekstensi browser."
+ "reddit.ask_body": "Reddit hanya menampilkan postingan ini ke akun yang sudah masuk (sering NSFW).\n\nGunakan login Reddit dari Firefox atau Zen Anda? Hanya Reddit yang menerima cookie tersebut. Anda bisa mematikannya di Pengaturan."
 }

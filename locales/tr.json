@@ -239,5 +239,5 @@
  "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit bu gönderiyi yalnızca giriş yapmış hesaplara gösteriyor (çoğunlukla NSFW). Ayarlar'dan Reddit oturumunu aç ve yeniden dene",
  "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit bu gönderiyi yalnızca giriş yapmış hesaplara gösteriyor. Firefox ya da Zen'de Reddit'e giriş yap, Reddit ayarlarından yetişkin içeriğe izin ver ve yeniden dene",
  "reddit.ask_title": "Reddit oturumu",
- "reddit.ask_body": "Reddit bu gönderiyi yalnızca giriş yapmış hesaplara gösteriyor (çoğunlukla NSFW).\n\nFirefox ya da Zen'deki Reddit oturumun kullanılsın mı? Bu çerezler yalnızca Reddit'e gider. Ayarlar › Tarayıcı eklentisi'nden kapatabilirsin."
+ "reddit.ask_body": "Reddit bu gönderiyi yalnızca giriş yapmış hesaplara gösteriyor (çoğunlukla NSFW).\n\nFirefox ya da Zen'deki Reddit oturumun kullanılsın mı? Bu çerezler yalnızca Reddit'e gider. Ayarlar'dan kapatabilirsin."
 }

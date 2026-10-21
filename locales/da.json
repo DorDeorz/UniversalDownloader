@@ -201,6 +201,8 @@
  "clipboard.copied": "Kopieret: {link}",
  "clipboard.copied_many": "{count} links kopieret",
  "clipboard.download": "Download",
+ "mix.offer": "Denne sang blev åbnet i et YouTube-mix; kun sangen hentes.",
+ "mix.download": "Hent mixet",
  "settings.subtitles": "Gem undertekster (.srt) med videoer",
  "settings.connection": "Forbindelse",
  "settings.speed_limit": "Hastighedsgrænse",

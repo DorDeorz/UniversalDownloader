@@ -201,6 +201,8 @@
  "clipboard.copied": "Копирано: {link}",
  "clipboard.copied_many": "Копирани връзки: {count}",
  "clipboard.download": "Изтегляне",
+ "mix.offer": "Тази песен е отворена в микс на YouTube; изтегля се само песента.",
+ "mix.download": "Изтегли микса",
  "settings.subtitles": "Запазване на субтитри (.srt) с видеата",
  "settings.connection": "Връзка",
  "settings.speed_limit": "Ограничение на скоростта",

@@ -1370,6 +1370,8 @@ class App(ctk.CTk):
         self._clip_poll = None
         self._clip_seen = ""
         self._copied = []         # links offered by the clipboard banner
+        self._offer = self.use_copied  # what the banner's button does (copied links or a Mix)
+        self._mix = None          # the Mix the link being analyzed was opened in
         self._watch_clipboard()
         if link:
             self._startup_calls.append(self.after(350, lambda: self.open_link(link)))
@@ -1530,7 +1532,7 @@ class App(ctk.CTk):
         self.copied_row.grid_columnconfigure(0, weight=1)
         self.lbl_copied = ctk.CTkLabel(self.copied_row, text="", font=font(13), text_color=TEXT, anchor="w")
         self.lbl_copied.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=6)
-        self.btn_copied = primary_button(self.copied_row, "", self.use_copied, height=28)
+        self.btn_copied = primary_button(self.copied_row, "", lambda: self._offer(), height=28)
         self.btn_copied.grid(row=0, column=1, pady=6)
         self.btn_copied_close = secondary_button(self.copied_row, "\u2715", self._hide_copied, width=28, height=28)
         self.btn_copied_close.grid(row=0, column=2, padx=(6, 8), pady=6)
@@ -2092,6 +2094,13 @@ class App(ctk.CTk):
             key, values = e.key, e.values  # ``e`` is unbound after the except block
             self._show_media(lambda: tr(key, **values), DANGER)
             return
+        # A song opened in a YouTube Mix is analyzed alone; the Mix is offered after.
+        self._begin_analysis(url, mix=urls.youtube_mix(self.url_entry.get()))
+
+    def _begin_analysis(self, url, mix=None):
+        if self._offer == self.use_mix:
+            self._hide_copied()
+        self._mix = mix
         if url != self.url_entry.get().strip():
             self.url_entry.delete(0, "end")
             self.url_entry.insert(0, url)
@@ -2151,6 +2160,9 @@ class App(ctk.CTk):
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._end_job()
         self._describe_analysis(analysis)
+        mix, self._mix = self._mix, None
+        if mix and not analysis.is_playlist and analysis.items and not self._from_queue:
+            self._show_mix(mix)
         for item in analysis.skipped:
             self._append_log(tr("log.skipped_entry", title=item.title, reason=i18n.tr_message(item.skip_reason)))
         from_queue, self._from_queue = self._from_queue, False
@@ -2307,6 +2319,7 @@ class App(ctk.CTk):
 
     def _show_copied(self, links):
         self._copied = links
+        self._offer = self.use_copied
         if len(links) == 1:
             link = links[0]
             short = link if len(link) <= 60 else link[:57] + "\u2026"
@@ -2323,6 +2336,20 @@ class App(ctk.CTk):
             self.copied_row.grid_remove()
         except (AttributeError, tkinter.TclError):
             pass
+
+    def _show_mix(self, mix):
+        self._copied = [mix]
+        self._offer = self.use_mix
+        self._live(self.lbl_copied, lambda: tr("mix.offer"))
+        self._live(self.btn_copied, lambda: tr("mix.download"))
+        self.copied_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 14))
+
+    def use_mix(self):
+        """Analyze the whole Mix the last song was opened in (offered after its analysis)."""
+        links = self._copied
+        self._hide_copied()
+        if links and not self.is_busy():
+            self._begin_analysis(links[0])
 
     def use_copied(self):
         links, self._copied = self._copied, []

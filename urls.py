@@ -48,16 +48,30 @@ def without_youtube_mix(url):
     so the link is reduced to the video. Playlists someone made (PL...,
     OLAK5uy... albums) stay, as does a link to a Mix alone (no v=).
     """
+    if not youtube_mix(url):
+        return url
     parts = urlsplit(url)
+    kept = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            if key not in _LIST_PARAMS]
+    return urlunsplit(parts._replace(query=urlencode(kept)))
+
+
+def youtube_mix(text):
+    """The link itself when it is a YouTube video opened inside a Mix, else None.
+
+    Analyzing this link as it is (without normalize_url) reads the whole Mix.
+    """
+    text = (text or "").strip()
+    if text and "://" not in text:
+        text = "https://" + text
+    parts = urlsplit(text)
     host = (parts.hostname or "").lower()
     if not (host == "youtube.com" or host.endswith(".youtube.com")):
-        return url
-    query = parse_qsl(parts.query, keep_blank_values=True)
-    values = dict(query)
-    if not values.get("v") or not values.get("list", "").startswith("RD"):
-        return url
-    kept = [(key, value) for key, value in query if key not in _LIST_PARAMS]
-    return urlunsplit(parts._replace(query=urlencode(kept)))
+        return None
+    values = dict(parse_qsl(parts.query, keep_blank_values=True))
+    if values.get("v") and values.get("list", "").startswith("RD"):
+        return text
+    return None
 
 
 def split_links(text):

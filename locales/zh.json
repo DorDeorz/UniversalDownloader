@@ -201,6 +201,8 @@
  "clipboard.copied": "已复制：{link}",
  "clipboard.copied_many": "已复制 {count} 个链接",
  "clipboard.download": "下载",
+ "mix.offer": "这首歌是在 YouTube 合辑（Mix）中打开的，只会下载这首歌。",
+ "mix.download": "下载整个合辑",
  "settings.subtitles": "随视频保存字幕 (.srt)",
  "settings.connection": "连接",
  "settings.speed_limit": "限速",

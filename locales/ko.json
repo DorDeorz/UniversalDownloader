@@ -201,6 +201,8 @@
  "clipboard.copied": "복사됨: {link}",
  "clipboard.copied_many": "링크 {count}개 복사됨",
  "clipboard.download": "다운로드",
+ "mix.offer": "이 곡은 YouTube 믹스에서 열렸습니다. 곡만 다운로드합니다.",
+ "mix.download": "믹스 다운로드",
  "settings.subtitles": "동영상과 함께 자막(.srt) 저장",
  "settings.connection": "연결",
  "settings.speed_limit": "속도 제한",

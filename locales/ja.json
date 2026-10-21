@@ -201,6 +201,8 @@
  "clipboard.copied": "コピーしました: {link}",
  "clipboard.copied_many": "{count} 件のリンクをコピーしました",
  "clipboard.download": "ダウンロード",
+ "mix.offer": "この曲は YouTube のミックスで開かれています。曲だけをダウンロードします。",
+ "mix.download": "ミックスをダウンロード",
  "settings.subtitles": "動画と一緒に字幕 (.srt) を保存",
  "settings.connection": "接続",
  "settings.speed_limit": "速度制限",

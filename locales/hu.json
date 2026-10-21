@@ -201,6 +201,8 @@
  "clipboard.copied": "Másolva: {link}",
  "clipboard.copied_many": "{count} link másolva",
  "clipboard.download": "Letöltés",
+ "mix.offer": "Ez a dal egy YouTube-mixben nyílt meg; csak a dal töltődik le.",
+ "mix.download": "Mix letöltése",
  "settings.subtitles": "Feliratok (.srt) mentése a videókkal",
  "settings.connection": "Kapcsolat",
  "settings.speed_limit": "Sebességkorlát",

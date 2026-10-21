@@ -201,6 +201,8 @@
  "clipboard.copied": "Skopiowano: {link}",
  "clipboard.copied_many": "Skopiowano linki: {count}",
  "clipboard.download": "Pobierz",
+ "mix.offer": "Ten utwór otwarto w składance YouTube (Mix); pobierany jest tylko utwór.",
+ "mix.download": "Pobierz Mix",
  "settings.subtitles": "Zapisuj napisy (.srt) razem z filmami",
  "settings.connection": "Połączenie",
  "settings.speed_limit": "Limit prędkości",

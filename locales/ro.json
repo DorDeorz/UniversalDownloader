@@ -201,6 +201,8 @@
  "clipboard.copied": "Copiat: {link}",
  "clipboard.copied_many": "{count} linkuri copiate",
  "clipboard.download": "Descarcă",
+ "mix.offer": "Această melodie a fost deschisă într-un Mix YouTube; se descarcă doar melodia.",
+ "mix.download": "Descarcă Mixul",
  "settings.subtitles": "Salvează subtitrările (.srt) cu videoclipurile",
  "settings.connection": "Conexiune",
  "settings.speed_limit": "Limită de viteză",

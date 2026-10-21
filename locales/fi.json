@@ -201,6 +201,8 @@
  "clipboard.copied": "Kopioitu: {link}",
  "clipboard.copied_many": "{count} linkkiä kopioitu",
  "clipboard.download": "Lataa",
+ "mix.offer": "Tämä kappale avattiin YouTube-mixissä; vain kappale ladataan.",
+ "mix.download": "Lataa mix",
  "settings.subtitles": "Tallenna tekstitykset (.srt) videoiden mukana",
  "settings.connection": "Yhteys",
  "settings.speed_limit": "Nopeusrajoitus",

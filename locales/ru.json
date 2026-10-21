@@ -201,6 +201,8 @@
  "clipboard.copied": "Скопировано: {link}",
  "clipboard.copied_many": "Скопировано ссылок: {count}",
  "clipboard.download": "Скачать",
+ "mix.offer": "Эта песня открыта в YouTube-миксе; скачивается только песня.",
+ "mix.download": "Скачать микс",
  "settings.subtitles": "Сохранять субтитры (.srt) вместе с видео",
  "settings.connection": "Подключение",
  "settings.speed_limit": "Ограничение скорости",

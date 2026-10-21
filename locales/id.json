@@ -201,6 +201,8 @@
  "clipboard.copied": "Disalin: {link}",
  "clipboard.copied_many": "{count} tautan disalin",
  "clipboard.download": "Unduh",
+ "mix.offer": "Lagu ini dibuka di dalam Mix YouTube; hanya lagunya yang diunduh.",
+ "mix.download": "Unduh Mix",
  "settings.subtitles": "Simpan subtitel (.srt) bersama video",
  "settings.connection": "Koneksi",
  "settings.speed_limit": "Batas kecepatan",

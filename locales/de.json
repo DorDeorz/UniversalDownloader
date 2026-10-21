@@ -201,6 +201,8 @@
  "clipboard.copied": "Kopiert: {link}",
  "clipboard.copied_many": "{count} Links kopiert",
  "clipboard.download": "Herunterladen",
+ "mix.offer": "Dieser Song wurde in einem YouTube-Mix geöffnet; nur der Song wird heruntergeladen.",
+ "mix.download": "Mix herunterladen",
  "settings.subtitles": "Untertitel (.srt) mit Videos speichern",
  "settings.connection": "Verbindung",
  "settings.speed_limit": "Tempolimit",

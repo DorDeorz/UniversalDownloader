@@ -201,6 +201,8 @@
  "clipboard.copied": "Copiado: {link}",
  "clipboard.copied_many": "{count} links copiados",
  "clipboard.download": "Baixar",
+ "mix.offer": "Esta música foi aberta em um Mix do YouTube; só a música é baixada.",
+ "mix.download": "Baixar o Mix",
  "settings.subtitles": "Salvar legendas (.srt) com os vídeos",
  "settings.connection": "Conexão",
  "settings.speed_limit": "Limite de velocidade",

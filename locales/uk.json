@@ -201,6 +201,8 @@
  "clipboard.copied": "Скопійовано: {link}",
  "clipboard.copied_many": "Скопійовано посилань: {count}",
  "clipboard.download": "Завантажити",
+ "mix.offer": "Цю пісню відкрито в міксі YouTube; завантажується лише пісня.",
+ "mix.download": "Завантажити мікс",
  "settings.subtitles": "Зберігати субтитри (.srt) разом із відео",
  "settings.connection": "З'єднання",
  "settings.speed_limit": "Обмеження швидкості",

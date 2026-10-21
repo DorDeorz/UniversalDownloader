@@ -201,6 +201,8 @@
  "clipboard.copied": "Gekopieerd: {link}",
  "clipboard.copied_many": "{count} links gekopieerd",
  "clipboard.download": "Downloaden",
+ "mix.offer": "Dit nummer is geopend in een YouTube-mix; alleen het nummer wordt gedownload.",
+ "mix.download": "Mix downloaden",
  "settings.subtitles": "Ondertitels (.srt) bij video's opslaan",
  "settings.connection": "Verbinding",
  "settings.speed_limit": "Snelheidslimiet",

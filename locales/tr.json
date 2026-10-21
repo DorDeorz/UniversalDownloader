@@ -201,6 +201,8 @@
  "clipboard.copied": "Kopyalandı: {link}",
  "clipboard.copied_many": "{count} bağlantı kopyalandı",
  "clipboard.download": "İndir",
+ "mix.offer": "Bu şarkı bir YouTube Mix'inde açılmış; yalnızca şarkı indirilir.",
+ "mix.download": "Mix'i indir",
  "settings.subtitles": "Videolarla birlikte altyazıyı (.srt) kaydet",
  "settings.connection": "Bağlantı",
  "settings.speed_limit": "Hız sınırı",

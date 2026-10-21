@@ -201,6 +201,8 @@
  "clipboard.copied": "Kopierad: {link}",
  "clipboard.copied_many": "{count} länkar kopierade",
  "clipboard.download": "Ladda ner",
+ "mix.offer": "Den här låten öppnades i en YouTube-mix; bara låten laddas ner.",
+ "mix.download": "Ladda ner mixen",
  "settings.subtitles": "Spara undertexter (.srt) med videor",
  "settings.connection": "Anslutning",
  "settings.speed_limit": "Hastighetsgräns",

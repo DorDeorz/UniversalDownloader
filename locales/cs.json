@@ -201,6 +201,8 @@
  "clipboard.copied": "Zkopírováno: {link}",
  "clipboard.copied_many": "Zkopírované odkazy: {count}",
  "clipboard.download": "Stáhnout",
+ "mix.offer": "Tato skladba byla otevřena v mixu YouTube; stáhne se jen skladba.",
+ "mix.download": "Stáhnout mix",
  "settings.subtitles": "Ukládat titulky (.srt) s videi",
  "settings.connection": "Připojení",
  "settings.speed_limit": "Omezení rychlosti",

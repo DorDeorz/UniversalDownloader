@@ -101,7 +101,7 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
 
 ### Windows
 
-- **Browser extension** for Chrome, Edge, Brave and Opera (see below).
+- **Browser extension** for Chrome, Edge, Brave, Opera and Firefox (see below).
 - **Clipboard watch:** with Settings › Copied links › Watch, every link
   you copy while Orbida runs is offered with a Download button.
 - Video Only mode, and the WebM and Opus formats.
@@ -139,10 +139,13 @@ The extension is not in the Chrome Web Store, so it is added by hand:
    `edge://extensions`) and turn on **Developer mode**.
 3. Click **Load unpacked** and choose the folder that opened.
 
-Firefox can load it from `about:debugging` › This Firefox › Load Temporary
-Add-on (pick `manifest.json`), but removes it when Firefox closes. The
-extension needs no access to the pages you visit: it only reads the address
-of the tab when you click it.
+**Firefox** (140 or newer): in the same window click **Add to Firefox**, then
+**Add** in Firefox. This copy is signed by Mozilla, so Firefox keeps it after
+it closes. It is not listed on addons.mozilla.org; the release also has it as
+`Orbida-Firefox-<version>.xpi`, which can be dragged into a Firefox window.
+
+The extension needs no access to the pages you visit: it only reads the
+address of the tab when you click it.
 
 ![Browser extension](docs/images/extension.png)
 

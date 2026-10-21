@@ -1,4 +1,4 @@
-"""Build the Windows EXE from Orbida.spec (ISSUES.md #48, #61-#66, #72, #77).
+r"""Build the Windows EXE from Orbida.spec (ISSUES.md #48, #61-#66, #72, #77).
 
 Refuses to build when an input is missing or broken, so a bad EXE is never
 produced: FFmpeg/ffprobe must be real programs (not Git LFS pointers) that
@@ -11,6 +11,8 @@ Usage (in a clean virtual environment with requirements-dev.txt):
 
 With --onedir, bin\deno.exe is bundled when present (--require-deno makes
 it mandatory) so YouTube's JavaScript challenges work out of the box.
+firefox\Orbida.xpi, the Mozilla-signed Firefox add-on, is bundled when present
+(--require-firefox makes it mandatory; see firefox_addon.py).
 """
 
 import argparse
@@ -24,6 +26,7 @@ import sys
 from datetime import datetime, timezone
 from importlib import metadata
 
+import firefox_addon
 import media_tools
 from version import APP_NAME, __version__
 
@@ -75,7 +78,8 @@ def check_impersonation(available=None):
     return None
 
 
-def preflight(root=ROOT, run=subprocess.run, require_windows=True, require_deno=False, impersonation=None):
+def preflight(root=ROOT, run=subprocess.run, require_windows=True, require_deno=False, require_firefox=False,
+              impersonation=None):
     """All problems that must be fixed before building."""
     problems = []
     if require_windows and sys.platform != "win32":
@@ -101,6 +105,11 @@ def preflight(root=ROOT, run=subprocess.run, require_windows=True, require_deno=
         deno = check_deno(os.path.join(bin_dir, "deno.exe"), run)
         if deno:
             problems.append(deno)
+    xpi = os.path.join(root, "firefox", "Orbida.xpi")
+    if require_firefox and not os.path.isfile(xpi):
+        problems.append(f"{xpi} not found (the signed Firefox add-on)")
+    elif os.path.isfile(xpi):
+        problems += firefox_addon.check(xpi, source=os.path.join(root, "browser_extension"))
     return problems
 
 
@@ -129,6 +138,9 @@ def write_manifest(exe_path, dist=DIST, root=ROOT):
     deno = os.path.join(root, "bin", "deno.exe")
     if os.path.isfile(deno):
         files.append(deno)
+    xpi = os.path.join(root, "firefox", "Orbida.xpi")
+    if os.path.isfile(xpi):
+        files.append(xpi)
     sums = {os.path.basename(p): sha256(p) for p in files}
     with open(os.path.join(dist, "SHA256SUMS.txt"), "w", encoding="utf-8") as f:
         for name, digest in sums.items():
@@ -164,8 +176,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--onedir", action="store_true", help="build a folder for the installer")
     parser.add_argument("--require-deno", action="store_true", help="fail unless bin\\deno.exe works")
+    parser.add_argument("--require-firefox", action="store_true", help="fail unless firefox\\Orbida.xpi is signed")
     args = parser.parse_args(argv)
-    problems = preflight(require_deno=args.require_deno)
+    problems = preflight(require_deno=args.require_deno, require_firefox=args.require_firefox)
     if problems:
         print("Cannot build:")
         for problem in problems:

@@ -159,9 +159,13 @@ Eklenti Chrome Web Mağazası'nda olmadığı için elle eklenir:
    `edge://extensions`) sayfasını açıp **Geliştirici modu**'nu açın.
 3. **Paketlenmemiş öğe yükle**'ye tıklayıp açılan klasörü seçin.
 
-Firefox eklentiyi `about:debugging` › Bu Firefox › Geçici eklenti yükle
-ile (`manifest.json` seçilerek) yükleyebilir, ama Firefox kapanınca
-kaldırır. Eklentinin ziyaret ettiğiniz sayfalara erişimi yoktur; yalnızca
+**Firefox** (140 ya da daha yeni): aynı pencerede **Firefox'a ekle**'ye,
+ardından Firefox'ta **Ekle**'ye tıklayın. Bu kopya Mozilla tarafından
+imzalıdır, bu yüzden Firefox kapanınca kaldırılmaz. addons.mozilla.org'da
+listelenmez; sürüm sayfasında da `Orbida-Firefox-<sürüm>.xpi` olarak durur
+ve bir Firefox penceresine sürüklenerek kurulabilir.
+
+Eklentinin ziyaret ettiğiniz sayfalara erişimi yoktur; yalnızca
 tıkladığınızda sekmenin adresini okur.
 
 ![Tarayıcı eklentisi](docs/images/extension.png)

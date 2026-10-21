@@ -28,6 +28,10 @@
     "scripts": ["background.js"]
   },
   "browser_specific_settings": {
-    "gecko": { "id": "orbida@dordeorz.github.io", "strict_min_version": "121.0" }
+    "gecko": {
+      "id": "orbida@dordeorz.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
   }
 }

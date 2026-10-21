@@ -66,22 +66,34 @@ app logs at startup whether it is available.
 ## Release workflow
 
 One GitHub Release per version holds both apps: `Orbida-Setup-<version>.exe`
-(Windows), `Orbida-<version>.apk` (Android), `SHA256SUMS.txt` for both, and
+(Windows), `Orbida-<version>.apk` (Android), the Firefox add-on
+`Orbida-Firefox-<version>.xpi`, `SHA256SUMS.txt` for all three, and
 `build-info.json`. It is tagged `orbida-v<version>`, and the in-app updaters
 of both apps read the latest such release (see [updates.md](updates.md)).
 
 `.github/workflows/release.yml`:
 
-1. **Windows** (`windows-latest`): checks out with Git LFS, so the real FFmpeg
+1. **Firefox add-on** (`ubuntu-latest`): runs `web-ext lint` (the checks
+   addons.mozilla.org runs) on `browser_extension/`, then has it signed by
+   Mozilla in the **unlisted** channel (signed for self-distribution, no
+   store page) and checks the result with `firefox_addon.py check`: signed,
+   the app's version, the same files as `browser_extension/`. AMO signs each
+   version number only once, so a run that comes again downloads the copy
+   signed before (`firefox_addon.py fetch`). Pull requests only lint. The
+   Windows job puts the signed file in `firefox\Orbida.xpi`, which the
+   installer ships and Settings › Browser extension › **Add to Firefox**
+   opens in Firefox.
+2. **Windows** (`windows-latest`): checks out with Git LFS, so the real FFmpeg
    and ffprobe are used; downloads the latest Deno; builds the folder and the
    installer; installs it silently, runs FFmpeg, ffprobe and Deno from the
    installed folder, starts the app and checks it is still running after 20
    seconds, then uninstalls it. It then installs again and lets the running
    app update itself with the new installer, the way the updater does, and
    checks that the app closed and started again.
-2. **Android**: runs `.github/workflows/android.yml` (APK build and emulator
+3. **Android**: runs `.github/workflows/android.yml` (APK build and emulator
    test).
-3. **Publish**: puts both files in one release with one checksum list. With
+4. **Publish**: puts the three files in one release with one checksum list.
+   It refuses to publish without a signed APK or a signed Firefox add-on. With
    **delete_android_previews** ticked it also deletes every
    `android-preview-*` pre-release and its tag.
 
@@ -90,6 +102,25 @@ A manual run from the Actions tab builds and tests only, unless **publish**
 is ticked; then it also creates the tag on the chosen commit. The release
 text is `RELEASE_NOTES.md`. Pull requests that change the Windows build run
 the Windows job only.
+
+### Firefox signing key
+
+Firefox keeps only add-ons signed by Mozilla; an unsigned one can only be
+loaded as a temporary add-on, which Firefox removes when it closes. The key
+is the repository owner's:
+
+1. Sign in (or create a free account) at <https://addons.mozilla.org> and
+   accept the Firefox Add-on Distribution Agreement in the Developer Hub.
+2. Open <https://addons.mozilla.org/developers/addon/api/key/> and generate
+   credentials: a **JWT issuer** (`user:12345:67`) and a **JWT secret**.
+3. Add them to the repository as Actions secrets `AMO_JWT_ISSUER` and
+   `AMO_JWT_SECRET` (Settings › Secrets and variables › Actions).
+
+The first signed version creates the unlisted add-on
+`orbida@dordeorz.github.io` in that account. Signing is automatic and usually
+takes a few minutes; the job waits up to 30 minutes. Mozilla may still review
+an unlisted add-on later. The extension's version follows `version.py`
+(a test checks it), so every release signs a new version.
 
 The version lives only in `version.py`; the window title, the EXE name,
 `build-info.json`, the release tag and the updater all read it. Bump it

@@ -4,6 +4,10 @@ name: Release
 # in one GitHub Release tagged orbida-v<version> (version from version.py).
 # The in-app updaters read the latest such release.
 #
+# - The Firefox job has browser_extension/ signed by Mozilla (addons.mozilla.org,
+#   unlisted: no store page) with the AMO_JWT_ISSUER / AMO_JWT_SECRET secrets.
+#   The installer ships the signed file and the release carries it too;
+#   Firefox keeps only signed add-ons after it closes. See firefox_addon.py.
 # - The Windows job builds the installer, then installs it on the runner to
 #   check that the app starts and finds FFmpeg and Deno.
 # - The Android job is .github/workflows/android.yml (build and emulator test).
@@ -22,6 +26,8 @@ on:
       - "installer/**"
       - "Orbida.spec"
       - "build_app.py"
+      - "firefox_addon.py"
+      - "browser_extension/**"
       - "requirements*.txt"
   workflow_dispatch:
     inputs:
@@ -38,8 +44,60 @@ permissions:
   contents: read
 
 jobs:
+  firefox:
+    name: Firefox add-on
+    runs-on: ubuntu-latest
+    outputs:
+      signed: ${{ steps.sign.outputs.signed }}
+    env:
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The checks addons.mozilla.org runs; errors fail the job.
+      - name: Check the add-on (web-ext lint)
+        run: npx --yes web-ext@10.7.0 lint --source-dir browser_extension
+
+      # AMO signs a version number once: a run that comes again downloads the
+      # copy it signed before. A pull request never signs (no secrets there).
+      - name: Sign with Mozilla (unlisted)
+        id: sign
+        if: github.event_name != 'pull_request' && env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != ''
+        run: |
+          set +e
+          python firefox_addon.py fetch firefox/Orbida.xpi
+          code=$?
+          set -e
+          if [ $code -eq 2 ]; then
+            npx --yes web-ext@10.7.0 sign --channel unlisted --source-dir browser_extension \
+              --artifacts-dir "$RUNNER_TEMP/web-ext" --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" \
+              --approval-timeout 1800000
+            mkdir -p firefox
+            mv "$RUNNER_TEMP"/web-ext/*.xpi firefox/Orbida.xpi
+          elif [ $code -ne 0 ]; then
+            exit $code
+          fi
+          python firefox_addon.py check firefox/Orbida.xpi
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.sign.outputs.signed == 'true'
+        with:
+          name: firefox-addon
+          path: firefox/Orbida.xpi
+
   windows:
     name: Windows installer
+    needs: firefox
     runs-on: windows-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -80,8 +138,18 @@ jobs:
           Expand-Archive "$env:RUNNER_TEMP\deno.zip" -DestinationPath bin -Force
           bin\deno.exe --version
 
+      # The installer ships the signed Firefox add-on when there is one.
+      - uses: actions/download-artifact@v4
+        if: needs.firefox.outputs.signed == 'true'
+        with:
+          name: firefox-addon
+          path: firefox
+
       - name: Build the app folder
-        run: .venv\Scripts\python build_app.py --onedir --require-deno
+        run: |
+          $extra = @()
+          if ("${{ needs.firefox.outputs.signed }}" -eq "true") { $extra += "--require-firefox" }
+          .venv\Scripts\python build_app.py --onedir --require-deno @extra
 
       - name: Build the installer
         run: |
@@ -161,7 +229,7 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [windows, android]
+    needs: [firefox, windows, android]
     if: github.ref_type == 'tag' || inputs.publish
     runs-on: ubuntu-latest
     permissions:
@@ -176,11 +244,21 @@ jobs:
         run: |
           echo "::error::The APK is not signed with the project key; add the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets"
           exit 1
+      # Firefox keeps only add-ons signed by Mozilla.
+      - name: Only a signed Firefox add-on is published
+        if: needs.firefox.outputs.signed != 'true'
+        run: |
+          echo "::error::The Firefox add-on is not signed; add the AMO_JWT_ISSUER and AMO_JWT_SECRET secrets (docs/building.md)"
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: windows-installer
           path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: firefox-addon
+          path: firefox
       - uses: actions/download-artifact@v4
         with:
           name: apk-arm64-v8a
@@ -190,15 +268,16 @@ jobs:
           apks=(apk/*.apk)
           if [ ${#apks[@]} -ne 1 ]; then echo "Expected one APK, found ${#apks[@]}"; exit 1; fi
           cp "${apks[0]}" "release/Orbida-$VERSION.apk"
+          cp firefox/Orbida.xpi "release/Orbida-Firefox-$VERSION.xpi"
           cd release
           test -f "Orbida-Setup-$VERSION.exe"
-          sha256sum "Orbida-Setup-$VERSION.exe" "Orbida-$VERSION.apk" > SHA256SUMS.txt
+          sha256sum "Orbida-Setup-$VERSION.exe" "Orbida-$VERSION.apk" "Orbida-Firefox-$VERSION.xpi" > SHA256SUMS.txt
           cat SHA256SUMS.txt
           ls -l
       - name: Create the release
         run: |
           gh release create "orbida-v$VERSION" \
-            "release/Orbida-Setup-$VERSION.exe" "release/Orbida-$VERSION.apk" \
+            "release/Orbida-Setup-$VERSION.exe" "release/Orbida-$VERSION.apk" "release/Orbida-Firefox-$VERSION.xpi" \
             release/SHA256SUMS.txt release/build-info.json \
             --target "$GITHUB_SHA" --latest --title "Orbida $VERSION" --notes-file RELEASE_NOTES.md
       - name: Delete the Android preview and test pre-releases

@@ -229,3 +229,49 @@ def send_link(url, folder=None):
     except (OSError, ValueError, KeyError, TypeError) as e:
         _log.warning("Could not hand the link to the running app: %s", e)
         return False
+
+
+# --- The Firefox add-on ------------------------------------------------------------
+#
+# Firefox keeps only add-ons signed by Mozilla. The release workflow has the
+# extension signed on addons.mozilla.org (unlisted: not shown in the store)
+# and the installer ships the signed file as firefox\Orbida.xpi. Opening that
+# file with Firefox shows Firefox's own "Add Orbida?" prompt.
+
+FIREFOX_XPI = os.path.join("firefox", "Orbida.xpi")
+
+
+def firefox_path():
+    """firefox.exe as Windows records it (App Paths, current user first), or None."""
+    if sys.platform != "win32":
+        return None
+    import winreg
+    key_name = r"Software\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe"
+    for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(root, key_name) as key:
+                path = winreg.QueryValue(key, None)
+        except OSError:
+            continue
+        path = path.strip().strip('"')
+        if os.path.isfile(path):
+            return path
+    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        path = os.path.join(base, "Mozilla Firefox", "firefox.exe") if base else ""
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+
+def open_in_firefox(xpi, firefox=None):
+    """Open the add-on file in Firefox, which asks whether to add it; False without Firefox."""
+    import subprocess
+    firefox = firefox or firefox_path()
+    if not firefox:
+        return False
+    try:
+        subprocess.Popen([firefox, os.path.abspath(xpi)])
+        return True
+    except OSError as e:
+        _log.warning("Could not start Firefox: %s", e)
+        return False

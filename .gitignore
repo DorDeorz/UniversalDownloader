@@ -21,3 +21,5 @@ bin/deno.exe
 android/.build/
 android/.buildozer/
 android/bin/
+# The signed Firefox add-on, put here by the release workflow.
+firefox/

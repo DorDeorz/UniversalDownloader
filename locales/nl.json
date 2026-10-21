@@ -174,6 +174,7 @@
  "update.title": "Orbida bijwerken",
  "update.checking": "Zoeken naar updates...",
  "update.latest": "Je hebt de nieuwste versie ({version}).",
+ "update.ytdlp_ready": "yt-dlp {version} is gedownload; deze wordt vanaf de volgende start gebruikt",
  "update.available": "Orbida {version} is beschikbaar.",
  "update.failed": "Kon niet op updates controleren. Controleer je internetverbinding.",
  "update.install": "Downloaden en installeren",

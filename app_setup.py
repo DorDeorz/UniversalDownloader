@@ -55,6 +55,27 @@ def migrate_legacy_data(base=None):
     return copied
 
 
+def ytdlp_dir():
+    """Folder of the yt-dlp downloaded for use instead of the bundled one (ytdlp_updates)."""
+    return os.path.join(data_dir(), "yt-dlp")
+
+
+def use_downloaded_ytdlp():
+    """Import the downloaded yt-dlp, when there is a newer one; call before anything imports yt_dlp.
+
+    One that cannot be imported is deleted, and the bundled one is used.
+    """
+    import ytdlp_updates
+    folder = ytdlp_dir()
+    try:
+        if ytdlp_updates.activate(folder):
+            import yt_dlp  # noqa: F401  (proves the download works)
+    except Exception:
+        _log.exception("The downloaded yt-dlp does not work; using the bundled one")
+        ytdlp_updates.deactivate(folder)
+    return ytdlp_updates.active_version()
+
+
 def log_dir():
     """Folder of the log files (Settings > Open log folder)."""
     return os.path.join(data_dir(), "logs")

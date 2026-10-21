@@ -174,6 +174,7 @@
  "update.title": "Actualizează Orbida",
  "update.checking": "Se caută actualizări...",
  "update.latest": "Ai cea mai nouă versiune ({version}).",
+ "update.ytdlp_ready": "yt-dlp {version} a fost descărcat; se folosește de la următoarea pornire",
  "update.available": "Orbida {version} este disponibilă.",
  "update.failed": "Nu s-au putut căuta actualizări. Verifică conexiunea la internet.",
  "update.install": "Descarcă și instalează",

@@ -32,6 +32,7 @@ SHARED_MODULES = (
     "urls.py",
     "utils.py",
     "version.py",
+    "ytdlp_updates.py",
 )
 
 

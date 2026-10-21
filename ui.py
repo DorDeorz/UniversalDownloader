@@ -25,6 +25,7 @@ import playlist
 import settings as settings_store
 import updates
 import urls
+import ytdlp_updates
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
 from utils import default_download_dir, resource_path
@@ -1390,6 +1391,7 @@ class App(ctk.CTk):
         self.available_update = None   # updates.Release newer than this version
         self.update_dialog = None
         self._update_status = None     # function giving the last check's result text
+        self._ytdlp_ready = None       # yt-dlp version downloaded for the next start
         self._update_cancel = threading.Event()
         self._update_thread = None
         self.last_summary = None
@@ -2748,17 +2750,38 @@ class App(ctk.CTk):
                 release, error = None, str(e)
             except Exception as e:  # never let a check break the app
                 release, error = None, f"{type(e).__name__}: {e}"
-            self.events.post(events.UPDATE_CHECKED, release=release, error=error, manual=manual)
+            ytdlp = self.update_ytdlp()
+            self.events.post(events.UPDATE_CHECKED, release=release, error=error, manual=manual, ytdlp=ytdlp)
 
         self._update_thread = threading.Thread(target=work, name="orbida-update-check", daemon=True)
         self._update_thread.start()
 
+    def update_ytdlp(self):
+        """Worker thread: download a newer yt-dlp for the next start.
+
+        Returns the version downloaded, or None (up to date, or the check
+        failed; that is only logged, since the bundled yt-dlp still works).
+        """
+        try:
+            return ytdlp_updates.update(app_setup.ytdlp_dir(), lambda url: updates._open(url, "*/*"),
+                                        cancelled=lambda: self._closing)
+        except Exception as e:  # never let a check break the app
+            _log.info("yt-dlp update failed: %s", e)
+            return None
+
     def _set_update_status(self, text):
+        ready = self._ytdlp_ready
+        if ready and text is not None:
+            first = text
+            text = lambda: f"{first()}\n{tr('update.ytdlp_ready', version=ready)}"  # noqa: E731
         self._update_status = text
         if self.settings_view is not None:
             self.settings_view.show_update_status(text)
 
-    def _on_update_checked(self, release, error, manual):
+    def _on_update_checked(self, release, error, manual, ytdlp=None):
+        if ytdlp:
+            self._ytdlp_ready = ytdlp
+            self._append_log(tr("update.ytdlp_ready", version=ytdlp))
         if error:
             _log.info("Update check failed: %s", error)
             if manual:

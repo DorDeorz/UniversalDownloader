@@ -109,6 +109,7 @@ class _ProxiedResponse:
     def __init__(self, ydl, response):
         self._ydl, self._response = ydl, response
         self.headers = response.headers
+        self.url = response.url
 
     def read(self, size=-1):
         from yt_dlp.networking.exceptions import RequestError

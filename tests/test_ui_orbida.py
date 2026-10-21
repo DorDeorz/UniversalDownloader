@@ -278,3 +278,17 @@ def test_update_note_is_logged_once_after_an_update(monkeypatch):
         assert ui.settings_store.load(window.settings_path, "unused").last_version == __version__
     finally:
         window.destroy()
+
+
+@needs_display
+def test_a_downloaded_yt_dlp_is_announced(monkeypatch):
+    ui_helpers.isolate_settings(monkeypatch)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    window = ui.App()
+    try:
+        window._on_update_checked(None, None, manual=True, ytdlp="2026.12.01")
+        note = ui.tr("update.ytdlp_ready", version="2026.12.01")
+        assert f"> {note}" in window.console.get("1.0", "end")
+        assert window._update_status().endswith(note)
+    finally:
+        window.destroy()

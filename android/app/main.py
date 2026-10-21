@@ -17,6 +17,18 @@ import threading
 import time
 from collections import deque
 
+import ytdlp_updates
+
+# A yt-dlp the update check downloaded replaces the bundled one; this has
+# to happen before anything imports yt_dlp.
+YTDLP_DIR = os.path.join(os.environ["ANDROID_PRIVATE"], "yt-dlp") if "ANDROID_PRIVATE" in os.environ else None
+try:
+    if ytdlp_updates.activate(YTDLP_DIR):
+        import yt_dlp  # noqa: F401  (proves the download works)
+except Exception:
+    logging.getLogger(__name__).exception("The downloaded yt-dlp does not work; using the bundled one")
+    ytdlp_updates.deactivate(YTDLP_DIR)
+
 from kivy.base import ExceptionHandler, ExceptionManager
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -1583,12 +1595,23 @@ class UniversalDownloaderApp(MDApp):
                 found, error = self_update.check(APP_VERSION, url), None
             except self_update.UpdateError as e:
                 found, error = None, str(e)
-            self.events.post("update_checked", update=found, quiet=quiet, error=error)
+            ytdlp = None
+            if YTDLP_DIR and url == self_update.RELEASES_URL:
+                try:
+                    ytdlp = ytdlp_updates.update(YTDLP_DIR, lambda page: self_update._open(page, 30))
+                except Exception as e:  # the bundled yt-dlp still works
+                    _log.info("yt-dlp update failed: %s", e)
+            self.events.post("update_checked", update=found, quiet=quiet, error=error, ytdlp=ytdlp)
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _on_update_checked(self, update, quiet, error):
+    def _on_update_checked(self, update, quiet, error, ytdlp=None):
         self._update_checking = False
+        if ytdlp:
+            self.log(self.tr("update.ytdlp_ready", version=ytdlp))
+            if update is None:
+                self.snack(self.tr("update.ytdlp_ready", version=ytdlp))
+                quiet = True  # that note is enough
         if self._selftest == "update":
             selftest(f"update found version={update.version if update else None} error={error}")
             if update:

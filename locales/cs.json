@@ -174,6 +174,7 @@
  "update.title": "Aktualizovat Orbida",
  "update.checking": "Hledání aktualizací...",
  "update.latest": "Máte nejnovější verzi ({version}).",
+ "update.ytdlp_ready": "yt-dlp {version} je stažen; použije se od příštího spuštění",
  "update.available": "Je k dispozici Orbida {version}.",
  "update.failed": "Aktualizace nelze zkontrolovat. Zkontrolujte připojení k internetu.",
  "update.install": "Stáhnout a nainstalovat",

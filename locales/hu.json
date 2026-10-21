@@ -174,6 +174,7 @@
  "update.title": "Orbida frissítése",
  "update.checking": "Frissítések keresése...",
  "update.latest": "A legújabb verziót használja ({version}).",
+ "update.ytdlp_ready": "A yt-dlp {version} letöltve; a következő indítástól használja az app",
  "update.available": "Elérhető az Orbida {version}.",
  "update.failed": "Nem sikerült frissítéseket keresni. Ellenőrizze az internetkapcsolatot.",
  "update.install": "Letöltés és telepítés",

@@ -174,6 +174,7 @@
  "update.title": "Päivitä Orbida",
  "update.checking": "Tarkistetaan päivityksiä...",
  "update.latest": "Käytössäsi on uusin versio ({version}).",
+ "update.ytdlp_ready": "yt-dlp {version} on ladattu; sitä käytetään seuraavasta käynnistyksestä",
  "update.available": "Orbida {version} on saatavilla.",
  "update.failed": "Päivityksiä ei voitu tarkistaa. Tarkista internetyhteys.",
  "update.install": "Lataa ja asenna",

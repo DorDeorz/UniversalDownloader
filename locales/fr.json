@@ -174,6 +174,7 @@
  "update.title": "Mettre à jour Orbida",
  "update.checking": "Recherche de mises à jour...",
  "update.latest": "Vous avez la dernière version ({version}).",
+ "update.ytdlp_ready": "yt-dlp {version} est téléchargé ; il sera utilisé au prochain démarrage",
  "update.available": "Orbida {version} est disponible.",
  "update.failed": "Impossible de rechercher des mises à jour. Vérifiez votre connexion Internet.",
  "update.install": "Télécharger et installer",

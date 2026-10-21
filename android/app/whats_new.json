@@ -1,5 +1,25 @@
 [
   {
+    "version": "1.2.3",
+    "date": "2026-10-21",
+    "en": [
+      "Pause and resume: the button on the progress card holds a download and lets it go on.",
+      "Download on Wi-Fi only (Settings › Behaviour): asks before downloading on mobile data and pauses a running download until Wi-Fi is back.",
+      "yt-dlp updates itself when the app checks for updates, so changed sites work again without a new Orbida.",
+      "An analysis can be cancelled with the Download button.",
+      "Instagram sign-in (Settings › Instagram); age-restricted YouTube videos offer the YouTube sign-in.",
+      "The app's texts are now in all 25 languages."
+    ],
+    "tr": [
+      "Duraklat ve devam ettir: ilerleme kartındaki düğme indirmeyi bekletir ve sürdürür.",
+      "Yalnızca Wi-Fi ile indir (Ayarlar › Davranış): mobil veride indirmeden önce sorar, süren indirmeyi Wi-Fi gelene kadar duraklatır.",
+      "Uygulama güncelleme ararken yt-dlp'yi de günceller; değişen siteler yeni bir Orbida beklemeden yeniden çalışır.",
+      "Analiz, İndir düğmesiyle iptal edilebilir.",
+      "Instagram girişi (Ayarlar › Instagram); yaş kısıtlı YouTube videoları YouTube girişini önerir.",
+      "Uygulamanın tüm metinleri artık 25 dilde."
+    ]
+  },
+  {
     "version": "1.2.2",
     "date": "2026-10-21",
     "en": [

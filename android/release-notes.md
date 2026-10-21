@@ -1,6 +1,15 @@
-**Orbida for Android**, version 1.2.2 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
+**Orbida for Android**, version 1.2.3 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
 
 Coming from an Android preview (UniversalDownloader or Orbida 0.x)? Uninstall it once: 1.0 has a new app id and signing key. From 1.0 on, the app updates itself (Settings › About › Check for updates).
+
+**New in 1.2.3**
+- Pause and resume: the button on the progress card holds a download and lets it go on.
+- Download on Wi-Fi only (Settings › Behaviour): asks before downloading on mobile data and pauses a running download until Wi-Fi is back.
+- yt-dlp updates itself when the app checks for updates, so changed sites work again without a new Orbida.
+- An analysis can be cancelled with the Download button (it reads Cancel meanwhile).
+- Instagram sign-in (Settings › Instagram); age-restricted YouTube videos offer the YouTube sign-in.
+- The app's texts are in all 25 languages.
+- A link shared while a download runs waits in the queue; Back closes a dialog or returns to Download; low free space is pointed out.
 
 **New in 1.2.2**
 - NSFW Reddit posts: Reddit shows them only to signed-in accounts. Settings › Reddit › Sign in to Reddit (optional; the app also offers it when Reddit refuses a post). The sign-in stays on this phone.

@@ -1,14 +1,58 @@
-**Orbida 1.2.2** downloads NSFW Reddit posts, handles YouTube Mix links,
-cuts sponsors with SponsorBlock and tells you when downloads finish. This
-release holds both apps and the Firefox add-on:
+**Orbida 1.2.3** pauses and resumes downloads, keeps yt-dlp up to date
+on its own, signs in to Instagram and age-restricted YouTube videos, and
+fixes the problems two code reviews found. This release holds both apps
+and the Firefox add-on:
 
-- **Windows:** `Orbida-Setup-1.2.2.exe`, for Windows 10 or 11 (64-bit).
-- **Android:** `Orbida-1.2.2.apk`, for 64-bit ARM phones with Android 7 or newer.
-- **Firefox:** `Orbida-Firefox-1.2.2.xpi`, the browser extension signed by Mozilla.
+- **Windows:** `Orbida-Setup-1.2.3.exe`, for Windows 10 or 11 (64-bit).
+- **Android:** `Orbida-1.2.3.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Firefox:** `Orbida-Firefox-1.2.3.xpi`, the browser extension signed by Mozilla.
 
 Orbida 1.0 updates itself to this version: on Windows click **Update to
-1.2.2** in the top bar; on Android open Settings › About › Check for
+1.2.3** in the top bar; on Android open Settings › About › Check for
 updates.
+
+## New in 1.2.3
+
+**Both apps:**
+- **Pause and resume.** A running download can be paused and picks up
+  where it stopped (Windows: the Download button reads Pause while a
+  download runs; Android: the button on the progress card).
+- **yt-dlp stays up to date.** When Orbida looks for updates it also
+  fetches the newest yt-dlp (checked against its published checksum) and
+  uses it from the next start, so a site that changed works again without
+  waiting for a new Orbida.
+- **Cancel an analysis.** A long playlist or a slow site can be stopped
+  while it is being read.
+- **More sign-ins.** Instagram posts and age-restricted YouTube videos that
+  need an account now say so and offer a sign-in:
+  - Windows: Settings › Downloads › **Use my browser's sign-in** now lends
+    your Firefox or Zen sign-in to Reddit, Instagram, YouTube, Facebook, X
+    and TikTok (and to no other site).
+  - Android: Settings › **Instagram** sign-in; YouTube's sign-in is offered
+    for age-restricted videos.
+- A failed download no longer leaves half-downloaded files behind.
+- Checking for and downloading updates goes through the proxy from
+  Settings.
+
+**Windows:**
+- **Keep running in the tray.** With Settings › Downloads › **Keep running
+  in the tray when closed**, closing the window keeps Orbida in the
+  notification area: downloads go on, and the icon shows their progress.
+  Starting Orbida again brings its window back.
+- A file whose name differs only in capital letters no longer counts as a
+  new name.
+- Pasting text with a link in it keeps just the link; the activity box is
+  read-only; Open log folder opens the right folder; the window fits the
+  monitor it is on.
+
+**Android:**
+- **Wi-Fi only.** Settings › Behaviour › **Download on Wi-Fi only** asks
+  before downloading on mobile data and pauses a running download until
+  Wi-Fi is back.
+- All of the app's texts are now in all 25 languages.
+- A link shared while a download runs waits in the queue; Back closes a
+  dialog or returns to Download; low free space is pointed out before a
+  download.
 
 ## New in 1.2.2
 
@@ -127,7 +171,7 @@ Before this version, the Windows app was called Universal Video Downloader.
 - New downloads go to `Downloads\Orbida` by default. A folder you chose
   before stays the same.
 
-**Install:** run `Orbida-Setup-1.2.2.exe`. It installs for your user only,
+**Install:** run `Orbida-Setup-1.2.3.exe`. It installs for your user only,
 with no administrator password. FFmpeg, ffprobe and Deno are included.
 The setup is not code-signed, so SmartScreen may say "Windows protected
 your PC". Click **More info**, then **Run anyway**.

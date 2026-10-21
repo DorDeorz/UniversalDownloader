@@ -243,3 +243,39 @@ def test_cancel_removes_the_thumbnail_and_new_folders(manager, server, media, tm
 
     assert result.status is ItemStatus.CANCELLED
     assert list(tmp_path.iterdir()) == []
+
+
+def _sponsor_segments(monkeypatch, segments):
+    # The test clip comes from the generic extractor; SponsorBlock only knows YouTube.
+    monkeypatch.setattr(logic.QuietSponsorBlockPP, "EXTRACTORS", {"Generic": "YouTube"})
+    monkeypatch.setattr(logic.QuietSponsorBlockPP, "_get_sponsor_segments", lambda self, video_id, service: segments())
+
+
+def test_sponsorblock_cuts_the_segments(manager, server, tmp_path, monkeypatch):
+    _sponsor_segments(monkeypatch, lambda: [{"segment": [2, 4], "category": "sponsor", "actionType": "skip",
+                                             "videoDuration": 0, "description": ""}])
+    for mode, fmt in (("Video + Audio", "mp4"), ("Audio Only", "mp3")):
+        result = download(manager, server, tmp_path, mode=mode, format=fmt, quality="Best", sponsorblock=True)
+        assert result.status is ItemStatus.COMPLETED, result.error
+        assert probe(result.path)[1] == pytest.approx(4, abs=0.5)
+
+
+def test_sponsorblock_unavailable_keeps_the_whole_video(manager, server, tmp_path, monkeypatch):
+    def offline():
+        raise logic.yt_dlp.utils.PostProcessingError("Unable to communicate with SponsorBlock API")
+    _sponsor_segments(monkeypatch, offline)
+    result = download(manager, server, tmp_path, mode="Video + Audio", format="mp4", quality="Best",
+                      sponsorblock=True)
+    assert result.status is ItemStatus.COMPLETED, result.error
+    assert probe(result.path)[1] == pytest.approx(6, abs=0.5)
+
+
+def test_sponsorblock_is_skipped_for_a_trimmed_download(manager, server, tmp_path, monkeypatch):
+    _sponsor_segments(monkeypatch, lambda: pytest.fail("SponsorBlock asked for a trimmed download"))
+    lines = []
+    result = manager.download_video(f"{server}/clip.mp4", {"save_path": str(tmp_path), "trim_start": "1",
+                                                           "trim_end": "5", "sponsorblock": True},
+                                    log_callback=lines.append)
+    assert result.status is ItemStatus.COMPLETED, result.error
+    assert probe(result.path)[1] == pytest.approx(4, abs=0.3)
+    assert "SponsorBlock: skipped for a trimmed download" in lines

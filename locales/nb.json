@@ -204,6 +204,7 @@
  "mix.offer": "Denne sangen ble åpnet i en YouTube-miks; bare sangen lastes ned.",
  "mix.download": "Last ned miksen",
  "settings.subtitles": "Lagre undertekster (.srt) med videoer",
+ "settings.sponsorblock": "Klipp ut sponsorer og intro fra YouTube-videoer (SponsorBlock)",
  "settings.connection": "Tilkobling",
  "settings.speed_limit": "Hastighetsgrense",
  "speed.unlimited": "Ingen grense",
@@ -227,5 +228,6 @@
  "extension.description": "Sender videoen du ser på, eller en hvilken som helst lenke, til Orbida-appen.",
  "log.batch": "{count} lenker lagt til i køen",
  "log.from_browser": "Lenke mottatt fra nettleseren",
- "options.subtitles": "Undertekster"
+ "options.subtitles": "Undertekster",
+ "options.sponsorblock": "Hopp over sponsorer"
 }

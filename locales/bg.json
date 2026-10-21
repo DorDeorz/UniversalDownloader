@@ -204,6 +204,7 @@
  "mix.offer": "Тази песен е отворена в микс на YouTube; изтегля се само песента.",
  "mix.download": "Изтегли микса",
  "settings.subtitles": "Запазване на субтитри (.srt) с видеата",
+ "settings.sponsorblock": "Изрязване на спонсори и интра от видеа в YouTube (SponsorBlock)",
  "settings.connection": "Връзка",
  "settings.speed_limit": "Ограничение на скоростта",
  "speed.unlimited": "Без ограничение",
@@ -227,5 +228,6 @@
  "extension.description": "Изпраща гледаното видео или всяка връзка към приложението Orbida.",
  "log.batch": "Добавени връзки в опашката: {count}",
  "log.from_browser": "Получена връзка от браузъра",
- "options.subtitles": "Субтитри"
+ "options.subtitles": "Субтитри",
+ "options.sponsorblock": "Без спонсори"
 }

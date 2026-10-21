@@ -347,6 +347,18 @@ def test_folder_is_not_opened_when_nothing_completed(app, monkeypatch):
 
 
 @needs_display
+@pytest.mark.parametrize("in_front", [True, False])
+def test_finished_downloads_notify_only_in_the_background(app, monkeypatch, in_front):
+    shown = []
+    monkeypatch.setattr(ui.app_setup, "notify", lambda title, text, window=None: shown.append((title, text, window)))
+    monkeypatch.setattr(app, "_in_front", lambda: in_front)
+    app.settings.show_summary = False
+    app._job_kind = "download"
+    app._on_job_done(JobSummary([ItemResult("a", "A", ItemStatus.COMPLETED, path="x")]))
+    assert shown == ([] if in_front else [("Download complete", "1 completed", app)])
+
+
+@needs_display
 def test_keyboard_shortcuts(app, monkeypatch):
     calls = []
     monkeypatch.setattr(app, "start_download_queue", lambda: calls.append("download"))

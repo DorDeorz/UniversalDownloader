@@ -204,6 +204,7 @@
  "mix.offer": "Dit nummer is geopend in een YouTube-mix; alleen het nummer wordt gedownload.",
  "mix.download": "Mix downloaden",
  "settings.subtitles": "Ondertitels (.srt) bij video's opslaan",
+ "settings.sponsorblock": "Sponsors en intro's uit YouTube-video's knippen (SponsorBlock)",
  "settings.connection": "Verbinding",
  "settings.speed_limit": "Snelheidslimiet",
  "speed.unlimited": "Geen limiet",
@@ -227,5 +228,6 @@
  "extension.description": "Stuurt de video die je bekijkt, of een willekeurige link, naar de Orbida-app.",
  "log.batch": "{count} links aan de wachtrij toegevoegd",
  "log.from_browser": "Link ontvangen van de browser",
- "options.subtitles": "Ondertitels"
+ "options.subtitles": "Ondertitels",
+ "options.sponsorblock": "Sponsors overslaan"
 }

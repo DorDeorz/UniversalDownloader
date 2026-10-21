@@ -86,6 +86,14 @@ Windows tarafının ayrıntıları için:
   kapağıyla kaydedilir. SoundCloud ve Bandcamp doğrudan iner.
 - **Altyazı** videoların yanına .srt dosyası olarak, uygulamanın dilinde ve
   İngilizce kaydedilebilir.
+- **Sponsorları atla.** SponsorBlock açıkken, SponsorBlock topluluğunun
+  işaretlediği sponsor, "abone ol" ve intro kısımları YouTube videolarından
+  kesilir (müzik videolarındaki konuşmalar da). Kırpılan indirmelerde
+  kullanılmaz.
+- **YouTube Mix linkleri.** Mix içinde açılmış bir şarkı tek başına iner;
+  **Mix'i indir** düğmesi listenin tamamını sunar.
+- **Bildirim:** Başka bir pencerede çalışırken indirmeler bitince haber
+  verir.
 - **Birden çok bağlantı.** Bir bağlantı listesi yapıştırıp Analiz et'e
   basın: her biri sırayla iner.
 - **Kuyruk.** İndirme sürerken eklenen bağlantılar kuyrukta bekler ve

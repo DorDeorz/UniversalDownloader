@@ -204,6 +204,7 @@
  "mix.offer": "Această melodie a fost deschisă într-un Mix YouTube; se descarcă doar melodia.",
  "mix.download": "Descarcă Mixul",
  "settings.subtitles": "Salvează subtitrările (.srt) cu videoclipurile",
+ "settings.sponsorblock": "Taie sponsorii și introurile din videoclipurile YouTube (SponsorBlock)",
  "settings.connection": "Conexiune",
  "settings.speed_limit": "Limită de viteză",
  "speed.unlimited": "Fără limită",
@@ -227,5 +228,6 @@
  "extension.description": "Trimite videoclipul pe care îl vizionezi sau orice link către aplicația Orbida.",
  "log.batch": "{count} linkuri adăugate în coadă",
  "log.from_browser": "Link primit din browser",
- "options.subtitles": "Subtitrări"
+ "options.subtitles": "Subtitrări",
+ "options.sponsorblock": "Sari peste sponsori"
 }

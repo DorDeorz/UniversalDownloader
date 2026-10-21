@@ -204,6 +204,7 @@
  "mix.offer": "Ten utwór otwarto w składance YouTube (Mix); pobierany jest tylko utwór.",
  "mix.download": "Pobierz Mix",
  "settings.subtitles": "Zapisuj napisy (.srt) razem z filmami",
+ "settings.sponsorblock": "Wycinaj sponsorów i intra z filmów YouTube (SponsorBlock)",
  "settings.connection": "Połączenie",
  "settings.speed_limit": "Limit prędkości",
  "speed.unlimited": "Bez limitu",
@@ -227,5 +228,6 @@
  "extension.description": "Wysyła oglądany film lub dowolny link do aplikacji Orbida.",
  "log.batch": "Dodano linki do kolejki: {count}",
  "log.from_browser": "Odebrano link z przeglądarki",
- "options.subtitles": "Napisy"
+ "options.subtitles": "Napisy",
+ "options.sponsorblock": "Pomiń sponsorów"
 }

@@ -79,6 +79,13 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
   artist, album and album cover. SoundCloud and Bandcamp download directly.
 - **Subtitles** can be saved next to videos as .srt files, in the app's
   language and English.
+- **Skip sponsors.** With SponsorBlock on, the sponsor, "subscribe" and
+  intro parts the SponsorBlock community marked are cut out of YouTube
+  videos (also the talking in music videos). Not used for trimmed downloads.
+- **YouTube Mix links.** A song opened inside a Mix downloads alone; a
+  **Download the Mix** button offers the whole list.
+- **A notification** tells you when downloads finish while you work in
+  another window.
 - **Several links at once.** Paste a list of links and press Analyze: each
   one downloads in turn.
 - **Queue.** Links added while a download runs wait in a queue and start

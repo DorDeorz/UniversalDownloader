@@ -204,6 +204,7 @@
  "mix.offer": "Αυτό το τραγούδι άνοιξε σε ένα Mix του YouTube· κατεβαίνει μόνο το τραγούδι.",
  "mix.download": "Λήψη του Mix",
  "settings.subtitles": "Αποθήκευση υποτίτλων (.srt) με τα βίντεο",
+ "settings.sponsorblock": "Αφαίρεση χορηγιών και εισαγωγών από βίντεο YouTube (SponsorBlock)",
  "settings.connection": "Σύνδεση",
  "settings.speed_limit": "Όριο ταχύτητας",
  "speed.unlimited": "Χωρίς όριο",
@@ -227,5 +228,6 @@
  "extension.description": "Στέλνει το βίντεο που βλέπετε, ή οποιονδήποτε σύνδεσμο, στην εφαρμογή Orbida.",
  "log.batch": "Προστέθηκαν {count} σύνδεσμοι στην ουρά",
  "log.from_browser": "Λήφθηκε σύνδεσμος από το πρόγραμμα περιήγησης",
- "options.subtitles": "Υπότιτλοι"
+ "options.subtitles": "Υπότιτλοι",
+ "options.sponsorblock": "Χωρίς χορηγίες"
 }

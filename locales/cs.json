@@ -204,6 +204,7 @@
  "mix.offer": "Tato skladba byla otevřena v mixu YouTube; stáhne se jen skladba.",
  "mix.download": "Stáhnout mix",
  "settings.subtitles": "Ukládat titulky (.srt) s videi",
+ "settings.sponsorblock": "Vystřihnout sponzory a intra z videí YouTube (SponsorBlock)",
  "settings.connection": "Připojení",
  "settings.speed_limit": "Omezení rychlosti",
  "speed.unlimited": "Bez omezení",
@@ -227,5 +228,6 @@
  "extension.description": "Pošle sledované video nebo jakýkoli odkaz do aplikace Orbida.",
  "log.batch": "Odkazy přidané do fronty: {count}",
  "log.from_browser": "Odkaz přijat z prohlížeče",
- "options.subtitles": "Titulky"
+ "options.subtitles": "Titulky",
+ "options.sponsorblock": "Přeskočit sponzory"
 }

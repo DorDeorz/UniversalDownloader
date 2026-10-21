@@ -204,6 +204,7 @@
  "mix.offer": "Ez a dal egy YouTube-mixben nyílt meg; csak a dal töltődik le.",
  "mix.download": "Mix letöltése",
  "settings.subtitles": "Feliratok (.srt) mentése a videókkal",
+ "settings.sponsorblock": "Szponzorok és introk kivágása a YouTube-videókból (SponsorBlock)",
  "settings.connection": "Kapcsolat",
  "settings.speed_limit": "Sebességkorlát",
  "speed.unlimited": "Nincs korlát",
@@ -227,5 +228,6 @@
  "extension.description": "Elküldi a nézett videót vagy bármely linket az Orbida alkalmazásnak.",
  "log.batch": "{count} link hozzáadva a sorhoz",
  "log.from_browser": "Link érkezett a böngészőből",
- "options.subtitles": "Felirat"
+ "options.subtitles": "Felirat",
+ "options.sponsorblock": "Szponzorok kihagyása"
 }

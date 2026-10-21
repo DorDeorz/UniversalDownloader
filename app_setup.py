@@ -1,10 +1,12 @@
 """Process-level setup done once at startup: logging, taskbar id, single instance."""
 
+import base64
 import json
 import logging
 import logging.handlers
 import os
 import shutil
+import subprocess
 import sys
 
 from version import APP_NAME, APP_USER_MODEL_ID, LEGACY_APP_NAME, __version__
@@ -81,6 +83,63 @@ def set_app_user_model_id():
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
     except (AttributeError, OSError):
         pass
+
+
+# Shows a toast as Orbida (the Start menu shortcut carries the same id).
+# The texts come in environment variables, so they need no quoting.
+_TOAST_SCRIPT = """
+$ErrorActionPreference = 'Stop'
+$manager = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$xml = $manager::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$lines = $xml.GetElementsByTagName('text')
+$lines.Item(0).AppendChild($xml.CreateTextNode($env:ORBIDA_TOAST_TITLE)) | Out-Null
+$lines.Item(1).AppendChild($xml.CreateTextNode($env:ORBIDA_TOAST_TEXT)) | Out-Null
+$manager::CreateToastNotifier($env:ORBIDA_TOAST_APP).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
+"""
+_CREATE_NO_WINDOW = 0x08000000
+# FlashWindowEx flags (winuser.h): flash the caption and the taskbar button until the window is in front.
+_FLASHW_ALL = 0x3
+_FLASHW_TIMERNOFG = 0xC
+
+
+def notify(title, text, window=None, popen=subprocess.Popen):
+    """Tell the user on Windows that something finished while they looked elsewhere.
+
+    Shows a notification (toast) and flashes ``window``'s taskbar button.
+    Windows shows the toast only for an installed Orbida, whose Start menu
+    shortcut carries APP_USER_MODEL_ID. A no-op elsewhere; never raises.
+    """
+    if sys.platform != "win32":
+        return False
+    if window is not None:
+        _flash(window)
+    script = base64.b64encode(_TOAST_SCRIPT.encode("utf-16-le")).decode("ascii")
+    env = dict(os.environ, ORBIDA_TOAST_TITLE=title, ORBIDA_TOAST_TEXT=text, ORBIDA_TOAST_APP=APP_USER_MODEL_ID)
+    try:
+        popen(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+               "-EncodedCommand", script], env=env, creationflags=_CREATE_NO_WINDOW,
+              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        _log.warning("Notification failed: %s", e)
+        return False
+    return True
+
+
+def _flash(window):
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class FLASHWINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.UINT), ("hwnd", wintypes.HWND), ("dwFlags", wintypes.DWORD),
+                        ("uCount", wintypes.UINT), ("dwTimeout", wintypes.DWORD)]
+
+        # Tk's toplevel frame sits inside the real window that has the taskbar button.
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id()) or window.winfo_id()
+        info = FLASHWINFO(ctypes.sizeof(FLASHWINFO), hwnd, _FLASHW_ALL | _FLASHW_TIMERNOFG, 0, 0)
+        ctypes.windll.user32.FlashWindowEx(ctypes.byref(info))
+    except Exception as e:  # cosmetic; never worth an error
+        _log.warning("Taskbar flash failed: %s", e)
 
 
 # SetThreadExecutionState flags (winbase.h).
@@ -302,7 +361,6 @@ def firefox_path(registry=None):
 
 def open_in_firefox(xpi, firefox=None):
     """Open the add-on file in Firefox, which asks whether to add it; False without Firefox."""
-    import subprocess
     firefox = firefox or firefox_path()
     if not firefox:
         return False

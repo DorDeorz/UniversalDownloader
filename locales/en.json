@@ -204,6 +204,7 @@
  "mix.offer": "This song was opened in a YouTube Mix; only the song is downloaded.",
  "mix.download": "Download the Mix",
  "settings.subtitles": "Save subtitles (.srt) with videos",
+ "settings.sponsorblock": "Cut sponsors and intros from YouTube videos (SponsorBlock)",
  "settings.connection": "Connection",
  "settings.speed_limit": "Speed limit",
  "speed.unlimited": "No limit",
@@ -227,5 +228,6 @@
  "extension.description": "Send the video you are watching, or any link, to the Orbida app.",
  "log.batch": "{count} links added to the queue",
  "log.from_browser": "Link received from the browser",
- "options.subtitles": "Subtitles"
+ "options.subtitles": "Subtitles",
+ "options.sponsorblock": "Skip sponsors"
 }

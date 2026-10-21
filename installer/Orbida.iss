@@ -23,6 +23,9 @@
 #define AppExe "Orbida.exe"
 #define SourceDir "..\dist\Orbida"
 #define OldAppName "Universal Video Downloader"
+; Same as version.APP_USER_MODEL_ID: Windows shows the app's notifications
+; only when a Start menu shortcut carries this id.
+#define AppUserModelID "DorDeorz.UniversalDownloader"
 
 [Setup]
 ; Keep AppId stable: upgrades and the uninstaller find the install by it.
@@ -78,8 +81,8 @@ Type: files; Name: "{autodesktop}\{#OldAppName}.lnk"
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "{#AppUserModelID}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "{#AppUserModelID}"; Tasks: desktopicon
 
 [Registry]
 ; The orbida: address the browser extension opens (browser_extension/): the

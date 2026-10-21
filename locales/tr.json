@@ -204,6 +204,7 @@
  "mix.offer": "Bu şarkı bir YouTube Mix'inde açılmış; yalnızca şarkı indirilir.",
  "mix.download": "Mix'i indir",
  "settings.subtitles": "Videolarla birlikte altyazıyı (.srt) kaydet",
+ "settings.sponsorblock": "YouTube videolarındaki sponsor ve intro kısımlarını kes (SponsorBlock)",
  "settings.connection": "Bağlantı",
  "settings.speed_limit": "Hız sınırı",
  "speed.unlimited": "Sınırsız",
@@ -227,5 +228,6 @@
  "extension.description": "İzlediğin videoyu ya da herhangi bir bağlantıyı Orbida uygulamasına gönderir.",
  "log.batch": "{count} bağlantı kuyruğa eklendi",
  "log.from_browser": "Tarayıcıdan bağlantı geldi",
- "options.subtitles": "Altyazı"
+ "options.subtitles": "Altyazı",
+ "options.sponsorblock": "Sponsorları atla"
 }

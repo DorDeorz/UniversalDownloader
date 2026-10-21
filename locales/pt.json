@@ -204,6 +204,7 @@
  "mix.offer": "Esta música foi aberta em um Mix do YouTube; só a música é baixada.",
  "mix.download": "Baixar o Mix",
  "settings.subtitles": "Salvar legendas (.srt) com os vídeos",
+ "settings.sponsorblock": "Cortar patrocínios e intros dos vídeos do YouTube (SponsorBlock)",
  "settings.connection": "Conexão",
  "settings.speed_limit": "Limite de velocidade",
  "speed.unlimited": "Sem limite",
@@ -227,5 +228,6 @@
  "extension.description": "Envia o vídeo que você está assistindo, ou qualquer link, para o app Orbida.",
  "log.batch": "{count} links adicionados à fila",
  "log.from_browser": "Link recebido do navegador",
- "options.subtitles": "Legendas"
+ "options.subtitles": "Legendas",
+ "options.sponsorblock": "Pular patrocínios"
 }

@@ -204,6 +204,7 @@
  "mix.offer": "Tämä kappale avattiin YouTube-mixissä; vain kappale ladataan.",
  "mix.download": "Lataa mix",
  "settings.subtitles": "Tallenna tekstitykset (.srt) videoiden mukana",
+ "settings.sponsorblock": "Leikkaa sponsorit ja introt YouTube-videoista (SponsorBlock)",
  "settings.connection": "Yhteys",
  "settings.speed_limit": "Nopeusrajoitus",
  "speed.unlimited": "Ei rajoitusta",
@@ -227,5 +228,6 @@
  "extension.description": "Lähettää katsomasi videon tai minkä tahansa linkin Orbida-sovellukseen.",
  "log.batch": "{count} linkkiä lisätty jonoon",
  "log.from_browser": "Linkki vastaanotettu selaimesta",
- "options.subtitles": "Tekstitys"
+ "options.subtitles": "Tekstitys",
+ "options.sponsorblock": "Ohita sponsorit"
 }

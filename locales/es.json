@@ -204,6 +204,7 @@
  "mix.offer": "Esta canción se abrió en un Mix de YouTube; solo se descarga la canción.",
  "mix.download": "Descargar el Mix",
  "settings.subtitles": "Guardar subtítulos (.srt) con los vídeos",
+ "settings.sponsorblock": "Quitar patrocinios e intros de los vídeos de YouTube (SponsorBlock)",
  "settings.connection": "Conexión",
  "settings.speed_limit": "Límite de velocidad",
  "speed.unlimited": "Sin límite",
@@ -227,5 +228,6 @@
  "extension.description": "Envía el vídeo que estás viendo, o cualquier enlace, a la app Orbida.",
  "log.batch": "{count} enlaces añadidos a la cola",
  "log.from_browser": "Enlace recibido del navegador",
- "options.subtitles": "Subtítulos"
+ "options.subtitles": "Subtítulos",
+ "options.sponsorblock": "Saltar patrocinios"
 }

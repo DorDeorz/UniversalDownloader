@@ -204,6 +204,7 @@
  "mix.offer": "Цю пісню відкрито в міксі YouTube; завантажується лише пісня.",
  "mix.download": "Завантажити мікс",
  "settings.subtitles": "Зберігати субтитри (.srt) разом із відео",
+ "settings.sponsorblock": "Вирізати спонсорів і заставки з відео YouTube (SponsorBlock)",
  "settings.connection": "З'єднання",
  "settings.speed_limit": "Обмеження швидкості",
  "speed.unlimited": "Без обмежень",
@@ -227,5 +228,6 @@
  "extension.description": "Надсилає відео, яке ви дивитеся, або будь-яке посилання в застосунок Orbida.",
  "log.batch": "Додано посилань у чергу: {count}",
  "log.from_browser": "Отримано посилання з браузера",
- "options.subtitles": "Субтитри"
+ "options.subtitles": "Субтитри",
+ "options.sponsorblock": "Без спонсорів"
 }

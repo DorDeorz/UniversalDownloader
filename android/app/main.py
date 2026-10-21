@@ -262,6 +262,8 @@ class UniversalDownloaderApp(MDApp):
         self.chosen = []          # the playlist entries picked for download
         self.link_queue = []      # links added while a download runs
         self._from_queue = False  # the running analysis came from link_queue
+        self._mix = None  # the Mix link a song being analyzed was opened in
+        self.mix_url = None  # offered on the "Download the Mix" button
         self._cancelled = False
         self.download_dir = None
         self.job = None  # "analyze" or "download" while one runs
@@ -328,6 +330,7 @@ class UniversalDownloaderApp(MDApp):
         self._show_mode()
         _show(self.ids.media_card, False)
         _show(self.ids.btn_pick, False)
+        _show(self.ids.btn_mix, False)
         _show(self.ids.queue_row, False)
         _show(self.ids.progress_card, False)
         _show(self.ids.trim_box, False)
@@ -761,7 +764,7 @@ class UniversalDownloaderApp(MDApp):
             _show(self.ids.btn_pick, False)
             self._show_media(self.tr("link.changed"), "", "link-variant-off")
 
-    def analyze(self):
+    def analyze(self, keep_mix=False):
         links = urls.split_links(self.ids.url.text)
         if len(links) > 1:
             self.queue_links(links)
@@ -772,14 +775,18 @@ class UniversalDownloaderApp(MDApp):
         if self.session is None or self.job is not None:
             return
         try:
-            started = self.session.analyze(self.ids.url.text)
+            started = self.session.analyze(self.ids.url.text, keep_mix=keep_mix)
         except urls.UrlError as e:
             self._show_media(self.tr(e.key, **e.values), "", "alert-circle-outline")
             return
         if started:
             self.job = "analyze"
             self.analysis = None
+            # A song opened inside a YouTube Mix is analyzed alone; the Mix is offered afterwards.
+            self._mix = None if keep_mix else urls.youtube_mix(self.ids.url.text)
+            self.mix_url = None
             _show(self.ids.btn_pick, False)
+            _show(self.ids.btn_mix, False)
             self.set_busy(True)
             self.ids.btn_download.disabled = True
             self._show_media(self.tr("link.reading"), "", "timer-sand")
@@ -875,6 +882,8 @@ class UniversalDownloaderApp(MDApp):
                                        quality=self.quality[self.mode], trim_start=start, trim_end=end)
         if self.settings.subtitles:
             options.update(subtitles=True, subtitle_langs=logic.subtitle_languages(i18n.current()))
+        if self.settings.sponsorblock:
+            options["sponsorblock"] = True
         self._set_platform_options()
         if self.session.download(dataclasses.replace(self.analysis, items=list(self.chosen)), options):
             self.job = "download"
@@ -1005,6 +1014,7 @@ class UniversalDownloaderApp(MDApp):
 
     def _on_analysis_done(self, analysis, url):
         self.job = None
+        mix, self._mix = self._mix, None
         self.analysis = analysis
         self.analysis_url = self.ids.url.text.strip()
         self.set_busy(False)
@@ -1029,6 +1039,10 @@ class UniversalDownloaderApp(MDApp):
         elif analysis.items:
             self._show_media(analysis.title, self.tr("media.video"), "movie-open-outline")
             self.log(self.tr("log.video", title=analysis.title))
+            if mix and not self._from_queue:
+                self.mix_url = mix
+                self.ids.media_sub.text = self.tr("mix.offer")
+                _show(self.ids.btn_mix, True)
         else:
             reason = analysis.skipped[0].skip_reason if analysis.skipped else None
             text = (self.tr("link.nothing_reason", reason=i18n.tr_message(reason)) if reason
@@ -1064,8 +1078,16 @@ class UniversalDownloaderApp(MDApp):
         selftest(f"pass mode={mode} trim={trim}")
         self.download()
 
+    def download_mix(self):
+        """Analyze the whole Mix the last song was opened in."""
+        if self.mix_url and self.job is None:
+            self.ids.url.text = self.mix_url
+            _show(self.ids.btn_mix, False)
+            self.analyze(keep_mix=True)
+
     def _on_analysis_failed(self, message):
         self.job = None
+        self._mix = None
         self.set_busy(False)
         self.ids.btn_download.disabled = True
         self._show_media(self.tr("link.nothing_reason", reason=message), "", "alert-circle-outline")
@@ -1389,6 +1411,8 @@ class UniversalDownloaderApp(MDApp):
         self._add_fragments_row(box)
         switch("subtitles-outline", t("settings.subtitles"), s.subtitles,
                lambda v: self._save_settings(subtitles=v))
+        switch("content-cut", t("settings.sponsorblock"), s.sponsorblock,
+               lambda v: self._save_settings(sponsorblock=v))
         info("folder-download-outline", t("settings.folder"), self.download_dir or "…")
 
         # Connection

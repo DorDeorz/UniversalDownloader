@@ -204,6 +204,7 @@
  "mix.offer": "Lagu ini dibuka di dalam Mix YouTube; hanya lagunya yang diunduh.",
  "mix.download": "Unduh Mix",
  "settings.subtitles": "Simpan subtitel (.srt) bersama video",
+ "settings.sponsorblock": "Potong sponsor dan intro dari video YouTube (SponsorBlock)",
  "settings.connection": "Koneksi",
  "settings.speed_limit": "Batas kecepatan",
  "speed.unlimited": "Tanpa batas",
@@ -227,5 +228,6 @@
  "extension.description": "Mengirim video yang Anda tonton, atau tautan apa pun, ke aplikasi Orbida.",
  "log.batch": "{count} tautan ditambahkan ke antrean",
  "log.from_browser": "Tautan diterima dari browser",
- "options.subtitles": "Subtitel"
+ "options.subtitles": "Subtitel",
+ "options.sponsorblock": "Lewati sponsor"
 }

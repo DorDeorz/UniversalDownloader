@@ -13,11 +13,12 @@ class UrlError(ValueError):
         self.values = values
 
 
-def normalize_url(text):
+def normalize_url(text, keep_mix=False):
     """Return a cleaned http(s) URL, or raise UrlError with a readable reason.
 
     Adds ``https://`` when the scheme is missing (``youtu.be/abc``), so a
-    pasted link without it still works.
+    pasted link without it still works. A song opened inside a YouTube Mix
+    loses the Mix unless ``keep_mix`` (the user asked for the whole Mix).
     """
     text = (text or "").strip()
     if not text:
@@ -33,7 +34,7 @@ def normalize_url(text):
     host = parts.hostname or ""
     if "." not in host and host != "localhost":
         raise UrlError("url.invalid", "This does not look like a web link")
-    return without_youtube_mix(text)
+    return text if keep_mix else without_youtube_mix(text)
 
 
 # Query parameters that only place a video inside a YouTube list.

@@ -72,6 +72,7 @@
  "summary.cancelled": "Η λήψη ακυρώθηκε",
  "summary.partial": "Η λήψη απέτυχε εν μέρει",
  "summary.failed": "Η λήψη απέτυχε",
+ "summary.skipped": "Δεν λήφθηκε τίποτα",
  "summary.more": "... και {count} ακόμη",
  "quit.title": "Λήψη σε εξέλιξη",
  "quit.body": "Μια λήψη εκτελείται ακόμη. Να ακυρωθεί και να γίνει έξοδος;",

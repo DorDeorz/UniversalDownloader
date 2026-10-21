@@ -72,6 +72,7 @@
  "summary.cancelled": "Download abgebrochen",
  "summary.partial": "Download teilweise fehlgeschlagen",
  "summary.failed": "Download fehlgeschlagen",
+ "summary.skipped": "Nichts heruntergeladen",
  "summary.more": "... und {count} weitere",
  "quit.title": "Download läuft",
  "quit.body": "Ein Download läuft noch. Abbrechen und beenden?",

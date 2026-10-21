@@ -72,6 +72,7 @@
  "summary.cancelled": "Download cancelado",
  "summary.partial": "Download falhou em parte",
  "summary.failed": "Falha no download",
+ "summary.skipped": "Nada foi baixado",
  "summary.more": "... e mais {count}",
  "quit.title": "Download em andamento",
  "quit.body": "Um download ainda está em andamento. Cancelar e sair?",

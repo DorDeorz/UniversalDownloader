@@ -72,6 +72,7 @@
  "summary.cancelled": "Download cancelled",
  "summary.partial": "Download partly failed",
  "summary.failed": "Download failed",
+ "summary.skipped": "Nothing downloaded",
  "summary.more": "... and {count} more",
  "quit.title": "Download in progress",
  "quit.body": "A download is still running. Cancel it and quit?",

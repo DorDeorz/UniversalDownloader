@@ -72,6 +72,7 @@
  "summary.cancelled": "Nedlasting avbrutt",
  "summary.partial": "Nedlastingen mislyktes delvis",
  "summary.failed": "Nedlasting mislyktes",
+ "summary.skipped": "Ingenting ble lastet ned",
  "summary.more": "... og {count} til",
  "quit.title": "Nedlasting pågår",
  "quit.body": "En nedlasting pågår fortsatt. Vil du avbryte den og avslutte?",

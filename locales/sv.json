@@ -72,6 +72,7 @@
  "summary.cancelled": "Nedladdningen avbröts",
  "summary.partial": "Nedladdningen misslyckades delvis",
  "summary.failed": "Nedladdningen misslyckades",
+ "summary.skipped": "Inget laddades ner",
  "summary.more": "... och {count} till",
  "quit.title": "Nedladdning pågår",
  "quit.body": "En nedladdning pågår fortfarande. Vill du avbryta den och avsluta?",

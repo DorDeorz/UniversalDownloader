@@ -72,6 +72,7 @@
  "summary.cancelled": "İndirme iptal edildi",
  "summary.partial": "İndirme kısmen başarısız",
  "summary.failed": "İndirme başarısız",
+ "summary.skipped": "Hiçbir şey indirilmedi",
  "summary.more": "... ve {count} tane daha",
  "quit.title": "İndirme sürüyor",
  "quit.body": "Bir indirme hâlâ devam ediyor. İptal edip çıkılsın mı?",

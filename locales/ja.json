@@ -72,6 +72,7 @@
  "summary.cancelled": "ダウンロードをキャンセルしました",
  "summary.partial": "一部のダウンロードに失敗しました",
  "summary.failed": "ダウンロードに失敗しました",
+ "summary.skipped": "何もダウンロードされませんでした",
  "summary.more": "...ほか {count} 件",
  "quit.title": "ダウンロード中",
  "quit.body": "ダウンロードが実行中です。キャンセルして終了しますか？",

@@ -2594,7 +2594,9 @@ class App(ctk.CTk):
             return summary.headline(label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))
         self._live(self.lbl_item, lambda: f"{tr(summary.title_key())}: {headline()}")
         done = len(summary.with_status(ItemStatus.COMPLETED))
-        self.progress_bar.configure(progress_color=SUCCESS if summary.all_ok else WARNING if done else DANGER)
+        good = summary.all_ok or (done and summary.no_problems)
+        self.progress_bar.configure(progress_color=SUCCESS if good else WARNING if done or summary.no_problems
+                                    else DANGER)
         if summary.all_ok:
             self._show_progress(1, lambda: tr("progress.complete"))
         else:
@@ -2608,7 +2610,7 @@ class App(ctk.CTk):
         if done and self.settings.open_folder_when_done:
             self.open_folder()
         if self.settings.show_summary:
-            show = messagebox.showinfo if summary.all_ok else messagebox.showwarning
+            show = messagebox.showinfo if summary.no_problems and done else messagebox.showwarning
             report = summary.report(label=lambda status: tr("status." + status.value),
                                     nothing=tr("summary.nothing"), more=tr("summary.more", count="{count}"))
             show(tr(summary.title_key()), report, parent=self)

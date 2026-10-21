@@ -72,6 +72,7 @@
  "summary.cancelled": "Lataus peruutettu",
  "summary.partial": "Lataus epäonnistui osittain",
  "summary.failed": "Lataus epäonnistui",
+ "summary.skipped": "Mitään ei ladattu",
  "summary.more": "... ja {count} muuta",
  "quit.title": "Lataus käynnissä",
  "quit.body": "Lataus on vielä käynnissä. Peruutetaanko se ja lopetetaan?",

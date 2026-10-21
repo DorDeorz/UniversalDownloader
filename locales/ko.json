@@ -72,6 +72,7 @@
  "summary.cancelled": "다운로드 취소됨",
  "summary.partial": "일부 다운로드 실패",
  "summary.failed": "다운로드 실패",
+ "summary.skipped": "다운로드된 항목 없음",
  "summary.more": "... 외 {count}개",
  "quit.title": "다운로드 진행 중",
  "quit.body": "다운로드가 아직 진행 중입니다. 취소하고 종료할까요?",

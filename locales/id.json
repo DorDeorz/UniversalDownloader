@@ -72,6 +72,7 @@
  "summary.cancelled": "Unduhan dibatalkan",
  "summary.partial": "Sebagian unduhan gagal",
  "summary.failed": "Unduhan gagal",
+ "summary.skipped": "Tidak ada yang diunduh",
  "summary.more": "... dan {count} lainnya",
  "quit.title": "Unduhan sedang berjalan",
  "quit.body": "Unduhan masih berjalan. Batalkan dan keluar?",

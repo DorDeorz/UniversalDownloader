@@ -72,6 +72,7 @@
  "summary.cancelled": "A letöltés megszakítva",
  "summary.partial": "A letöltés részben sikertelen",
  "summary.failed": "A letöltés sikertelen",
+ "summary.skipped": "Semmi sem lett letöltve",
  "summary.more": "... és még {count}",
  "quit.title": "Letöltés folyamatban",
  "quit.body": "Egy letöltés még fut. Megszakítja, és kilép?",

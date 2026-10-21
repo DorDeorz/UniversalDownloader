@@ -72,6 +72,7 @@
  "summary.cancelled": "Download annulleret",
  "summary.partial": "Download mislykkedes delvist",
  "summary.failed": "Download mislykkedes",
+ "summary.skipped": "Intet blev downloadet",
  "summary.more": "... og {count} mere",
  "quit.title": "Download i gang",
  "quit.body": "En download kører stadig. Vil du annullere den og afslutte?",

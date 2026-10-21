@@ -72,6 +72,7 @@
  "summary.cancelled": "Descarga cancelada",
  "summary.partial": "Descarga fallida en parte",
  "summary.failed": "Descarga fallida",
+ "summary.skipped": "No se descargó nada",
  "summary.more": "... y {count} más",
  "quit.title": "Descarga en curso",
  "quit.body": "Todavía hay una descarga en curso. ¿Cancelarla y salir?",

@@ -72,6 +72,7 @@
  "summary.cancelled": "Stahování zrušeno",
  "summary.partial": "Stahování částečně selhalo",
  "summary.failed": "Stahování selhalo",
+ "summary.skipped": "Nic nebylo staženo",
  "summary.more": "... a další: {count}",
  "quit.title": "Probíhá stahování",
  "quit.body": "Stahování stále probíhá. Zrušit ho a ukončit aplikaci?",

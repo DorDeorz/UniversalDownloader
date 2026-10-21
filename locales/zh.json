@@ -72,6 +72,7 @@
  "summary.cancelled": "下载已取消",
  "summary.partial": "部分下载失败",
  "summary.failed": "下载失败",
+ "summary.skipped": "未下载任何内容",
  "summary.more": "……还有 {count} 项",
  "quit.title": "正在下载",
  "quit.body": "仍有下载正在进行。要取消并退出吗？",

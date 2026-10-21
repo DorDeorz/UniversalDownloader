@@ -57,6 +57,12 @@ class JobSummary:
     def all_ok(self):
         return bool(self.results) and all(r.ok for r in self.results)
 
+    @property
+    def no_problems(self):
+        """True when nothing failed or was cancelled (skipped items are fine)."""
+        counts = self.counts()
+        return not counts[ItemStatus.FAILED] and not counts[ItemStatus.CANCELLED]
+
     def headline(self, label=None, nothing="Nothing to download"):
         """Short text such as '2 completed, 1 failed'.
 
@@ -71,15 +77,23 @@ class JobSummary:
         "summary.cancelled": "Download cancelled",
         "summary.partial": "Download partly failed",
         "summary.failed": "Download failed",
+        "summary.skipped": "Nothing downloaded",
     }
 
     def title_key(self):
-        """Message key of the dialog title matching the outcome."""
+        """Message key of the dialog title matching the outcome.
+
+        Skipped items (private or deleted videos) are not failures: a job
+        that only skipped some is complete, one that skipped all of them
+        downloaded nothing.
+        """
         counts = self.counts()
         if self.all_ok:
             return "summary.complete"
         if counts[ItemStatus.CANCELLED]:
             return "summary.cancelled"
+        if self.no_problems:
+            return "summary.complete" if counts[ItemStatus.COMPLETED] else "summary.skipped"
         if counts[ItemStatus.COMPLETED]:
             return "summary.partial"
         return "summary.failed"

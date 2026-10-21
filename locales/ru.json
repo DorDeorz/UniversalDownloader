@@ -72,6 +72,7 @@
  "summary.cancelled": "Загрузка отменена",
  "summary.partial": "Загрузка частично не удалась",
  "summary.failed": "Загрузка не удалась",
+ "summary.skipped": "Ничего не скачано",
  "summary.more": "... и ещё {count}",
  "quit.title": "Идёт загрузка",
  "quit.body": "Загрузка ещё выполняется. Отменить её и выйти?",

@@ -72,6 +72,7 @@
  "summary.cancelled": "Download geannuleerd",
  "summary.partial": "Download deels mislukt",
  "summary.failed": "Download mislukt",
+ "summary.skipped": "Niets gedownload",
  "summary.more": "... en nog {count}",
  "quit.title": "Download bezig",
  "quit.body": "Er loopt nog een download. Annuleren en afsluiten?",

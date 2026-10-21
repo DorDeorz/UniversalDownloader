@@ -72,6 +72,7 @@
  "summary.cancelled": "Download annullato",
  "summary.partial": "Download in parte non riuscito",
  "summary.failed": "Download non riuscito",
+ "summary.skipped": "Nulla è stato scaricato",
  "summary.more": "... e altri {count}",
  "quit.title": "Download in corso",
  "quit.body": "Un download è ancora in corso. Annullarlo e uscire?",

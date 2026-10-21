@@ -72,6 +72,7 @@
  "summary.cancelled": "Pobieranie anulowane",
  "summary.partial": "Pobieranie częściowo nieudane",
  "summary.failed": "Pobieranie nieudane",
+ "summary.skipped": "Nic nie pobrano",
  "summary.more": "... i jeszcze {count}",
  "quit.title": "Trwa pobieranie",
  "quit.body": "Pobieranie wciąż trwa. Anulować je i zakończyć?",

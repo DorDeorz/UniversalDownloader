@@ -72,6 +72,7 @@
  "summary.cancelled": "Đã hủy tải xuống",
  "summary.partial": "Tải xuống thất bại một phần",
  "summary.failed": "Tải xuống thất bại",
+ "summary.skipped": "Không có gì được tải xuống",
  "summary.more": "... và {count} mục khác",
  "quit.title": "Đang tải xuống",
  "quit.body": "Vẫn đang tải xuống. Hủy và thoát?",

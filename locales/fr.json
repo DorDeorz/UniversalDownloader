@@ -72,6 +72,7 @@
  "summary.cancelled": "Téléchargement annulé",
  "summary.partial": "Téléchargement partiellement échoué",
  "summary.failed": "Échec du téléchargement",
+ "summary.skipped": "Rien n'a été téléchargé",
  "summary.more": "... et {count} de plus",
  "quit.title": "Téléchargement en cours",
  "quit.body": "Un téléchargement est en cours. L'annuler et quitter ?",

@@ -1127,7 +1127,12 @@ def extension_folder():
 
 
 class ExtensionDialog(ctk.CTkToplevel):
-    """How to add the browser extension (loaded unpacked; it is not in a store)."""
+    """How to add the browser extension.
+
+    Chromium browsers load it unpacked from the data folder (it is not in a
+    store); Firefox installs the Mozilla-signed copy the installer ships
+    (app_setup.FIREFOX_XPI), which stays after Firefox closes.
+    """
 
     ADDRESS = "chrome://extensions"
 
@@ -1146,7 +1151,8 @@ class ExtensionDialog(ctk.CTkToplevel):
         steps.insert("1.0", tr("extension.steps", address=self.ADDRESS) + "\n\n" + tr("extension.firefox"))
         steps.configure(state="disabled")
         steps.grid(row=1, column=0, sticky="nsew", padx=20)
-        self.lbl_note = ctk.CTkLabel(self, text="", font=font(12), text_color=MUTED, anchor="w")
+        self.lbl_note = ctk.CTkLabel(self, text="", font=font(12), text_color=MUTED, anchor="w",
+                                    justify="left", wraplength=620)
         self.lbl_note.grid(row=2, column=0, sticky="ew", padx=20, pady=(8, 0))
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.grid(row=3, column=0, sticky="e", padx=20, pady=(12, 18))
@@ -1154,11 +1160,13 @@ class ExtensionDialog(ctk.CTkToplevel):
         self.btn_copy.pack(side="left", padx=(0, 8))
         self.btn_close = secondary_button(buttons, tr("extension.close"), self.destroy)
         self.btn_close.pack(side="left", padx=(0, 8))
+        self.btn_firefox = secondary_button(buttons, tr("extension.add_firefox"), self.add_to_firefox)
+        self.btn_firefox.pack(side="left", padx=(0, 8))
         self.btn_folder = primary_button(buttons, tr("extension.open_folder"), self.open_folder)
         self.btn_folder.pack(side="left")
         set_window_icon(self)
         self.after(200, lambda: set_window_icon(self))
-        fit_dialog(self, (600, 440), (440, 320))
+        fit_dialog(self, (680, 460), (480, 320))
         self.lift()
         self.btn_folder.focus_set()
 
@@ -1166,6 +1174,17 @@ class ExtensionDialog(ctk.CTkToplevel):
         folder = extension_folder()
         open_path(folder)
         self.lbl_note.configure(text=folder)
+
+    def add_to_firefox(self):
+        xpi = resource_path(app_setup.FIREFOX_XPI)
+        if not os.path.isfile(xpi):  # a copy built without the signed add-on (not a release)
+            webbrowser.open(updates.RELEASES_PAGE)
+            self.lbl_note.configure(text=tr("extension.firefox_missing"))
+        elif app_setup.open_in_firefox(xpi):
+            self.lbl_note.configure(text=tr("extension.firefox_opened"))
+        else:
+            open_path(os.path.dirname(xpi))
+            self.lbl_note.configure(text=tr("extension.firefox_file"))
 
     def copy_address(self):
         self.clipboard_clear()

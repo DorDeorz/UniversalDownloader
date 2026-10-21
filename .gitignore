@@ -21,3 +21,7 @@ bin/deno.exe
 android/.build/
 android/.buildozer/
 android/bin/
+# The signed Firefox add-on, put here by the release workflow.
+firefox/
+# Left by web-ext sign in the source folder.
+browser_extension/.amo-upload-uuid

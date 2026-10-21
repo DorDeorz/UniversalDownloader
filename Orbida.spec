@@ -15,6 +15,10 @@ ONEDIR = os.environ.get('UVD_ONEDIR') == '1'
 
 datas = [('app.ico', '.'), ('app.png', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('locales', 'locales'),
          ('browser_extension', 'browser_extension')]
+# The Mozilla-signed Firefox add-on (firefox/Orbida.xpi), which the release
+# workflow puts here before building; other builds go without it.
+if os.path.isfile(os.path.join('firefox', 'Orbida.xpi')):
+    datas.append((os.path.join('firefox', 'Orbida.xpi'), 'firefox'))
 binaries = [(os.path.join('bin', 'ffmpeg.exe'), 'bin'), (os.path.join('bin', 'ffprobe.exe'), 'bin')]
 # Deno runs YouTube's JavaScript challenges. It sits next to FFmpeg, whose
 # folder the app puts first on PATH, where yt-dlp looks for it. Only the

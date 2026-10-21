@@ -252,5 +252,10 @@
  "action.resume": "Lanjutkan",
  "progress.paused": "Dijeda",
  "log.paused": "Unduhan dijeda",
- "log.resumed": "Unduhan dilanjutkan"
+ "log.resumed": "Unduhan dilanjutkan",
+ "settings.tray": "Tetap berjalan di baki sistem saat ditutup",
+ "tray.show": "Tampilkan Orbida",
+ "tray.quit": "Keluar",
+ "tray.hidden_title": "Orbida masih berjalan",
+ "tray.hidden_body": "Unduhan tetap berjalan di latar belakang. Klik ikon Orbida di sudut bilah tugas untuk membukanya lagi."
 }

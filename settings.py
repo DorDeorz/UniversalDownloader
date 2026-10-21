@@ -49,6 +49,7 @@ class Settings:
     proxy: str = ""              # urls.proxy_url address; empty for a direct connection
     reddit_browser_sign_in: bool = False  # send Reddit the cookies of the user's Firefox/Zen sign-in
     keep_awake: bool = True      # keep the PC from sleeping while a download runs
+    close_to_tray: bool = False  # closing the window keeps Orbida running in the tray (Windows)
     save_history: bool = True
     check_updates: bool = True   # look for a new version at start
     last_version: str = ""       # version that ran last; "what's new" shows after an update

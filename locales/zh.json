@@ -252,5 +252,10 @@
  "action.resume": "继续",
  "progress.paused": "已暂停",
  "log.paused": "下载已暂停",
- "log.resumed": "下载已继续"
+ "log.resumed": "下载已继续",
+ "settings.tray": "关闭后在通知区域继续运行",
+ "tray.show": "显示 Orbida",
+ "tray.quit": "退出",
+ "tray.hidden_title": "Orbida 仍在运行",
+ "tray.hidden_body": "下载会在后台继续。点击任务栏角落的 Orbida 图标即可重新打开。"
 }

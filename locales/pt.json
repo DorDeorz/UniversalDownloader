@@ -252,5 +252,10 @@
  "action.resume": "Retomar",
  "progress.paused": "Pausado",
  "log.paused": "Download pausado",
- "log.resumed": "Download retomado"
+ "log.resumed": "Download retomado",
+ "settings.tray": "Continuar na bandeja do sistema ao fechar",
+ "tray.show": "Mostrar Orbida",
+ "tray.quit": "Sair",
+ "tray.hidden_title": "O Orbida continua em execução",
+ "tray.hidden_body": "Os downloads continuam em segundo plano. Clique no ícone do Orbida no canto da barra de tarefas para abri-lo de novo."
 }

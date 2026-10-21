@@ -252,5 +252,10 @@
  "action.resume": "Hervatten",
  "progress.paused": "Gepauzeerd",
  "log.paused": "Download gepauzeerd",
- "log.resumed": "Download hervat"
+ "log.resumed": "Download hervat",
+ "settings.tray": "Bij sluiten in het systeemvak blijven draaien",
+ "tray.show": "Orbida tonen",
+ "tray.quit": "Afsluiten",
+ "tray.hidden_title": "Orbida draait nog",
+ "tray.hidden_body": "Downloads gaan op de achtergrond door. Klik op het Orbida-pictogram in de hoek van de taakbalk om het weer te openen."
 }

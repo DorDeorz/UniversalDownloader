@@ -459,6 +459,7 @@ def test_settings_page_fits_without_scrolling(monkeypatch, screen, dpi, text_siz
     # Windows display scaling (125%, 150%) is simulated for every window.
     monkeypatch.setattr(ctk.ScalingTracker, "get_window_dpi_scaling", classmethod(lambda cls, window: dpi))
     monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, screen[0], screen[1] - 40))  # taskbar
+    monkeypatch.setattr(ui.tray, "supported", lambda: True)  # its switch shows on Windows
     ui_helpers.isolate_settings(monkeypatch)
     folder = os.path.join(os.environ["LOCALAPPDATA"], "Orbida")
     os.makedirs(folder)

@@ -252,5 +252,10 @@
  "action.resume": "Reanudar",
  "progress.paused": "En pausa",
  "log.paused": "Descarga en pausa",
- "log.resumed": "Descarga reanudada"
+ "log.resumed": "Descarga reanudada",
+ "settings.tray": "Seguir en la bandeja del sistema al cerrar",
+ "tray.show": "Mostrar Orbida",
+ "tray.quit": "Salir",
+ "tray.hidden_title": "Orbida sigue en ejecución",
+ "tray.hidden_body": "Las descargas continúan en segundo plano. Haz clic en el icono de Orbida en la esquina de la barra de tareas para abrirlo de nuevo."
 }

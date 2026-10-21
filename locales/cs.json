@@ -252,5 +252,10 @@
  "action.resume": "Pokračovat",
  "progress.paused": "Pozastaveno",
  "log.paused": "Stahování pozastaveno",
- "log.resumed": "Stahování pokračuje"
+ "log.resumed": "Stahování pokračuje",
+ "settings.tray": "Po zavření běžet v oznamovací oblasti",
+ "tray.show": "Zobrazit Orbida",
+ "tray.quit": "Ukončit",
+ "tray.hidden_title": "Orbida stále běží",
+ "tray.hidden_body": "Stahování pokračuje na pozadí. Znovu ji otevřete kliknutím na ikonu Orbida v rohu hlavního panelu."
 }

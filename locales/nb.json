@@ -252,5 +252,10 @@
  "action.resume": "Fortsett",
  "progress.paused": "Satt på pause",
  "log.paused": "Nedlasting satt på pause",
- "log.resumed": "Nedlasting fortsatt"
+ "log.resumed": "Nedlasting fortsatt",
+ "settings.tray": "Fortsett i systemstatusfeltet ved lukking",
+ "tray.show": "Vis Orbida",
+ "tray.quit": "Avslutt",
+ "tray.hidden_title": "Orbida kjører fortsatt",
+ "tray.hidden_body": "Nedlastingene fortsetter i bakgrunnen. Klikk på Orbida-ikonet i hjørnet av oppgavelinjen for å åpne det igjen."
 }

@@ -18,6 +18,7 @@ linked projects.
 | [brotli](https://github.com/google/brotli) | HTTP compression | MIT |
 | [websockets](https://github.com/python-websockets/websockets) | Live/websocket downloads | BSD-3-Clause |
 | [curl_cffi](https://github.com/lexiforest/curl_cffi) with [curl-impersonate](https://github.com/lexiforest/curl-impersonate), [cffi](https://github.com/python-cffi/cffi), [pycparser](https://github.com/eliben/pycparser) | Browser-like requests (needed for TikTok) | MIT / MIT (bundles curl and BoringSSL under their own licenses) / MIT-0 / BSD-3-Clause |
+| [pystray](https://github.com/moses-palmer/pystray), [Pillow](https://github.com/python-pillow/Pillow), [six](https://github.com/benjaminp/six) | Tray icon | LGPL v3 (used unmodified as a separate library) / MIT-CMU / MIT |
 | [pycryptodomex](https://github.com/Legrandin/pycryptodome) | Decrypting some streams | BSD-2-Clause / Public Domain |
 | [Python](https://www.python.org/) (embedded by PyInstaller) | Runtime | PSF License |
 

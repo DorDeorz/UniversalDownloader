@@ -252,5 +252,10 @@
  "action.resume": "Resume",
  "progress.paused": "Paused",
  "log.paused": "Download paused",
- "log.resumed": "Download resumed"
+ "log.resumed": "Download resumed",
+ "settings.tray": "Keep running in the tray when closed",
+ "tray.show": "Show Orbida",
+ "tray.quit": "Quit",
+ "tray.hidden_title": "Orbida is still running",
+ "tray.hidden_body": "Downloads go on in the background. Click Orbida's icon in the taskbar corner to open it again."
 }

@@ -252,5 +252,10 @@
  "action.resume": "Devam et",
  "progress.paused": "Duraklatıldı",
  "log.paused": "İndirme duraklatıldı",
- "log.resumed": "İndirme devam ediyor"
+ "log.resumed": "İndirme devam ediyor",
+ "settings.tray": "Kapatınca simge durumunda çalışmaya devam et",
+ "tray.show": "Orbida'yı göster",
+ "tray.quit": "Çık",
+ "tray.hidden_title": "Orbida çalışmaya devam ediyor",
+ "tray.hidden_body": "İndirmeler arka planda sürüyor. Yeniden açmak için görev çubuğunun köşesindeki Orbida simgesine tıklayın."
 }

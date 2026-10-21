@@ -252,5 +252,10 @@
  "action.resume": "Fortsetzen",
  "progress.paused": "Pausiert",
  "log.paused": "Download pausiert",
- "log.resumed": "Download fortgesetzt"
+ "log.resumed": "Download fortgesetzt",
+ "settings.tray": "Beim Schließen im Infobereich weiterlaufen",
+ "tray.show": "Orbida anzeigen",
+ "tray.quit": "Beenden",
+ "tray.hidden_title": "Orbida läuft weiter",
+ "tray.hidden_body": "Downloads laufen im Hintergrund weiter. Klicke auf das Orbida-Symbol in der Taskleistenecke, um es wieder zu öffnen."
 }

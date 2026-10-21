@@ -252,5 +252,10 @@
  "action.resume": "Riprendi",
  "progress.paused": "In pausa",
  "log.paused": "Download in pausa",
- "log.resumed": "Download ripreso"
+ "log.resumed": "Download ripreso",
+ "settings.tray": "Resta nell'area di notifica alla chiusura",
+ "tray.show": "Mostra Orbida",
+ "tray.quit": "Esci",
+ "tray.hidden_title": "Orbida è ancora in esecuzione",
+ "tray.hidden_body": "I download continuano in background. Fai clic sull'icona di Orbida nell'angolo della barra delle applicazioni per riaprirlo."
 }

@@ -252,5 +252,10 @@
  "action.resume": "Fortsæt",
  "progress.paused": "På pause",
  "log.paused": "Download sat på pause",
- "log.resumed": "Download fortsat"
+ "log.resumed": "Download fortsat",
+ "settings.tray": "Bliv kørende i meddelelsesområdet ved lukning",
+ "tray.show": "Vis Orbida",
+ "tray.quit": "Afslut",
+ "tray.hidden_title": "Orbida kører stadig",
+ "tray.hidden_body": "Downloads fortsætter i baggrunden. Klik på Orbidas ikon i hjørnet af proceslinjen for at åbne det igen."
 }

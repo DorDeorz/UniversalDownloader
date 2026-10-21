@@ -252,5 +252,10 @@
  "action.resume": "Tiếp tục",
  "progress.paused": "Đã tạm dừng",
  "log.paused": "Đã tạm dừng tải xuống",
- "log.resumed": "Tiếp tục tải xuống"
+ "log.resumed": "Tiếp tục tải xuống",
+ "settings.tray": "Tiếp tục chạy ở khay hệ thống khi đóng",
+ "tray.show": "Hiện Orbida",
+ "tray.quit": "Thoát",
+ "tray.hidden_title": "Orbida vẫn đang chạy",
+ "tray.hidden_body": "Các tệp vẫn tải xuống trong nền. Nhấp vào biểu tượng Orbida ở góc thanh tác vụ để mở lại."
 }

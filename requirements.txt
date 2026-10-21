@@ -25,3 +25,7 @@ yt-dlp-ejs==0.8.0
 curl-cffi==0.16.0
 cffi==2.1.1
 pycparser==3.0
+# The tray icon (tray.py): pystray draws it, Pillow loads app.ico for it.
+pystray==0.19.5
+pillow==13.0.0
+six==1.17.0

@@ -252,5 +252,10 @@
  "action.resume": "Fortsätt",
  "progress.paused": "Pausad",
  "log.paused": "Nedladdning pausad",
- "log.resumed": "Nedladdning återupptagen"
+ "log.resumed": "Nedladdning återupptagen",
+ "settings.tray": "Fortsätt i meddelandefältet vid stängning",
+ "tray.show": "Visa Orbida",
+ "tray.quit": "Avsluta",
+ "tray.hidden_title": "Orbida körs fortfarande",
+ "tray.hidden_body": "Nedladdningarna fortsätter i bakgrunden. Klicka på Orbidas ikon i hörnet av aktivitetsfältet för att öppna det igen."
 }

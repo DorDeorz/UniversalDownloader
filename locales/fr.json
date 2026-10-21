@@ -252,5 +252,10 @@
  "action.resume": "Reprendre",
  "progress.paused": "En pause",
  "log.paused": "Téléchargement en pause",
- "log.resumed": "Téléchargement repris"
+ "log.resumed": "Téléchargement repris",
+ "settings.tray": "Rester dans la zone de notification à la fermeture",
+ "tray.show": "Afficher Orbida",
+ "tray.quit": "Quitter",
+ "tray.hidden_title": "Orbida est toujours actif",
+ "tray.hidden_body": "Les téléchargements continuent en arrière-plan. Cliquez sur l'icône d'Orbida dans le coin de la barre des tâches pour le rouvrir."
 }

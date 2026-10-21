@@ -23,6 +23,7 @@ import logic
 import media_tools
 import playlist
 import settings as settings_store
+import tray
 import updates
 import urls
 import ytdlp_updates
@@ -30,7 +31,7 @@ from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
 from utils import default_download_dir, resource_path
 from i18n import tr
-from version import DISPLAY_NAME, GITHUB_REPO, __version__
+from version import APP_NAME, DISPLAY_NAME, GITHUB_REPO, __version__
 
 _log = logging.getLogger(__name__)
 
@@ -837,7 +838,9 @@ class SettingsView(ctk.CTkFrame):
         self.sw_summary = self._switch(after, 10, tr("settings.summary"), settings.show_summary, "show_summary")
         self.sw_open = self._switch(after, 11, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
-        self._spacing[-1] = (self.sw_open, (0, 14), (0, 10))
+        if tray.supported():
+            self.sw_tray = self._switch(after, 12, tr("settings.tray"), settings.close_to_tray, "close_to_tray")
+        self._spacing[-1] = (self._spacing[-1][0], (0, 14), (0, 10))
 
         # Updates
         self.card_updates = upd = self._section(body, tr("settings.updates"))
@@ -1435,6 +1438,12 @@ class App(ctk.CTk):
             self.link_server = None
         if self.settings.check_updates:
             self._startup_calls.append(self.after(1500, self.check_for_updates))
+        # The notification-area icon, while "keep running in the tray" is on.
+        self.tray = None
+        self._told_tray = False
+        self.events.register(events.TRAY_SHOW, self.show_window)
+        self.events.register(events.TRAY_QUIT, self.quit_from_tray)
+        self._apply_tray()
 
     POLL_INTERVAL_MS = 50
     LOG_LINES = 2000  # activity lines kept on screen
@@ -1471,6 +1480,9 @@ class App(ctk.CTk):
         if getattr(self, "link_server", None) is not None:
             self.link_server.close()
             self.link_server = None
+        if getattr(self, "tray", None) is not None:
+            self.tray.stop()
+            self.tray = None
         if self._poll_id is not None:
             try:
                 self.after_cancel(self._poll_id)
@@ -1759,6 +1771,8 @@ class App(ctk.CTk):
         """``text`` and ``detail`` are strings, or functions for translated text."""
         self.progress_bar.set(fraction)
         self._live(self.lbl_progress, text if callable(text) else (lambda: text))
+        if self.tray is not None and self.state() == "withdrawn":
+            self.tray.set_title(f"{APP_NAME} · {text() if callable(text) else text}")
         if self._job_kind == "download" and self._pause_event.is_set():
             detail = lambda: tr("progress.paused")  # an update sent just before the pause  # noqa: E731
         self._live(self.lbl_detail, detail if callable(detail) else (lambda: detail))
@@ -1826,6 +1840,8 @@ class App(ctk.CTk):
             if value and self.settings_view is not None:
                 # Turned on in Settings: say whether the browser is signed in to Reddit.
                 messagebox.showinfo(tr("reddit.ask_title"), self.reddit_status(), parent=self)
+        if name == "close_to_tray":
+            self._apply_tray()
         if name == "accent":
             recolor(self, apply_accent(value))
 
@@ -2198,9 +2214,44 @@ class App(ctk.CTk):
 
     CLOSE_TIMEOUT_MS = 15000
 
-    def on_close(self):
-        """Window close: confirm, cancel a running download, wait, then exit."""
+    def _apply_tray(self):
+        """Show the tray icon while the setting is on (Windows only)."""
+        if self.settings.close_to_tray and self.tray is None:
+            icon = tray.Tray(APP_NAME, lambda: self.events.post(events.TRAY_SHOW),
+                             lambda: self.events.post(events.TRAY_QUIT), tr)
+            if icon.start():
+                self.tray = icon
+        elif not self.settings.close_to_tray and self.tray is not None:
+            self.tray.stop()
+            self.tray = None
+            self.show_window()
+
+    def hide_to_tray(self):
+        self.withdraw()
+        if not self._told_tray:
+            self._told_tray = True
+            app_setup.notify(tr("tray.hidden_title"), tr("tray.hidden_body"))
+
+    def show_window(self):
         if self._closing:
+            return
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        if self.tray is not None:
+            self.tray.set_title(APP_NAME)
+
+    def quit_from_tray(self):
+        """Quit in the tray icon's menu: the window's close, without hiding again."""
+        self.show_window()
+        self.on_close(hide=False)
+
+    def on_close(self, hide=True):
+        """Window close: hide to the tray, or confirm, cancel a running download, wait, then exit."""
+        if self._closing:
+            return
+        if hide and self.tray is not None:
+            self.hide_to_tray()
             return
         if self._job_kind == "download":
             if not messagebox.askyesno(tr("quit.title"), tr("quit.body"), parent=self):
@@ -2459,15 +2510,21 @@ class App(ctk.CTk):
             self._next_in_queue()
 
     def open_link(self, url):
-        """A link from the browser extension: bring the window up and analyze it."""
+        """A link from the browser extension: bring the window up and analyze it.
+
+        An empty link only brings the window up (Orbida started again while
+        it runs, perhaps hidden in the tray).
+        """
         try:
-            if self.state() == "iconic":
+            if self.state() in ("iconic", "withdrawn"):
                 self.deiconify()
             self.lift()
             self.attributes("-topmost", True)
             self.after(300, lambda: self.attributes("-topmost", False))
             self.focus_force()
         except tkinter.TclError:
+            return
+        if not url:
             return
         if self.settings_view is not None:
             self.close_settings()

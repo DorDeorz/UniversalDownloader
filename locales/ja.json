@@ -252,5 +252,10 @@
  "action.resume": "再開",
  "progress.paused": "一時停止中",
  "log.paused": "ダウンロードを一時停止しました",
- "log.resumed": "ダウンロードを再開しました"
+ "log.resumed": "ダウンロードを再開しました",
+ "settings.tray": "閉じたら通知領域で動作を続ける",
+ "tray.show": "Orbida を表示",
+ "tray.quit": "終了",
+ "tray.hidden_title": "Orbida は動作中です",
+ "tray.hidden_body": "ダウンロードはバックグラウンドで続きます。タスクバーの隅にある Orbida のアイコンをクリックすると再び開きます。"
 }

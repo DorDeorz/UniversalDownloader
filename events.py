@@ -27,6 +27,8 @@ UPDATE_PROGRESS = "update_progress"  # payload: done, total (bytes of the instal
 UPDATE_READY = "update_ready"        # payload: path (verified installer)
 UPDATE_FAILED = "update_failed"      # payload: error
 LINK_RECEIVED = "link_received"      # payload: url (from the browser extension)
+TRAY_SHOW = "tray_show"              # no payload (the tray icon was clicked)
+TRAY_QUIT = "tray_quit"              # no payload (Quit in the tray icon's menu)
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 

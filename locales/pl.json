@@ -252,5 +252,10 @@
  "action.resume": "Wznów",
  "progress.paused": "Wstrzymano",
  "log.paused": "Pobieranie wstrzymane",
- "log.resumed": "Pobieranie wznowione"
+ "log.resumed": "Pobieranie wznowione",
+ "settings.tray": "Po zamknięciu działaj w zasobniku systemowym",
+ "tray.show": "Pokaż Orbida",
+ "tray.quit": "Zakończ",
+ "tray.hidden_title": "Orbida nadal działa",
+ "tray.hidden_body": "Pobieranie trwa w tle. Kliknij ikonę Orbida w rogu paska zadań, aby otworzyć ją ponownie."
 }

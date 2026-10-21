@@ -252,5 +252,10 @@
  "action.resume": "Reia",
  "progress.paused": "În pauză",
  "log.paused": "Descărcare în pauză",
- "log.resumed": "Descărcare reluată"
+ "log.resumed": "Descărcare reluată",
+ "settings.tray": "La închidere rămâi în zona de notificare",
+ "tray.show": "Afișează Orbida",
+ "tray.quit": "Ieșire",
+ "tray.hidden_title": "Orbida încă rulează",
+ "tray.hidden_body": "Descărcările continuă în fundal. Fă clic pe pictograma Orbida din colțul barei de activități pentru a o redeschide."
 }

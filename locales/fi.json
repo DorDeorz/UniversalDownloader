@@ -252,5 +252,10 @@
  "action.resume": "Jatka",
  "progress.paused": "Keskeytetty",
  "log.paused": "Lataus keskeytetty",
- "log.resumed": "Lataus jatkuu"
+ "log.resumed": "Lataus jatkuu",
+ "settings.tray": "Jatka ilmoitusalueella suljettaessa",
+ "tray.show": "Näytä Orbida",
+ "tray.quit": "Lopeta",
+ "tray.hidden_title": "Orbida on yhä käynnissä",
+ "tray.hidden_body": "Lataukset jatkuvat taustalla. Avaa se uudelleen napsauttamalla Orbidan kuvaketta tehtäväpalkin kulmassa."
 }

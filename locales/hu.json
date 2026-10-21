@@ -252,5 +252,10 @@
  "action.resume": "Folytatás",
  "progress.paused": "Szüneteltetve",
  "log.paused": "Letöltés szüneteltetve",
- "log.resumed": "Letöltés folytatva"
+ "log.resumed": "Letöltés folytatva",
+ "settings.tray": "Bezáráskor fusson tovább az értesítési területen",
+ "tray.show": "Orbida megjelenítése",
+ "tray.quit": "Kilépés",
+ "tray.hidden_title": "Az Orbida tovább fut",
+ "tray.hidden_body": "A letöltések a háttérben folytatódnak. Az újbóli megnyitáshoz kattints az Orbida ikonjára a tálca sarkában."
 }

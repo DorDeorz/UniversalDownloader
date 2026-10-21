@@ -138,6 +138,10 @@ def test_web_ext_leftovers_and_a_rewritten_manifest_pass(tmp_path):
     xpi = signed_xpi(tmp_path / "a.xpi", source=EXTENSION,
                      change={"manifest.json": json.dumps(manifest, indent=4).encode()})
     assert firefox_addon.check(xpi, source=str(source)) == []
+    # A Windows checkout with core.autocrlf has CRLF line endings.
+    script = source / "background.js"
+    script.write_bytes(script.read_bytes().replace(b"\n", b"\r\n"))
+    assert firefox_addon.check(xpi, source=str(source)) == []
 
 
 def test_an_unsigned_old_or_different_copy_is_refused(tmp_path):

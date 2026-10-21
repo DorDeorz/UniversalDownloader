@@ -97,6 +97,10 @@ def fetch(target, issuer, secret, version=__version__, source=SOURCE, opener=url
     return True
 
 
+def _lf(data):
+    return data.replace(b"\r\n", b"\n")
+
+
 def check(path, version=__version__, source=SOURCE):
     """Problems with the signed add-on at ``path`` (empty when it is fine to ship)."""
     try:
@@ -131,7 +135,8 @@ def check(path, version=__version__, source=SOURCE):
                     continue
                 with open(full, "rb") as f:
                     data = f.read()
-                if inside not in names or archive.read(inside) != data:
+                # A Windows checkout may turn line endings into CRLF (git core.autocrlf).
+                if inside not in names or _lf(archive.read(inside)) != _lf(data):
                     problems.append(inside + stale)
     return problems
 

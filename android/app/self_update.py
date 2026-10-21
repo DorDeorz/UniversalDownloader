@@ -24,6 +24,8 @@ import ssl
 import urllib.request
 from dataclasses import dataclass
 
+import logic
+
 RELEASES_URL = "https://api.github.com/repos/DorDeorz/UniversalDownloader/releases?per_page=30"
 TAG = re.compile(r"^orbida-v(\d+)\.(\d+)\.(\d+)$")
 APK_NAME = re.compile(r"^Orbida-[\w.-]*\.apk$")  # Orbida-1.0.0.apk (the release) or Orbida-1.0.0-android-arm64-v8a.apk
@@ -103,9 +105,13 @@ def _context():
 
 
 def _open(url, timeout, accept=None):
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    headers = {"User-Agent": USER_AGENT}
     if accept:
-        request.add_header("Accept", accept)
+        headers["Accept"] = accept
+    if logic.network_proxy():
+        # The proxy the user set for downloads (urllib cannot use a SOCKS one).
+        return logic.open_through_proxy(url, headers, timeout=timeout)
+    request = urllib.request.Request(url, headers=headers)
     context = _context() if url.startswith("https:") else None
     return urllib.request.urlopen(request, timeout=timeout, context=context)
 

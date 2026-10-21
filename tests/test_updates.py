@@ -166,3 +166,58 @@ def test_notes_are_shortened_for_the_dialog():
     text = updates.notes_summary(notes, limit=200)
     assert text.startswith("What's new\nFaster downloads, see the page\n\n- mp3")
     assert len(text) <= 202 and text.endswith("…")
+
+
+# --- The proxy set for downloads -------------------------------------------------
+
+@pytest.fixture
+def local_proxy():
+    """An HTTP proxy on 127.0.0.1 answering every request itself; yields (address, requested URLs)."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(self.path)  # a proxy gets the whole URL
+            missing = self.path.endswith("/missing")
+            body = b"not found" if missing else json.dumps(release_json("orbida-v99.0.0")).encode()
+            self.send_response(404 if missing else 200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_address[1]}", seen
+    server.shutdown()
+    server.server_close()
+
+
+def test_update_requests_use_the_proxy_set_for_downloads(local_proxy, monkeypatch):
+    import logic
+    address, seen = local_proxy
+    monkeypatch.setattr(updates, "LATEST_URL", "http://releases.invalid/latest")
+    logic.set_network_options(address)
+    try:
+        release = updates.fetch_latest()
+        with pytest.raises(OSError) as error:
+            with updates._open("http://releases.invalid/missing") as response:
+                response.read()
+    finally:
+        logic.set_network_options("")
+    assert release.version == "99.0.0"
+    assert seen == ["http://releases.invalid/latest", "http://releases.invalid/missing"]
+    assert error.value.code == 404
+
+
+def test_update_requests_go_direct_without_a_proxy(monkeypatch):
+    import logic
+    logic.set_network_options("")
+    opened = []
+    monkeypatch.setattr(updates.urllib.request, "urlopen", lambda request, **kw: opened.append(request.full_url))
+    monkeypatch.setattr(logic, "open_through_proxy", lambda *a, **kw: pytest.fail("no proxy is set"))
+    updates._open("https://api.github.com/x")
+    assert opened == ["https://api.github.com/x"]

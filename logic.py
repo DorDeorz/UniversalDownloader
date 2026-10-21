@@ -82,6 +82,71 @@ def set_network_options(proxy=''):
     _network_options = {'proxy': proxy} if proxy else {}
 
 
+def network_proxy():
+    """The proxy address set with set_network_options ('' for none)."""
+    return _network_options.get('proxy', '')
+
+
+class ProxyRequestError(OSError):
+    """A request through the proxy failed; ``code`` is the HTTP status, if any."""
+
+    def __init__(self, message, code=None):
+        super().__init__(message)
+        self.code = code
+
+
+class _ProxiedResponse:
+    """A yt-dlp response that closes its YoutubeDL with it; network errors are OSError."""
+
+    def __init__(self, ydl, response):
+        self._ydl, self._response = ydl, response
+        self.headers = response.headers
+
+    def read(self, size=-1):
+        from yt_dlp.networking.exceptions import RequestError
+        try:
+            return self._response.read(None if size is None or size < 0 else size)
+        except RequestError as e:
+            raise ProxyRequestError(str(e)) from e
+
+    def close(self):
+        try:
+            self._response.close()
+        finally:
+            self._ydl.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def open_through_proxy(url, headers=None, timeout=None):
+    """Open ``url`` through the proxy set with set_network_options.
+
+    For the app's own requests (update checks), which plain urllib would
+    send past an HTTP or SOCKS proxy the user set for downloads. The
+    certificate is checked as for downloads.
+    """
+    from yt_dlp.networking import Request
+    from yt_dlp.networking.exceptions import HTTPError, RequestError
+    ydl = yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'color': 'no_color',
+                            'socket_timeout': timeout or SOCKET_TIMEOUT, **_network_options})
+    try:
+        response = ydl.urlopen(Request(url, headers=headers or {}))
+    except HTTPError as e:
+        ydl.close()
+        raise ProxyRequestError(str(e), code=e.status) from e
+    except RequestError as e:
+        ydl.close()
+        raise ProxyRequestError(str(e)) from e
+    except BaseException:
+        ydl.close()
+        raise
+    return _ProxiedResponse(ydl, response)
+
+
 # The browser's Reddit sign-in (browser_cookies.RedditSignIn) when the user
 # turned it on; see set_reddit_sign_in.
 _reddit_sign_in = None

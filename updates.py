@@ -21,6 +21,7 @@ import ssl
 import urllib.request
 from dataclasses import dataclass
 
+import logic
 from version import GITHUB_REPO, __version__
 
 _log = logging.getLogger(__name__)
@@ -110,8 +111,11 @@ def _context():
 
 
 def _open(url, accept="application/octet-stream"):
-    request = urllib.request.Request(url, headers={
-        "Accept": accept, "User-Agent": f"Orbida/{__version__} (+https://github.com/{GITHUB_REPO})"})
+    headers = {"Accept": accept, "User-Agent": f"Orbida/{__version__} (+https://github.com/{GITHUB_REPO})"}
+    if logic.network_proxy():
+        # The proxy the user set for downloads (urllib cannot use a SOCKS one).
+        return logic.open_through_proxy(url, headers, timeout=TIMEOUT)
+    request = urllib.request.Request(url, headers=headers)
     return urllib.request.urlopen(request, timeout=TIMEOUT, context=_context())
 
 

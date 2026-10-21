@@ -1062,6 +1062,19 @@ def test_update_versions_are_parsed_from_tags():
     assert updates.parse_version("") is None
 
 
+def test_update_requests_use_the_proxy_set_for_downloads(monkeypatch):
+    import logic
+    import self_update as updates
+    opened = []
+    monkeypatch.setattr(logic, "open_through_proxy", lambda url, headers, timeout: opened.append((url, headers)))
+    logic.set_network_options("socks5://127.0.0.1:1080")
+    try:
+        updates._open("https://api.github.com/x", 5, accept="application/json")
+    finally:
+        logic.set_network_options("")
+    assert opened == [("https://api.github.com/x", {"User-Agent": updates.USER_AGENT, "Accept": "application/json"})]
+
+
 def test_update_picks_the_newest_published_release_with_an_apk():
     import self_update as updates
     releases = [

@@ -7,6 +7,7 @@ import yt_dlp
 from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 from yt_dlp.postprocessor.sponsorblock import SponsorBlockPP
 
+import browser_cookies
 import filenames
 import formats
 import media_tools
@@ -81,6 +82,16 @@ def set_network_options(proxy=''):
     _network_options = {'proxy': proxy} if proxy else {}
 
 
+# The browser's Reddit sign-in (browser_cookies.RedditSignIn) when the user
+# turned it on; see set_reddit_sign_in.
+_reddit_sign_in = None
+
+def set_reddit_sign_in(sign_in):
+    """Send the browser's Reddit cookies with every request (None: never)."""
+    global _reddit_sign_in
+    _reddit_sign_in = sign_in
+
+
 def base_ydl_options(log_callback=None):
     """Options shared by every YoutubeDL instance.
 
@@ -92,6 +103,8 @@ def base_ydl_options(log_callback=None):
         # A copy, because yt-dlp may normalise nested option dicts in place.
         **copy.deepcopy(_platform_options),
         **_network_options,
+        # Only reddit.com cookies, so other sites see no sign-in.
+        **(_reddit_sign_in.ydl_options() if _reddit_sign_in else {}),
         'logger': YtDlpLogger(log_callback),
         'noprogress': True,
         # yt-dlp colours messages when stderr is a console (as on Windows),
@@ -400,14 +413,14 @@ class DownloadManager:
             except Exception as e:
                 if self._retry_bot_check(describe_error(e), clients, attempts, log_callback):
                     continue
-                return {'error': describe_error(e), 'error_type': type(e).__name__}
+                return {'error': explain_site_error(describe_error(e)), 'error_type': type(e).__name__}
 
             if info is None:
                 # ignoreerrors turned the failure into None; keep yt-dlp's reason.
                 reason = logger.errors[-1] if logger.errors else 'Content is private or unavailable'
                 if self._retry_bot_check(reason, clients, attempts, log_callback):
                     continue
-                return {'error': reason, 'error_type': 'DownloadError'}
+                return {'error': explain_site_error(reason), 'error_type': 'DownloadError'}
             self._working_clients = clients
             return info
 
@@ -588,7 +601,7 @@ class DownloadManager:
         except Exception as e:
             if is_cancelled():
                 return cancelled()
-            return failed(explain_format_error(describe_error(e), mode, quality))
+            return failed(explain_site_error(explain_format_error(describe_error(e), mode, quality)))
 
         problem = verify_output(path)
         if problem:
@@ -743,6 +756,26 @@ def _missing_folders(folder):
             break
         folder = parent
     return list(reversed(missing))
+
+
+# Shown instead of yt-dlp's "Account authentication is required ... --cookies"
+# for Reddit, which only shows NSFW posts to signed-in accounts.
+REDDIT_SIGN_IN_OFF = ('Reddit shows this post only to signed-in accounts (often NSFW). Turn on the '
+                      'Reddit sign-in in Settings, then try again')
+REDDIT_SIGN_IN_MISSING = ('Reddit shows this post only to signed-in accounts. Sign in to Reddit in '
+                          'Firefox or Zen, allow mature content in your Reddit settings, then try again')
+
+
+def explain_site_error(message):
+    """Replace yt-dlp's command-line advice for a sign-in refusal with what to do in the app."""
+    if '[Reddit]' not in message or 'Account authentication is required' not in message:
+        return message
+    _log.warning("Reddit refused without sign-in: %s", message)
+    if _reddit_sign_in is None:
+        return REDDIT_SIGN_IN_OFF
+    if _reddit_sign_in.status == browser_cookies.SIGNED_IN:
+        return message  # the browser is signed in and Reddit still refuses: keep yt-dlp's reason
+    return REDDIT_SIGN_IN_MISSING
 
 
 def explain_format_error(message, mode, quality):

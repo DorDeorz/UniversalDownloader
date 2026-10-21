@@ -229,5 +229,15 @@
  "log.batch": "{count} links added to the queue",
  "log.from_browser": "Link received from the browser",
  "options.subtitles": "Subtitles",
- "options.sponsorblock": "Skip sponsors"
+ "options.sponsorblock": "Skip sponsors",
+ "settings.reddit_sign_in": "Use my browser's Reddit sign-in",
+ "settings.reddit_sign_in_hint": "For NSFW Reddit posts. Only Reddit gets the cookies of your Firefox or Zen sign-in; Orbida never sees a password.",
+ "reddit.signed_in": "Signed in to Reddit in {browser}",
+ "reddit.signed_out": "{browser} is not signed in to Reddit; sign in there first",
+ "reddit.no_browser": "No Firefox or Zen profile found on this PC",
+ "reddit.failed": "Could not read the cookies of {browser}; see the log",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again",
+ "reddit.ask_title": "Reddit sign-in",
+ "reddit.ask_body": "Reddit shows this post only to signed-in accounts (often NSFW).\n\nUse the Reddit sign-in of your Firefox or Zen? Only Reddit gets those cookies. You can turn it off under Settings › Browser extension."
 }

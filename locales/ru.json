@@ -229,5 +229,15 @@
  "log.batch": "Добавлено ссылок в очередь: {count}",
  "log.from_browser": "Получена ссылка из браузера",
  "options.subtitles": "Субтитры",
- "options.sponsorblock": "Без спонсоров"
+ "options.sponsorblock": "Без спонсоров",
+ "settings.reddit_sign_in": "Использовать вход в Reddit из моего браузера",
+ "settings.reddit_sign_in_hint": "Для NSFW-публикаций Reddit. Куки входа в Firefox или Zen получает только Reddit; Orbida никогда не видит пароль.",
+ "reddit.signed_in": "Выполнен вход в Reddit в {browser}",
+ "reddit.signed_out": "В {browser} не выполнен вход в Reddit; сначала войдите там",
+ "reddit.no_browser": "На этом компьютере не найден профиль Firefox или Zen",
+ "reddit.failed": "Не удалось прочитать куки {browser}; см. журнал",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit показывает эту публикацию только вошедшим аккаунтам (часто NSFW). Включите вход в Reddit в настройках и повторите попытку",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit показывает эту публикацию только вошедшим аккаунтам. Войдите в Reddit в Firefox или Zen, разрешите контент для взрослых в настройках Reddit и повторите попытку",
+ "reddit.ask_title": "Вход в Reddit",
+ "reddit.ask_body": "Reddit показывает эту публикацию только вошедшим аккаунтам (часто NSFW).\n\nИспользовать вход в Reddit из вашего Firefox или Zen? Эти куки получает только Reddit. Отключить можно в разделе Настройки › Расширение для браузера."
 }

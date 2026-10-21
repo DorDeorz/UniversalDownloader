@@ -19,6 +19,7 @@ DEST = os.path.join(ANDROID, ".build", "src")
 # Modules from the repository root the Android app imports (directly or
 # through each other). Nothing Tk- or Windows-specific.
 SHARED_MODULES = (
+    "browser_cookies.py",
     "events.py",
     "filenames.py",
     "formats.py",

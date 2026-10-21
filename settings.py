@@ -47,6 +47,7 @@ class Settings:
     sponsorblock: bool = False   # cut SponsorBlock segments (sponsors, intros) from YouTube videos
     speed_limit: int = 0         # MB/s, one of SPEED_LIMITS; 0 means no limit
     proxy: str = ""              # urls.proxy_url address; empty for a direct connection
+    reddit_browser_sign_in: bool = False  # send Reddit the cookies of the user's Firefox/Zen sign-in
     keep_awake: bool = True      # keep the PC from sleeping while a download runs
     save_history: bool = True
     check_updates: bool = True   # look for a new version at start

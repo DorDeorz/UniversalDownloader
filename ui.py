@@ -13,6 +13,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 import app_setup
+import browser_cookies
 import download_history
 import events
 import filenames
@@ -1127,7 +1128,8 @@ def extension_folder():
 
 
 class ExtensionDialog(ctk.CTkToplevel):
-    """How to add the browser extension.
+    """How to add the browser extension, and the switch that lends Reddit
+    the browser's sign-in (for NSFW posts).
 
     Chromium browsers load it unpacked from the data folder (it is not in a
     store); Firefox installs the Mozilla-signed copy the installer ships
@@ -1154,8 +1156,19 @@ class ExtensionDialog(ctk.CTkToplevel):
         self.lbl_note = ctk.CTkLabel(self, text="", font=font(12), text_color=MUTED, anchor="w",
                                     justify="left", wraplength=620)
         self.lbl_note.grid(row=2, column=0, sticky="ew", padx=20, pady=(8, 0))
+        # Reddit shows NSFW posts only to signed-in accounts; this uses the browser's sign-in.
+        reddit = card(self)
+        reddit.grid(row=3, column=0, sticky="ew", padx=20, pady=(12, 0))
+        reddit.grid_columnconfigure(0, weight=1)
+        self.sw_reddit = switch(reddit, tr("settings.reddit_sign_in"), self._on_reddit_toggled)
+        if app.settings.reddit_browser_sign_in:
+            self.sw_reddit.select()
+        self.sw_reddit.grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+        self.lbl_reddit = ctk.CTkLabel(reddit, text=app.reddit_status(), font=font(12), text_color=MUTED,
+                                       anchor="w", justify="left", wraplength=600)
+        self.lbl_reddit.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 12))
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=3, column=0, sticky="e", padx=20, pady=(12, 18))
+        buttons.grid(row=4, column=0, sticky="e", padx=20, pady=(12, 18))
         self.btn_copy = secondary_button(buttons, tr("extension.copy_address"), self.copy_address)
         self.btn_copy.pack(side="left", padx=(0, 8))
         self.btn_close = secondary_button(buttons, tr("extension.close"), self.destroy)
@@ -1166,9 +1179,13 @@ class ExtensionDialog(ctk.CTkToplevel):
         self.btn_folder.pack(side="left")
         set_window_icon(self)
         self.after(200, lambda: set_window_icon(self))
-        fit_dialog(self, (680, 460), (480, 320))
+        fit_dialog(self, (680, 560), (480, 400))
         self.lift()
         self.btn_folder.focus_set()
+
+    def _on_reddit_toggled(self):
+        self.app._on_setting_changed("reddit_browser_sign_in", bool(self.sw_reddit.get()))
+        self.lbl_reddit.configure(text=self.app.reddit_status())
 
     def open_folder(self):
         folder = extension_folder()
@@ -1300,6 +1317,8 @@ class App(ctk.CTk):
         self.settings_path = os.path.join(app_setup.data_dir(), "settings.json")
         self.settings = settings_store.load(self.settings_path, default_download_dir())
         logic.set_network_options(self.settings.proxy)
+        self._reddit = None  # browser_cookies.RedditSignIn while the setting is on
+        self._apply_reddit_sign_in()
         ctk.set_appearance_mode(appearance_mode(self.settings.theme))
         ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
         i18n.set_language(self.settings.language)
@@ -1718,6 +1737,27 @@ class App(ctk.CTk):
         self.settings.theme = theme
         self._refresh_logo_bg()
         self._save_settings()
+    def _apply_reddit_sign_in(self):
+        """Send Reddit the browser's sign-in while the setting is on (Browser extension dialog)."""
+        if self.settings.reddit_browser_sign_in:
+            if self._reddit is None:
+                self._reddit = browser_cookies.RedditSignIn(os.path.join(app_setup.data_dir(), "reddit-cookies"))
+            self._reddit.refresh()
+            logic.set_reddit_sign_in(self._reddit)
+        else:
+            logic.set_reddit_sign_in(None)
+            if self._reddit is not None:
+                self._reddit.remove_copy()
+                self._reddit = None
+
+    def reddit_status(self):
+        """The translated state of the Reddit sign-in, or its description while it is off."""
+        sign_in = self._reddit
+        if sign_in is None:
+            return tr("settings.reddit_sign_in_hint")
+        sign_in.ydl_options()  # reads the browser again when the last look is old
+        return tr(f"reddit.{sign_in.status}", browser=browser_cookies.browser_name(sign_in.browser_database))
+
     def _on_setting_changed(self, name, value):
         """Called by the settings page; applies and saves one setting."""
         if name == "theme":
@@ -1731,6 +1771,8 @@ class App(ctk.CTk):
         setattr(self.settings, name, value)
         if name == "proxy":
             logic.set_network_options(value)
+        if name == "reddit_browser_sign_in":
+            self._apply_reddit_sign_in()
         if name == "accent":
             recolor(self, apply_accent(value))
 
@@ -2152,7 +2194,10 @@ class App(ctk.CTk):
             if info is None:
                 self.events.post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
             elif 'error' in info:
-                self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {info['error']}")
+                # A Reddit post that needs a sign-in also offers the browser's (offer_reddit_sign_in).
+                sign_in = {'sign_in': True} if info['error'] == logic.REDDIT_SIGN_IN_OFF else {}
+                self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
+                                 **sign_in)
             else:
                 analysis = playlist.analyze(info, url)
                 if not analysis.is_playlist and analysis.items and info.get('formats'):
@@ -2161,7 +2206,7 @@ class App(ctk.CTk):
                 self.events.post(events.ANALYSIS_DONE, analysis=analysis, url=url)
         except Exception as e:
             self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
-    def _on_analysis_failed(self, message):
+    def _on_analysis_failed(self, message, sign_in=False):
         self._append_log(message)
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._show_media(lambda: message, DANGER)
@@ -2169,6 +2214,20 @@ class App(ctk.CTk):
         if self._from_queue:
             self._from_queue = False
             self._next_in_queue()
+        elif sign_in and not self.settings.reddit_browser_sign_in:
+            self.offer_reddit_sign_in()
+
+    def offer_reddit_sign_in(self):
+        """Reddit refused a post without sign-in: offer the browser's sign-in, then try again."""
+        if not messagebox.askyesno(tr("reddit.ask_title"), tr("reddit.ask_body"), parent=self):
+            return
+        self._on_setting_changed("reddit_browser_sign_in", True)
+        status = self.reddit_status()
+        self._append_log(status)
+        if self._reddit.status == browser_cookies.SIGNED_IN:
+            self.start_analysis_thread()
+        else:
+            messagebox.showinfo(tr("reddit.ask_title"), status, parent=self)
     def _on_analysis_done(self, analysis, url):
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._end_job()

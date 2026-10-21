@@ -229,5 +229,15 @@
  "log.batch": "{count} link aggiunti alla coda",
  "log.from_browser": "Link ricevuto dal browser",
  "options.subtitles": "Sottotitoli",
- "options.sponsorblock": "Salta sponsor"
+ "options.sponsorblock": "Salta sponsor",
+ "settings.reddit_sign_in": "Usa l'accesso a Reddit del mio browser",
+ "settings.reddit_sign_in_hint": "Per i post NSFW di Reddit. Solo Reddit riceve i cookie del tuo accesso in Firefox o Zen; Orbida non vede mai una password.",
+ "reddit.signed_in": "Accesso a Reddit effettuato in {browser}",
+ "reddit.signed_out": "{browser} non ha effettuato l'accesso a Reddit; accedi prima lì",
+ "reddit.no_browser": "Nessun profilo Firefox o Zen trovato su questo PC",
+ "reddit.failed": "Impossibile leggere i cookie di {browser}; vedi il registro",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit mostra questo post solo agli account che hanno effettuato l'accesso (spesso NSFW). Attiva l'accesso a Reddit nelle Impostazioni e riprova",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit mostra questo post solo agli account che hanno effettuato l'accesso. Accedi a Reddit in Firefox o Zen, consenti i contenuti per adulti nelle impostazioni di Reddit e riprova",
+ "reddit.ask_title": "Accesso a Reddit",
+ "reddit.ask_body": "Reddit mostra questo post solo agli account che hanno effettuato l'accesso (spesso NSFW).\n\nUsare l'accesso a Reddit del tuo Firefox o Zen? Solo Reddit riceve quei cookie. Puoi disattivarlo in Impostazioni › Estensione del browser."
 }

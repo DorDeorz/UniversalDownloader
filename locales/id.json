@@ -229,5 +229,15 @@
  "log.batch": "{count} tautan ditambahkan ke antrean",
  "log.from_browser": "Tautan diterima dari browser",
  "options.subtitles": "Subtitel",
- "options.sponsorblock": "Lewati sponsor"
+ "options.sponsorblock": "Lewati sponsor",
+ "settings.reddit_sign_in": "Gunakan login Reddit dari browser saya",
+ "settings.reddit_sign_in_hint": "Untuk postingan NSFW Reddit. Hanya Reddit yang menerima cookie login Firefox atau Zen Anda; Orbida tidak pernah melihat kata sandi.",
+ "reddit.signed_in": "Sudah masuk ke Reddit di {browser}",
+ "reddit.signed_out": "{browser} belum masuk ke Reddit; masuk di sana dulu",
+ "reddit.no_browser": "Tidak ditemukan profil Firefox atau Zen di PC ini",
+ "reddit.failed": "Tidak dapat membaca cookie {browser}; lihat log",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit hanya menampilkan postingan ini ke akun yang sudah masuk (sering NSFW). Aktifkan login Reddit di Pengaturan, lalu coba lagi",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit hanya menampilkan postingan ini ke akun yang sudah masuk. Masuk ke Reddit di Firefox atau Zen, izinkan konten dewasa di pengaturan Reddit, lalu coba lagi",
+ "reddit.ask_title": "Login Reddit",
+ "reddit.ask_body": "Reddit hanya menampilkan postingan ini ke akun yang sudah masuk (sering NSFW).\n\nGunakan login Reddit dari Firefox atau Zen Anda? Hanya Reddit yang menerima cookie tersebut. Anda bisa mematikannya di Pengaturan › Ekstensi browser."
 }

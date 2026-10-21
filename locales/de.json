@@ -229,5 +229,15 @@
  "log.batch": "{count} Links zur Warteschlange hinzugefügt",
  "log.from_browser": "Link vom Browser empfangen",
  "options.subtitles": "Untertitel",
- "options.sponsorblock": "Sponsoren überspringen"
+ "options.sponsorblock": "Sponsoren überspringen",
+ "settings.reddit_sign_in": "Reddit-Anmeldung meines Browsers verwenden",
+ "settings.reddit_sign_in_hint": "Für NSFW-Beiträge auf Reddit. Nur Reddit erhält die Cookies deiner Firefox- oder Zen-Anmeldung; Orbida sieht nie ein Passwort.",
+ "reddit.signed_in": "Bei Reddit angemeldet in {browser}",
+ "reddit.signed_out": "{browser} ist nicht bei Reddit angemeldet; melde dich dort zuerst an",
+ "reddit.no_browser": "Kein Firefox- oder Zen-Profil auf diesem PC gefunden",
+ "reddit.failed": "Die Cookies von {browser} konnten nicht gelesen werden; siehe Protokoll",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit zeigt diesen Beitrag nur angemeldeten Konten (oft NSFW). Schalte die Reddit-Anmeldung in den Einstellungen ein und versuche es erneut",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit zeigt diesen Beitrag nur angemeldeten Konten. Melde dich in Firefox oder Zen bei Reddit an, erlaube in den Reddit-Einstellungen Inhalte für Erwachsene und versuche es erneut",
+ "reddit.ask_title": "Reddit-Anmeldung",
+ "reddit.ask_body": "Reddit zeigt diesen Beitrag nur angemeldeten Konten (oft NSFW).\n\nDie Reddit-Anmeldung deines Firefox oder Zen verwenden? Nur Reddit erhält diese Cookies. Ausschalten kannst du es unter Einstellungen › Browser-Erweiterung."
 }

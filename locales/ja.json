@@ -229,5 +229,15 @@
  "log.batch": "{count} 件のリンクをキューに追加しました",
  "log.from_browser": "ブラウザーからリンクを受け取りました",
  "options.subtitles": "字幕",
- "options.sponsorblock": "スポンサーをスキップ"
+ "options.sponsorblock": "スポンサーをスキップ",
+ "settings.reddit_sign_in": "ブラウザーの Reddit サインインを使う",
+ "settings.reddit_sign_in_hint": "Reddit の NSFW 投稿用です。Firefox または Zen のサインインの Cookie は Reddit にだけ送られ、Orbida がパスワードを見ることはありません。",
+ "reddit.signed_in": "{browser} で Reddit にサインイン済み",
+ "reddit.signed_out": "{browser} は Reddit にサインインしていません。先にそちらでサインインしてください",
+ "reddit.no_browser": "この PC に Firefox または Zen のプロファイルが見つかりません",
+ "reddit.failed": "{browser} の Cookie を読み取れませんでした。ログを確認してください",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit はこの投稿をサインイン済みのアカウントにだけ表示します (多くは NSFW)。設定で Reddit サインインをオンにして、もう一度お試しください",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit はこの投稿をサインイン済みのアカウントにだけ表示します。Firefox または Zen で Reddit にサインインし、Reddit の設定で成人向けコンテンツを許可してから、もう一度お試しください",
+ "reddit.ask_title": "Reddit サインイン",
+ "reddit.ask_body": "Reddit はこの投稿をサインイン済みのアカウントにだけ表示します (多くは NSFW)。\n\nFirefox または Zen の Reddit サインインを使いますか? その Cookie は Reddit にだけ送られます。設定 › ブラウザー拡張機能 でオフにできます。"
 }

@@ -446,6 +446,9 @@ def probe(*_):
     rows = [w for w in app.ids.settings_list.children if isinstance(w, LiteRow)]
     theme = next(r for r in rows if r.headline == app.t("settings.theme"))
     result["theme_before"] = theme.supporting
+    result["reddit_row"] = any(r.headline == app.t("reddit_login.sign_in") for r in rows)
+    app._on_analysis_failed(main.logic.REDDIT_SIGN_IN_OFF)  # off Android: no sign-in dialog
+    result["reddit_message"] = app.ids.media_title.text
     observers = len(Window.get_property_observers("mouse_pos"))
     theme.dispatch("on_release")  # opens the choice dialog
     dialog = [w for w in Window.children if type(w).__name__ == "MDDialog"][0]
@@ -495,6 +498,8 @@ def test_settings_choice_updates_its_row_in_place(tmp_path):
     assert result["widgets_per_choice"] <= 4  # row, icon, text box, one line (MDListItem: 10+)
     assert result["new_hover_observers"] == 0
     assert result["history_built"]
+    assert result["reddit_row"]
+    assert "Reddit" in result["reddit_message"] and "--cookies" not in result["reddit_message"]
 
 
 # --- staging ------------------------------------------------------------------------
@@ -809,6 +814,54 @@ def test_cookie_file_reaches_yt_dlp(tmp_path, fake_ydl, manager):
     logic.set_platform_options({"cookiefile": youtube_login.saved(str(tmp_path))})
     manager.fetch_info("https://youtu.be/abc")
     assert fake_ydl.instances[0].opts["cookiefile"].endswith(youtube_login.COOKIE_FILE)
+
+
+# --- Reddit sign-in (NSFW posts) ----------------------------------------------------
+
+REDDIT_SIGNED_IN = "loid=abc; reddit_session=eyJ; token_v2=t; csv=2"
+
+
+def test_reddit_cookies_are_saved_for_yt_dlp_next_to_youtube(tmp_path):
+    import http.cookiejar
+    import youtube_login
+    folder = str(tmp_path)
+    assert youtube_login.cookie_file(folder) is None
+    assert not youtube_login.save(folder, "loid=abc; csv=2", youtube_login.REDDIT)  # signed out
+    assert youtube_login.save(folder, REDDIT_SIGNED_IN, youtube_login.REDDIT)
+    assert youtube_login.saved(folder) is None  # YouTube stays signed out
+    path = youtube_login.cookie_file(folder)
+    assert path == youtube_login.saved(folder, youtube_login.REDDIT)
+    jar = http.cookiejar.MozillaCookieJar(path)
+    jar.load()
+    assert {(c.domain, c.name) for c in jar} >= {(".reddit.com", "reddit_session")}
+
+    youtube_login.save(folder, SIGNED_IN)  # both signed in: one file holds both
+    jar = http.cookiejar.MozillaCookieJar(youtube_login.cookie_file(folder))
+    jar.load()
+    assert {c.domain for c in jar} == {".reddit.com", ".youtube.com"}
+
+    youtube_login.forget(folder, youtube_login.REDDIT)
+    assert youtube_login.cookie_file(folder) == youtube_login.saved(folder)
+
+
+def test_reddit_refusal_points_to_the_sign_in_unless_signed_in():
+    import browser_cookies
+    message = "[Reddit] 1xbqytb: Account authentication is required. Use --cookies-from-browser or --cookies"
+    try:
+        assert logic.explain_site_error(message) == logic.REDDIT_SIGN_IN_OFF
+        logic.set_reddit_sign_in(browser_cookies.AppSignIn())
+        assert logic.explain_site_error(message) == message
+        assert "cookiesfrombrowser" not in logic.base_ydl_options()  # the cookie file carries them
+    finally:
+        logic.set_reddit_sign_in(None)
+
+
+def test_reddit_sign_in_texts_exist_in_english_and_turkish():
+    import texts
+    for key in ("reddit_login.section", "reddit_login.sign_in", "reddit_login.sign_in_hint",
+                "reddit_login.signed_in", "reddit_login.ok", "reddit_login.signed_out",
+                "reddit_login.ask_title", "reddit_login.ask_body"):
+        assert texts.TEXTS["en"].get(key) and texts.TEXTS["tr"].get(key), key
 
 
 # --- browser_route: YouTube through the phone's browser engine -----------------------

@@ -123,6 +123,12 @@ Windows tarafının ayrıntıları için:
 ### Windows
 
 - **Tarayıcı eklentisi:** Chrome, Edge, Brave ve Opera için (aşağıda).
+- **NSFW Reddit gönderileri:** Reddit bunları yalnızca giriş yapmış
+  hesaplara gösterir. **Tarayıcımdaki Reddit oturumunu kullan** seçeneğini
+  açın (Ayarlar › Tarayıcı eklentisi ya da Orbida sorduğunda Evet). Orbida,
+  Firefox ya da Zen'in (LibreWolf, Floorp, Waterfox da olur) reddit.com
+  çerezlerini Reddit'e gönderir. Varsayılan olarak kapalıdır; çerezler
+  başka hiçbir siteye gitmez, Orbida şifrenizi hiç görmez.
 - **Pano takibi:** Ayarlar › Kopyalanan bağlantılar › Takip et açıksa,
   Orbida çalışırken kopyaladığınız her bağlantı bir İndir düğmesiyle
   önerilir.
@@ -189,6 +195,9 @@ tıkladığınızda sekmenin adresini okur.
 - **Hesapsız YouTube.** YouTube "bot olmadığınızı doğrulayın" derse Orbida
   telefonun kendi tarayıcı motoru üzerinden yeniden dener. Oturum açmak
   mümkün ama gerekmez.
+- **NSFW Reddit gönderileri** giriş yapmış hesap ister: Ayarlar › Reddit ›
+  Reddit'e giriş yap (isteğe bağlı; Reddit bir gönderiyi reddettiğinde
+  Orbida da önerir). Giriş yalnızca telefonda kalır.
 - Dosyalar `Download/Orbida` klasörüne kaydedilir ve galeri ile müzik
   uygulamalarında görünür. Geçmiş sekmesinde Aç, Paylaş ve Kaldır var.
 - Çalma listesinden indirilecek öğeleri seçebilirsiniz.

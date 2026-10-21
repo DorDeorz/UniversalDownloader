@@ -229,5 +229,15 @@
  "log.batch": "{count} link hozzáadva a sorhoz",
  "log.from_browser": "Link érkezett a böngészőből",
  "options.subtitles": "Felirat",
- "options.sponsorblock": "Szponzorok kihagyása"
+ "options.sponsorblock": "Szponzorok kihagyása",
+ "settings.reddit_sign_in": "A böngészőm Reddit-bejelentkezésének használata",
+ "settings.reddit_sign_in_hint": "NSFW Reddit-bejegyzésekhez. A Firefox- vagy Zen-bejelentkezésed sütijeit csak a Reddit kapja meg; az Orbida soha nem lát jelszót.",
+ "reddit.signed_in": "Bejelentkezve a Redditre itt: {browser}",
+ "reddit.signed_out": "{browser}: nincs bejelentkezve a Redditre; előbb ott jelentkezz be",
+ "reddit.no_browser": "Nem található Firefox- vagy Zen-profil ezen a gépen",
+ "reddit.failed": "Nem sikerült beolvasni a(z) {browser} sütijeit; lásd a naplót",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "A Reddit ezt a bejegyzést csak bejelentkezett fiókoknak mutatja (gyakran NSFW). Kapcsold be a Reddit-bejelentkezést a Beállításokban, majd próbáld újra",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "A Reddit ezt a bejegyzést csak bejelentkezett fiókoknak mutatja. Jelentkezz be a Redditre a Firefoxban vagy a Zenben, engedélyezd a felnőtt tartalmat a Reddit-beállításokban, majd próbáld újra",
+ "reddit.ask_title": "Reddit-bejelentkezés",
+ "reddit.ask_body": "A Reddit ezt a bejegyzést csak bejelentkezett fiókoknak mutatja (gyakran NSFW).\n\nHasználjuk a Firefox vagy Zen Reddit-bejelentkezését? Ezeket a sütiket csak a Reddit kapja meg. Kikapcsolhatod itt: Beállítások › Böngészőbővítmény."
 }

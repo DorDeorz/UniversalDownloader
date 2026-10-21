@@ -229,5 +229,15 @@
  "log.batch": "已将 {count} 个链接加入队列",
  "log.from_browser": "已从浏览器收到链接",
  "options.subtitles": "字幕",
- "options.sponsorblock": "跳过赞助"
+ "options.sponsorblock": "跳过赞助",
+ "settings.reddit_sign_in": "使用浏览器中的 Reddit 登录",
+ "settings.reddit_sign_in_hint": "用于 Reddit 的 NSFW 帖子。Firefox 或 Zen 登录的 Cookie 只发送给 Reddit;Orbida 不会看到任何密码。",
+ "reddit.signed_in": "已在 {browser} 中登录 Reddit",
+ "reddit.signed_out": "{browser} 未登录 Reddit;请先在那里登录",
+ "reddit.no_browser": "此电脑上未找到 Firefox 或 Zen 配置文件",
+ "reddit.failed": "无法读取 {browser} 的 Cookie;请查看日志",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit 只向已登录的账户显示此帖子(通常为 NSFW)。请在设置中开启 Reddit 登录,然后重试",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit 只向已登录的账户显示此帖子。请在 Firefox 或 Zen 中登录 Reddit,在 Reddit 设置中允许成人内容,然后重试",
+ "reddit.ask_title": "Reddit 登录",
+ "reddit.ask_body": "Reddit 只向已登录的账户显示此帖子(通常为 NSFW)。\n\n要使用 Firefox 或 Zen 中的 Reddit 登录吗?这些 Cookie 只发送给 Reddit。可在 设置 › 浏览器扩展 中关闭。"
 }

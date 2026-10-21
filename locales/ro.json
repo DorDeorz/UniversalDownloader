@@ -229,5 +229,15 @@
  "log.batch": "{count} linkuri adăugate în coadă",
  "log.from_browser": "Link primit din browser",
  "options.subtitles": "Subtitrări",
- "options.sponsorblock": "Sari peste sponsori"
+ "options.sponsorblock": "Sari peste sponsori",
+ "settings.reddit_sign_in": "Folosește autentificarea Reddit din browserul meu",
+ "settings.reddit_sign_in_hint": "Pentru postările NSFW de pe Reddit. Doar Reddit primește cookie-urile autentificării din Firefox sau Zen; Orbida nu vede niciodată o parolă.",
+ "reddit.signed_in": "Autentificat pe Reddit în {browser}",
+ "reddit.signed_out": "{browser} nu este autentificat pe Reddit; autentifică-te mai întâi acolo",
+ "reddit.no_browser": "Nu s-a găsit niciun profil Firefox sau Zen pe acest PC",
+ "reddit.failed": "Nu s-au putut citi cookie-urile din {browser}; vezi jurnalul",
+ "msg.Reddit shows this post only to signed-in accounts (often NSFW). Turn on the Reddit sign-in in Settings, then try again": "Reddit arată această postare doar conturilor autentificate (adesea NSFW). Activează autentificarea Reddit din Setări, apoi încearcă din nou",
+ "msg.Reddit shows this post only to signed-in accounts. Sign in to Reddit in Firefox or Zen, allow mature content in your Reddit settings, then try again": "Reddit arată această postare doar conturilor autentificate. Autentifică-te pe Reddit în Firefox sau Zen, permite conținutul pentru adulți în setările Reddit, apoi încearcă din nou",
+ "reddit.ask_title": "Autentificare Reddit",
+ "reddit.ask_body": "Reddit arată această postare doar conturilor autentificate (adesea NSFW).\n\nFolosești autentificarea Reddit din Firefox sau Zen? Doar Reddit primește aceste cookie-uri. O poți dezactiva din Setări › Extensie de browser."
 }

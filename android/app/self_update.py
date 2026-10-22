@@ -3,8 +3,8 @@
 Each Orbida version is one GitHub release tagged ``orbida-v<X.Y.Z>`` that
 holds the Windows installer and the Android APK (``Orbida-<X.Y.Z>.apk``,
 published by .github/workflows/release.yml). The app lists the
-repository's releases, keeps published (not draft, not pre-release) ones
-with such a tag and an APK asset, and offers the newest if it is newer than
+repository's releases, keeps published (not draft; not pre-release unless
+the user chose the beta channel) ones with such a tag and an APK asset, and offers the newest if it is newer than
 the running version. Releases without an APK (older UniversalDownloader
 releases, or a new release whose APK is still being built) are skipped.
 
@@ -51,6 +51,7 @@ class Update:
     size: int          # bytes, 0 if unknown
     sha256: str        # hex digest, "" if GitHub did not report one
     name: str          # the APK's file name
+    prerelease: bool = False  # a beta (only on the beta channel)
 
 
 def parse_version(text):
@@ -60,19 +61,30 @@ def parse_version(text):
     return tuple(int(part) for part in match.groups()) if match else None
 
 
-def pick(releases, current):
+CHANNELS = ("stable", "beta")
+
+
+def pick(releases, current, channel="stable", skipped=""):
     """The newest release in the GitHub API's ``releases`` list that is newer
-    than ``current`` and carries an APK, as an ``Update``; else None."""
+    than ``current`` and carries an APK, as an ``Update``; else None.
+
+    The beta ``channel`` also takes pre-releases tagged orbida-vX.Y.Z (test
+    builds tagged orbida-test-N never match). A ``skipped`` version (the
+    user's "Skip this version") is passed over; a newer one is still offered.
+    """
     running = parse_version(current) or (0, 0, 0)
+    skip = parse_version(skipped)
     best = None
     for release in releases or ():
-        if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
+        if not isinstance(release, dict) or release.get("draft"):
+            continue
+        if release.get("prerelease") and channel != "beta":
             continue
         tag = release.get("tag_name") or ""
         if not TAG.match(tag):
             continue
         version = parse_version(tag)
-        if version <= running or (best and version <= best[0]):
+        if version <= running or version == skip or (best and version <= best[0]):
             continue
         apk = next((a for a in release.get("assets") or ()
                     if isinstance(a, dict) and APK_NAME.match(a.get("name") or "")), None)
@@ -88,6 +100,7 @@ def pick(releases, current):
             size=int(apk.get("size") or 0),
             sha256=digest[len("sha256:"):].lower() if digest.startswith("sha256:") else "",
             name=apk.get("name") or "",
+            prerelease=bool(release.get("prerelease")),
         ))
     return best[1] if best else None
 
@@ -125,9 +138,9 @@ def fetch_releases(url=RELEASES_URL, timeout=15):
         raise UpdateError(f"Could not check for updates: {e}") from e
 
 
-def check(current, url=RELEASES_URL, timeout=15):
+def check(current, url=RELEASES_URL, timeout=15, channel="stable", skipped=""):
     """The newest ``Update`` over ``current``, or None when it is up to date."""
-    return pick(fetch_releases(url, timeout), current)
+    return pick(fetch_releases(url, timeout), current, channel, skipped)
 
 
 def download(update, folder, progress=None, cancelled=None, timeout=30):
@@ -178,7 +191,7 @@ def remove_old(folder, keep=None):
         return
     for name in names:
         path = os.path.join(folder, name)
-        if path != keep and (name.endswith(".apk") or name.endswith(".part")):
+        if path != keep and name.endswith((".apk", ".part")):
             try:
                 os.remove(path)
             except OSError:

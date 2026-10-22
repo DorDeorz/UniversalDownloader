@@ -21,6 +21,8 @@ import os
 import time
 from collections import namedtuple
 
+import android_env
+
 Site = namedtuple("Site", "name domain file login_url page session_cookies")
 
 YOUTUBE = Site(
@@ -147,12 +149,16 @@ class LoginView:
 
     ``on_close(cookie_header)`` runs on Android's UI thread when the user
     taps Done or Back; the caller hands it to Kivy's thread.
+
+    ``dark`` follows the app's theme: a dark bar and page around the site,
+    and the site itself in dark colours where Android can darken it.
     """
 
-    def __init__(self, on_close, done_text="Done", site=YOUTUBE):
+    def __init__(self, on_close, done_text="Done", site=YOUTUBE, dark=False):
         self.on_close = on_close
         self.done_text = done_text
         self.site = site
+        self.dark = dark
         self._layout = None
         self._keep = []  # Java listeners must outlive the call that made them
 
@@ -219,6 +225,14 @@ class LoginView:
         settings.setDomStorageEnabled(True)
         settings.setUserAgentString(_browser_user_agent(activity))
         web.setWebViewClient(WebViewClient())  # keep pages inside the WebView
+        sdk = autoclass("android.os.Build$VERSION").SDK_INT
+        if sdk >= 33:
+            # Sites without a dark design of their own are darkened (with a dark app theme).
+            settings.setAlgorithmicDarkeningAllowed(self.dark)
+        elif sdk >= 29:
+            settings.setForceDark(2 if self.dark else 0)  # WebSettings.FORCE_DARK_ON / FORCE_DARK_OFF
+        background, text = (Color.rgb(18, 18, 18), Color.WHITE) if self.dark else (Color.WHITE, Color.BLACK)
+        web.setBackgroundColor(background)
         done, back = Done(), Back()
         self._keep = [done, back]
         web.setOnKeyListener(back)
@@ -226,12 +240,16 @@ class LoginView:
         button = Button(activity)
         button.setText(autoclass("java.lang.String")(self.done_text))  # a CharSequence parameter
         button.setOnClickListener(done)
+        button.setTextColor(text)
+        button.setBackgroundColor(Color.rgb(40, 40, 40) if self.dark else Color.rgb(238, 238, 238))
         layout = LinearLayout(activity)
         layout.setOrientation(LinearLayout.VERTICAL)
-        layout.setBackgroundColor(Color.WHITE)
+        layout.setBackgroundColor(background)
         insets = activity.getWindow().getDecorView().getRootWindowInsets()
         if insets is not None:
-            layout.setPadding(0, insets.getSystemWindowInsetTop(), 0, insets.getSystemWindowInsetBottom())
+            # Clear of the status and navigation bars (and, in landscape, the sides).
+            left, top, right, bottom = android_env.insets_of(insets, sdk)
+            layout.setPadding(left, top, right, bottom)
         layout.addView(button, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         layout.addView(web, autoclass("android.widget.LinearLayout$LayoutParams")(
             LayoutParams.MATCH_PARENT, 0, 1.0))

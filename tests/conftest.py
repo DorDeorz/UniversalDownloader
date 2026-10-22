@@ -63,7 +63,7 @@ class FakeYoutubeDL:
     def add_post_processor(self, pp, when="post_process"):
         self.added_pps.append((pp, when))
 
-    def extract_info(self, url, download=False):
+    def extract_info(self, url, download=False, process=True):
         self.extract_calls.append((url, download))
         if FakeYoutubeDL.warning and self.params.get("logger"):
             self.params["logger"].warning(FakeYoutubeDL.warning)
@@ -132,6 +132,16 @@ FAKE_TOOLS = media_tools.ToolStatus(True, directory="/fake/ffmpeg/bin", version=
 @pytest.fixture
 def manager():
     return logic.DownloadManager(tools=FAKE_TOOLS)
+
+
+@pytest.fixture(autouse=True)
+def empty_caches():
+    """Spotify lists and song searches are kept for a while; each test starts without them."""
+    logic.SPOTIFY_CACHE.clear()
+    logic.SEARCH_CACHE.clear()
+    yield
+    logic.SPOTIFY_CACHE.clear()
+    logic.SEARCH_CACHE.clear()
 
 
 @pytest.fixture(autouse=True)

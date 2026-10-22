@@ -107,7 +107,7 @@ def test_closing_hides_to_the_tray_and_the_menu_brings_it_back(monkeypatch):
     from ui_helpers import make_app, pump
     monkeypatch.setattr(ui.tray, "Tray", RecordingTray)
     notes = []
-    monkeypatch.setattr(ui.app_setup, "notify", lambda title, text, window=None: notes.append(title))
+    monkeypatch.setattr(ui.app_setup, "notify", lambda title, text, window=None, notifier=None: notes.append(title))
     app = make_app(monkeypatch)
     destroyed = []
     real_destroy = app.destroy

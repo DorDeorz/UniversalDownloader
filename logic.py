@@ -1,10 +1,13 @@
 import copy
+import difflib
 import logging
 import os
 import re
 import shutil
+import threading
 import time
 import yt_dlp
+from yt_dlp.postprocessor.common import PostProcessor
 from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 from yt_dlp.postprocessor.sponsorblock import SponsorBlockPP
 
@@ -13,8 +16,9 @@ import filenames
 import formats
 import media_tools
 import playlist
+import resume
 import spotify
-from results import ItemResult, ItemStatus, verify_output
+from results import ItemResult, ItemStatus, probe_output, verify_output
 
 _log = logging.getLogger(__name__)
 _log.addHandler(logging.NullHandler())
@@ -39,7 +43,7 @@ class YtDlpLogger:
             raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
 
     def _emit(self, level, prefix, msg):
-        msg = strip_ansi(msg)
+        msg = strip_ansi(msg).replace('\r', '')
         _log.log(level, msg)
         if self.log_callback is not None:
             self.log_callback(f"{prefix}{msg}")
@@ -64,7 +68,7 @@ class YtDlpLogger:
 # Options a platform adds to every YoutubeDL instance (see
 # set_platform_options). The Windows app adds none; the Android app points
 # yt-dlp at its bundled QuickJS because Deno is not available there.
-_platform_options = {}
+_platform_options: dict = {}
 
 
 def set_platform_options(options):
@@ -83,7 +87,7 @@ def set_platform_options(options):
 
 # Options the user's settings add to every YoutubeDL instance (the proxy);
 # see set_network_options.
-_network_options = {}
+_network_options: dict = {}
 
 def set_network_options(proxy=''):
     """Send every request through ``proxy`` (a urls.proxy_url address; '' for none)."""
@@ -94,6 +98,39 @@ def set_network_options(proxy=''):
 def network_proxy():
     """The proxy address set with set_network_options ('' for none)."""
     return _network_options.get('proxy', '')
+
+
+# Settings › Detailed log: yt-dlp writes its debug output (versions, the
+# requests it makes, format choices) to the log file too.
+_verbose = False
+
+
+def set_verbose(on):
+    global _verbose
+    _verbose = bool(on)
+
+
+# A tiny answer from a site that is reachable nearly everywhere (Settings › Test).
+CONNECTION_TEST_URL = 'https://www.youtube.com/generate_204'
+
+
+def check_connection(proxy='', url=CONNECTION_TEST_URL, timeout=10):
+    """Reach ``url`` through ``proxy`` ('' for a direct connection).
+
+    Returns ``(seconds, None)`` when it answered, else ``(None, error)``.
+    The certificate is checked as for downloads.
+    """
+    from yt_dlp.networking import Request
+    options = {'quiet': True, 'no_warnings': True, 'color': 'no_color', 'socket_timeout': timeout}
+    if proxy:
+        options['proxy'] = proxy
+    started = time.monotonic()
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl, ydl.urlopen(Request(url)) as response:
+            response.read(1024)
+    except Exception as e:
+        return None, describe_error(e)
+    return time.monotonic() - started, None
 
 
 class ProxyRequestError(OSError):
@@ -192,6 +229,7 @@ def base_ydl_options(log_callback=None):
         'fragment_retries': RETRIES,
         'extractor_retries': 3,
         'file_access_retries': 3,
+        **({'verbose': True} if _verbose else {}),
     }
 
 
@@ -287,7 +325,7 @@ class PartialFiles:
             if os.path.isdir(folder):
                 candidates.update(
                     os.path.join(folder, f) for f in os.listdir(folder)
-                    if f.startswith(name + '.part-Frag') or f.startswith(name + '-Frag'))
+                    if f.startswith((name + '.part-Frag', name + '-Frag')))
             for candidate in candidates:
                 try:
                     os.remove(candidate)
@@ -455,14 +493,18 @@ class DownloadManager:
                 _log.warning("curl_cffi is missing; TikTok and some other sites may refuse downloads")
         return self.tools
 
-    def fetch_info(self, url, log_callback=None, cancel_event=None):
-        """ 
+    def fetch_info(self, url, log_callback=None, cancel_event=None, progress=None):
+        """
         Playlist veya video bilgisini çeker.
         Hata olursa None döndürmez, 'error' ve 'error_type' anahtarları olan bir sözlük döndürür.
 
         Setting ``cancel_event`` stops the analysis at the next page yt-dlp
         (or the Spotify reader) asks for; the result is then
         ``{'error': 'Cancelled by user', 'cancelled': True}``.
+
+        ``progress(count, total)`` is called while a playlist's entries are
+        read (``total`` is None when the site does not say), at most every
+        PROGRESS_EVERY entries.
         """
         cancelled = {'error': 'Cancelled by user', 'error_type': 'DownloadCancelled', 'cancelled': True}
 
@@ -476,7 +518,13 @@ class DownloadManager:
 
         ydl_opts = base_ydl_options(log_callback)
         try:
-            info = spotify.fetch_info(url, read_page)
+            info = SPOTIFY_CACHE.get(url)
+            if info is None:
+                info = spotify.fetch_info(url, read_page)
+                if info is not None and not info.get('partial'):
+                    SPOTIFY_CACHE.put(url, copy.deepcopy(info))
+            else:
+                info = copy.deepcopy(info)
         except Exception as e:
             if is_cancelled():
                 return cancelled
@@ -501,7 +549,15 @@ class DownloadManager:
             ydl_opts['logger'] = logger
             try:
                 with yt_dlp.YoutubeDL(with_player_clients(ydl_opts, clients)) as ydl:
-                    info = ydl.extract_info(url, download=False)
+                    if progress is None:
+                        info = ydl.extract_info(url, download=False)
+                    else:
+                        # The same as extract_info(), with the playlist's entries
+                        # counted as yt-dlp reads them page by page.
+                        info = ydl.extract_info(url, download=False, process=False)
+                        if info is not None:
+                            info = ydl.process_ie_result(counting_entries(info, progress, is_cancelled),
+                                                         download=False)
             except Exception as e:
                 if is_cancelled():
                     return cancelled
@@ -548,6 +604,8 @@ class DownloadManager:
         """
         title = title or url
         partial = PartialFiles()
+        resumable: list = []  # the base name whose partial files a later try can continue (resume.py)
+        postprocessing: list = []  # set once the download is in (or past) its postprocessing
 
         def remove_partial_files():
             removed = partial.cleanup()
@@ -555,9 +613,16 @@ class DownloadManager:
                 log_callback(f"Removed {len(removed)} partial file(s)")
 
         def failed(error):
-            # A failed item leaves nothing behind either: half-downloaded
-            # parts would only fill the disk, and a retry picks a free name
-            # anyway (filenames.unique_base).
+            # A download that failed after data arrived keeps its partial
+            # files, so trying the same video again continues it
+            # (resume.py). Anything else leaves nothing behind: parts that
+            # cannot be continued would only fill the disk.
+            # A failed conversion or merge would only fail again.
+            in_download = not postprocessing and not str(error).startswith('Postprocessing')
+            if resumable and in_download and not is_cancelled() and resume.has_partial_data(resumable[0]):
+                if log_callback:
+                    log_callback("Kept the partial download; downloading this video again continues it")
+                return ItemResult(url, title, ItemStatus.FAILED, error=error)
             remove_partial_files()
             return ItemResult(url, title, ItemStatus.FAILED, error=error)
 
@@ -581,6 +646,7 @@ class DownloadManager:
                 progress_hook(d)
 
         def on_postprocess(d):
+            postprocessing.append(True)
             check_cancel()
             if progress_hook:
                 progress_hook(d)
@@ -634,7 +700,8 @@ class DownloadManager:
             else:
                 target = url
                 if url.startswith(playlist.SEARCH_PREFIX) and meta.get('duration'):
-                    target = self._closest_result(url, meta['duration'], log_callback) or url
+                    wanted = ' - '.join(n for n in (meta.get('artist'), meta.get('track')) if n)
+                    target = self._closest_result(url, meta['duration'], log_callback, wanted) or url
                 check_cancel()
                 info, _clients = self._extract(target, dict(ydl_opts), log_callback)
             if info is not None and info.get('_type') == 'playlist':
@@ -664,10 +731,19 @@ class DownloadManager:
             ydl_opts['outtmpl'] = filenames.output_template(folder, options.get('playlist_index'))
             with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
                 prepared = ydl.prepare_filename(info)
-            base = filenames.unique_base(prepared, plan.ext)
+            # A cut (trim) or a live stream is downloaded by FFmpeg, which cannot continue a file.
+            ident = None if trim_requested or info.get('is_live') else resume.identity(info, plan.ext, mode)
+            base = resume.find(folder, ident)  # also clears partial downloads left too long
+            if base is not None:
+                if log_callback:
+                    log_callback(f"Continuing the unfinished download of {os.path.basename(base)}.{plan.ext}")
+            else:
+                base = filenames.unique_base(prepared, plan.ext)
+                if base != os.path.splitext(prepared)[0] and log_callback:
+                    log_callback(f"File exists; saving as {os.path.basename(base)}.{plan.ext}")
             partial.claim(base, new_folders)
-            if base != os.path.splitext(prepared)[0] and log_callback:
-                log_callback(f"File exists; saving as {os.path.basename(base)}.{plan.ext}")
+            if ident is not None and resume.save(base, ident):
+                resumable.append(base)
             ydl_opts['outtmpl'] = filenames.escape_template(base) + '.%(ext)s'
             ydl_opts['postprocessors'] = formats.postprocessors_for(plan, info)
             if ydl_opts.get('http_chunk_size') and not plain_http_download(info):
@@ -687,18 +763,24 @@ class DownloadManager:
                 ydl_opts['download_ranges'] = yt_dlp.utils.download_range_func(None, [trim_range])
                 ydl_opts['force_keyframes_at_cuts'] = True
             sponsorblock = bool(options.get('sponsorblock'))
-            if sponsorblock and trim_requested:
-                # The segments are times in the whole video, not in the trimmed part.
+            categories = formats.sponsorblock_categories(options.get('sponsorblock_categories'))
+            if sponsorblock and not categories:
                 sponsorblock = False
                 if log_callback:
-                    log_callback("SponsorBlock: skipped for a trimmed download")
+                    log_callback("SponsorBlock: no categories chosen in Settings")
             if sponsorblock:
-                ydl_opts['postprocessors'] = formats.with_sponsor_cuts(ydl_opts['postprocessors'])
+                ydl_opts['postprocessors'] = formats.with_sponsor_cuts(ydl_opts['postprocessors'], categories,
+                                                                    exact=trim_requested)
+            if options.get('live_from_start') and info.get('is_live'):
+                ydl_opts['live_from_start'] = True
             selected = reusable_info(info) if options.get('subtitles') and mode != formats.AUDIO_ONLY else None
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 if sponsorblock:
-                    ydl.add_post_processor(
-                        QuietSponsorBlockPP(ydl, categories=formats.SPONSORBLOCK_CATEGORIES), when='after_filter')
+                    ydl.add_post_processor(QuietSponsorBlockPP(ydl, categories=categories), when='after_filter')
+                if trim_requested:
+                    # Chapters and SponsorBlock segments are times in the whole
+                    # video; the trimmed file starts at the trim start.
+                    ydl.add_post_processor(SectionChaptersPP(ydl), when='before_dl')
                 if plan.strip_audio:
                     ydl.add_post_processor(StripAudioPP(ydl), when='post_process')
                 info = ydl.process_ie_result(info, download=True)
@@ -712,38 +794,57 @@ class DownloadManager:
                 return cancelled()
             return failed(explain_site_error(explain_format_error(describe_error(e), mode, quality)))
 
-        problem = verify_output(path)
+        # The file exists and is not empty; ffprobe proves it can be read
+        # and holds what the mode promises.
+        problem = verify_output(path) or probe_output(
+            path, tools.ffprobe, need_video=mode != formats.AUDIO_ONLY, need_audio=mode == formats.AUDIO_ONLY)
         if problem:
+            resumable.clear()  # a broken result is not worth continuing
             return failed(problem)
+        if resumable:
+            resume.forget(resumable[0])
         if selected is not None and not is_cancelled():
-            self._download_subtitles(selected, base, options.get('subtitle_langs'), tools, log_callback)
+            saved = self._download_subtitles(selected, base, options.get('subtitle_langs'), tools, log_callback,
+                                             options.get('subtitle_format') or 'srt')
+            if saved and options.get('subtitle_embed'):
+                embed_subtitles(path, [sub['filepath'] for sub in saved], tools.ffmpeg, log_callback)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
 
-    def _closest_result(self, url, duration, log_callback=None):
-        """The link of the search result whose length is closest to ``duration``.
+    def _closest_result(self, url, duration, log_callback=None, title=None):
+        """The link of the search result that best matches the song, by length and name.
 
         ``url`` is a "ytsearch1:" search for a song (spotify.py). The first
-        few results are compared, so a music video with a long intro or a
-        live version loses to the plain song. None when the search fails.
+        few results are compared, so a music video with a long intro, a live
+        version or a cover loses to the plain song. None when the search fails.
+        Results are kept for a while (SEARCH_CACHE), so a list downloaded
+        again does not search for every song again.
         """
         query = SEARCH_CANDIDATES_PREFIX + url[len(playlist.SEARCH_PREFIX):]
-        ydl_opts = base_ydl_options(log_callback)
-        ydl_opts['extract_flat'] = 'in_playlist'
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                found = ydl.extract_info(query, download=False) or {}
-        except Exception as e:
-            _log.warning("Search for %s failed: %s", url, describe_error(e))
-            return None
-        entry = closest_by_duration(list(found.get('entries') or []), duration)
+        entries = SEARCH_CACHE.get(query)
+        if entries is None:
+            ydl_opts = base_ydl_options(log_callback)
+            ydl_opts['extract_flat'] = 'in_playlist'
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    found = ydl.extract_info(query, download=False) or {}
+            except Exception as e:
+                _log.warning("Search for %s failed: %s", url, describe_error(e))
+                return None
+            entries = [{k: e.get(k) for k in ('id', 'url', 'webpage_url', 'title', 'duration', 'ie_key')}
+                       for e in (found.get('entries') or []) if e]
+            if entries:
+                SEARCH_CACHE.put(query, entries)
+        entry = closest_by_duration(list(entries), duration, title)
         return playlist.entry_url(entry) if entry else None
 
-    def _download_subtitles(self, info, base, langs, tools, log_callback=None):
-        """Save the subtitles of a downloaded video next to it as .srt files.
+    def _download_subtitles(self, info, base, langs, tools, log_callback=None, fmt='srt'):
+        """Save the subtitles of a downloaded video next to it as files of ``fmt``
+        (one of SUBTITLE_FORMATS: srt, ass or vtt).
 
         A separate pass after the video is saved: a missing or refused
         subtitle (YouTube often limits them) never costs the video itself.
         """
+        fmt = fmt if fmt in SUBTITLE_FORMATS else 'srt'
         langs = [f'{lang}.*' for lang in (langs or ['en'])]
         ydl_opts = base_ydl_options(log_callback)
         ydl_opts.update({
@@ -751,10 +852,10 @@ class DownloadManager:
             'writesubtitles': True,
             'writeautomaticsub': True,
             'subtitleslangs': langs,
-            'subtitlesformat': 'srt/vtt/best',
+            'subtitlesformat': f'{fmt}/srt/vtt/best',
             'outtmpl': filenames.escape_template(base) + '.%(ext)s',
             'ffmpeg_location': tools.directory,
-            'postprocessors': [{'key': 'FFmpegSubtitlesConvertor', 'format': 'srt', 'when': 'before_dl'}],
+            'postprocessors': [{'key': 'FFmpegSubtitlesConvertor', 'format': fmt, 'when': 'before_dl'}],
             # Subtitle problems become warnings instead of errors.
             'ignoreerrors': True,
         })
@@ -772,6 +873,34 @@ class DownloadManager:
 
 PAGE_ATTEMPTS = 3
 PAUSE_POLL_SECONDS = 0.2
+PROGRESS_EVERY = 25  # playlist entries between analysis progress reports
+
+
+def counting_entries(info, progress, is_cancelled=lambda: False):
+    """``info`` (an unprocessed playlist) with its entries reported to
+    ``progress(count, total)`` as they are read, every PROGRESS_EVERY.
+
+    Only entries read one after another (a generator, as most sites give)
+    are counted; a list or a paged list is read in other ways and is left
+    as it is. A cancel stops the reading at the next entry.
+    """
+    entries = info.get('entries')
+    if info.get('_type') != 'playlist' or entries is None or isinstance(entries, (list, tuple)) \
+            or isinstance(entries, yt_dlp.utils.PagedList):
+        return info
+    total = info.get('playlist_count') if isinstance(info.get('playlist_count'), int) else None
+
+    def read():
+        count = 0
+        for entry in entries:
+            if is_cancelled():
+                raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
+            count += 1
+            if count % PROGRESS_EVERY == 0:
+                progress(count, total)
+            yield entry
+        progress(count, total)
+    return {**info, 'entries': read()}
 
 
 def wait_while_paused(pause_event, cancel_event=None):
@@ -825,28 +954,181 @@ SEARCH_CANDIDATES_PREFIX = 'ytsearch3:'
 CLOSE_ENOUGH_SECONDS = 15
 
 
-def subtitle_languages(language):
-    """Subtitle languages to save for an app shown in ``language``: it, then English."""
+class TimedCache:
+    """A small in-memory cache whose entries are forgotten after ``seconds``."""
+
+    def __init__(self, seconds, size=500):
+        self.seconds, self.size = seconds, size
+        self._items = {}
+        self._lock = threading.Lock()
+
+    def get(self, key):
+        with self._lock:
+            found = self._items.get(key)
+            if found is None:
+                return None
+            if time.monotonic() - found[0] > self.seconds:
+                del self._items[key]
+                return None
+            return found[1]
+
+    def put(self, key, value):
+        with self._lock:
+            if len(self._items) >= self.size:
+                del self._items[min(self._items, key=lambda k: self._items[k][0])]
+            self._items[key] = (time.monotonic(), value)
+
+    def clear(self):
+        with self._lock:
+            self._items.clear()
+
+
+# Spotify lists read in the last half hour, and YouTube searches for songs in
+# the last six hours: a list analysed or downloaded again asks for nothing twice.
+SPOTIFY_CACHE = TimedCache(30 * 60, size=50)
+SEARCH_CACHE = TimedCache(6 * 3600, size=5000)
+
+
+# Subtitle file types offered in Settings (FFmpeg converts to each).
+SUBTITLE_FORMATS = ('srt', 'ass', 'vtt')
+_SUBTITLE_LANGUAGE = re.compile(r'^[a-z]{2,3}(-[a-z0-9]{2,8})*$', re.I)
+
+
+def subtitle_languages(language, chosen=''):
+    """Subtitle languages to save.
+
+    ``chosen`` is the Settings text ("en, tr, pt-BR"); when it is empty the
+    app's language ``language`` is used, then English. Unusable entries are
+    left out.
+    """
+    picked = [part.strip() for part in re.split(r'[,;\s]+', chosen or '') if part.strip()]
+    picked = [lang for lang in picked if _SUBTITLE_LANGUAGE.match(lang)]
+    if picked:
+        return list(dict.fromkeys(picked))
     langs = [language or 'en', *(['no'] if language == 'nb' else []), 'en']
     return list(dict.fromkeys(langs))
 
 
-def closest_by_duration(entries, duration):
+# Subtitle codecs each video container takes; MKV keeps the files' own format.
+_EMBEDDED_SUBTITLE_CODECS = {'mp4': 'mov_text', 'webm': 'webvtt', 'mkv': 'copy'}
+
+
+def embed_subtitles(video, subtitles, ffmpeg, log_callback=None, run=None):
+    """Put the subtitle files into ``video`` as subtitle tracks, then delete them.
+
+    The language of each track comes from its name ("Video.en.srt"). When
+    FFmpeg fails, the video stays as it was and the files stay next to it.
+    Returns True when the subtitles are inside the video.
+    """
+    import subprocess
+    run = run or subprocess.run
+    ext = os.path.splitext(video)[1].lstrip('.').lower()
+    codec = _EMBEDDED_SUBTITLE_CODECS.get(ext)
+    if codec is None or not subtitles or not ffmpeg:
+        return False
+    if ext == 'mkv' and any(sub.lower().endswith('.vtt') for sub in subtitles):
+        codec = 'srt'  # older players read SRT in MKV better than WebVTT
+    temp = yt_dlp.utils.prepend_extension(video, 'subs-temp')
+    command = [ffmpeg, '-y', '-loglevel', 'error', '-i', video]
+    for sub in subtitles:
+        command += ['-i', sub]
+    command += ['-map', '0', '-map', '-0:s']
+    for i in range(len(subtitles)):
+        command += ['-map', f'{i + 1}:0']
+    command += ['-c', 'copy', '-c:s', codec]
+    for i, sub in enumerate(subtitles):
+        lang = os.path.basename(sub).rsplit('.', 2)[-2] if sub.count('.') >= 2 else ''
+        long = yt_dlp.utils.ISO639Utils.short2long(lang.split('-')[0]) or lang
+        if long:
+            command += [f'-metadata:s:s:{i}', f'language={long}']
+    if ext == 'mp4':
+        command += ['-movflags', '+faststart']
+    command.append(temp)
+    flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0
+    try:
+        proc = run(command, capture_output=True, text=True, timeout=600, creationflags=flags)
+        ok = proc.returncode == 0 and os.path.isfile(temp) and os.path.getsize(temp) > 0
+        if not ok:
+            raise OSError((proc.stderr or '').strip()[-300:] or f'exit code {proc.returncode}')
+        os.replace(temp, video)
+    except (OSError, subprocess.SubprocessError) as e:
+        _log.warning("Could not put the subtitles into %s: %s", video, e)
+        try:
+            os.remove(temp)
+        except OSError:
+            pass
+        if log_callback:
+            log_callback("Subtitles: could not be put into the video; they are saved next to it")
+        return False
+    for sub in subtitles:
+        try:
+            os.remove(sub)
+        except OSError:
+            pass
+    if log_callback:
+        log_callback(f"Subtitles: {len(subtitles)} put into the video")
+    return True
+
+
+# Words that mark another version of a song; a result with one loses unless
+# the song's own name has it too.
+OTHER_VERSION_WORDS = ('live', 'cover', 'karaoke', 'instrumental', 'remix', 'sped up', 'slowed',
+                       'nightcore', 'reverb', '8d', 'acoustic', 'reaction', 'lyrics video')
+OTHER_VERSION_PENALTY = 60     # seconds a result with such a word counts as off
+NAME_WEIGHT = 60               # seconds a result with an unrelated name counts as off
+
+
+def _words(text):
+    return ' '.join(re.findall(r'\w+', (text or '').casefold()))
+
+
+def title_similarity(wanted, found):
+    """0 to 1: how much of the song's name a result's title has."""
+    wanted, found = _words(wanted), _words(found)
+    if not wanted or not found:
+        return 0.0
+    words = wanted.split()
+    shared = sum(1 for w in words if re.search(rf'\b{re.escape(w)}\b', found))
+    return max(shared / len(words), difflib.SequenceMatcher(None, wanted, found).ratio())
+
+
+def _other_version(wanted, found):
+    wanted, found = f' {_words(wanted)} ', f' {_words(found)} '
+    return any(f' {w} ' in found and f' {w} ' not in wanted for w in OTHER_VERSION_WORDS)
+
+
+def closest_by_duration(entries, duration, title=None):
     """The entry to download for a song ``duration`` seconds long, or None.
 
-    The first result is kept when its length is close; otherwise the result
-    whose length is closest wins (results without a length never do).
+    Without ``title`` the first result is kept when its length is close;
+    otherwise the result whose length is closest wins (results without a
+    length never do). With ``title`` ("Artist - Song") a result also counts
+    as further off when its name shares little with the song's, or when it
+    is another version (live, cover, remix...); the first result, the one
+    YouTube ranks best, starts CLOSE_ENOUGH_SECONDS ahead.
     """
     entries = [e for e in entries if e and playlist.entry_url(e)]
     if not entries:
         return None
     timed = [e for e in entries if isinstance(e.get('duration'), (int, float))]
     first = entries[0]
-    if first in timed and abs(first['duration'] - duration) <= CLOSE_ENOUGH_SECONDS:
-        return first
     if not timed:
         return first
-    return min(timed, key=lambda e: abs(e['duration'] - duration))
+    if not title:
+        if first in timed and abs(first['duration'] - duration) <= CLOSE_ENOUGH_SECONDS:
+            return first
+        return min(timed, key=lambda e: abs(e['duration'] - duration))
+
+    def off(e):
+        seconds = abs(e['duration'] - duration)
+        seconds += (1 - title_similarity(title, e.get('title'))) * NAME_WEIGHT
+        if _other_version(title, e.get('title')):
+            seconds += OTHER_VERSION_PENALTY
+        if e is first:
+            seconds -= CLOSE_ENOUGH_SECONDS
+        return seconds
+
+    return min(timed, key=off)
 
 
 def apply_song_meta(info, meta):
@@ -962,6 +1244,44 @@ class QuietSponsorBlockPP(SponsorBlockPP):
         except Exception as e:
             self.report_warning(f"SponsorBlock is unavailable, the video is not cut: {e}")
             return [], info
+
+
+def shift_chapters(chapters, start, end):
+    """``chapters`` (start_time/end_time in the whole video) as times in the part from ``start`` to ``end``.
+
+    Chapters outside the part are left out and the others are cut at its
+    edges, so a trimmed file gets the chapters (and SponsorBlock segments)
+    it really has.
+    """
+    shifted = []
+    for chapter in chapters or []:
+        first = max(float(chapter.get('start_time') or 0), start)
+        last = min(float(chapter.get('end_time') if chapter.get('end_time') is not None else end), end)
+        if last - first > 0.05:
+            shifted.append({**chapter, 'start_time': round(first - start, 3), 'end_time': round(last - start, 3)})
+    return shifted
+
+
+class SectionChaptersPP(PostProcessor):
+    """For a trimmed download: chapters, SponsorBlock segments and length of the part downloaded.
+
+    yt-dlp keeps the whole video's chapters and length for a time range, so
+    ModifyChapters would cut the wrong places and the file would name
+    chapters it does not have. Runs before the download, once the part is known.
+    """
+
+    def run(self, info):
+        start = float(info.get('section_start') or 0)
+        end = info.get('section_end') or info.get('duration')
+        # A source that does not report its length is cut to its end.
+        end = float(end) if end is not None else float('inf')
+        if info.get('chapters'):
+            info['chapters'] = shift_chapters(info['chapters'], start, end) or None
+        if info.get('sponsorblock_chapters'):
+            info['sponsorblock_chapters'] = shift_chapters(info['sponsorblock_chapters'], start, end)
+        if end != float('inf'):
+            info['duration'] = round(end - start, 3)
+        return [], info
 
 
 class StripAudioPP(FFmpegPostProcessor):

@@ -17,6 +17,7 @@ ctk = pytest.importorskip("customtkinter")
 messagebox = pytest.importorskip("tkinter.messagebox")
 
 import events  # noqa: E402
+import settings as settings_store  # noqa: E402
 import ui  # noqa: E402
 from ui_helpers import ToolsOnlyManager, isolate_settings, new_app, pump  # noqa: E402
 from results import ItemResult, ItemStatus  # noqa: E402
@@ -30,13 +31,14 @@ class FakeManager:
         self.downloaded = []
         self.threads = set()
 
-    def fetch_info(self, url, cancel_event=None):
+    def fetch_info(self, url, cancel_event=None, progress=None):
         self.threads.add(threading.get_ident())
         if self.raise_on_fetch:
             raise self.raise_on_fetch
         return self.info
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None, pause_event=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None,
+                       pause_event=None):
         self.threads.add(threading.get_ident())
         progress_hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 2})
         if url in self.fail_urls:
@@ -61,6 +63,7 @@ class WorkerSide:
         self.events = events.EventQueue()
         self.manager = manager
         self._analysed = None
+        self.settings = settings_store.Settings()
 
     def drain(self):
         out = []
@@ -190,7 +193,7 @@ class InfoManager(FakeManager):
 def test_download_reuses_what_analysis_fetched():
     info = {"title": "clip", "webpage_url": "https://youtu.be/a", "formats": [{"format_id": "18"}]}
     manager = InfoManager()
-    manager.fetch_info = lambda url, cancel_event=None: dict(info)
+    manager.fetch_info = lambda url, cancel_event=None, progress=None: dict(info)
     side = WorkerSide(manager)
     run_in_thread(side.run_analysis, "https://youtu.be/a")
     run_in_thread(side.run_queue, [{"url": "https://youtu.be/a", "title": "clip"}], {})

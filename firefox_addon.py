@@ -74,7 +74,8 @@ def signed_file_url(guid, version, issuer, secret, opener=urllib.request.urlopen
         info = json.loads(_get(url, issuer, secret, opener))
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
-            raise RuntimeError(f"AMO refused the API key (HTTP {e.code}): check AMO_JWT_ISSUER and AMO_JWT_SECRET")
+            raise RuntimeError(f"AMO refused the API key (HTTP {e.code}): check AMO_JWT_ISSUER and AMO_JWT_SECRET") \
+                from e
         if e.code == 404:  # no such version, or no such add-on yet
             return None
         raise

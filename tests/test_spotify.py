@@ -97,6 +97,7 @@ def test_fetch_info_answers_spotify_links_without_yt_dlp(monkeypatch):
     def broken(url, opts, headers=None, data=None):
         raise OSError("HTTP Error 404: Not Found")
     monkeypatch.setattr(logic, "_read_page", broken)
+    logic.SPOTIFY_CACHE.clear()  # the list was kept for half an hour
     assert "404" in logic.DownloadManager().fetch_info("https://open.spotify.com/playlist/abc")["error"]
 
 
@@ -154,9 +155,10 @@ def test_long_playlists_are_read_past_the_embed_limit():
     info = spotify.fetch_info("https://open.spotify.com/playlist/big", open_url)
     assert len(info["entries"]) == 250 and "partial" not in info
     assert info["entries"][249]["url"] == "ytsearch1:Band - Song 249 audio"
+    assert [e["title"] for e in info["entries"]] == [f"Band - Song {i}" for i in range(250)]  # in order
     assert info["entries"][100]["duration"] == 180
     # The whole list comes from pathfinder, which also names albums and covers.
-    assert [p["variables"]["offset"] for p in posts] == [0, 100, 200]
+    assert sorted(p["variables"]["offset"] for p in posts) == [0, 100, 200]
     assert posts[0]["extensions"]["persistedQuery"]["sha256Hash"] == "a" * 64
 
 

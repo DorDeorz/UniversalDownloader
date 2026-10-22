@@ -45,3 +45,60 @@ def test_installer_shortcuts_carry_the_app_id():
         text = f.read()
     assert f'#define AppUserModelID "{APP_USER_MODEL_ID}"' in text
     assert text.count('AppUserModelID: "{#AppUserModelID}"') == 2
+
+
+def test_notify_uses_orbida_s_own_icon_before_powershell(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    shown, started = [], []
+    assert app_setup.notify("Done", "x", popen=lambda *a, **k: started.append(a),
+                            notifier=lambda title, text: shown.append((title, text)) or True)
+    assert shown == [("Done", "x")] and started == []
+
+
+def test_notify_falls_back_to_powershell(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    started = []
+
+    def broken(title, text):
+        raise OSError("no icon")
+    assert app_setup.notify("Done", "x", popen=lambda *a, **k: started.append(a), notifier=broken)
+    assert len(started) == 1
+
+
+def test_a_running_tray_icon_shows_the_notification():
+    import tray
+
+    class Icon:
+        notes = []
+
+        def notify(self, message, title=None):
+            self.notes.append((title, message))
+    icon = tray.Tray("Orbida", None, None, str)
+    icon.icon = Icon()
+    assert tray.show_notification("Done", "2 completed", icon)
+    assert Icon.notes == [("Done", "2 completed")]
+
+
+def test_without_a_tray_a_short_lived_icon_carries_the_notification(monkeypatch):
+    import threading
+    import pytest
+    pytest.importorskip("PIL")
+    import tray
+    done = threading.Event()
+
+    class Backend:
+        class Icon:
+            def __init__(self, name, image, title):
+                self.visible, self.notes = False, []
+
+            def notify(self, message, title=None):
+                self.notes.append((title, message))
+
+            def run(self, setup):
+                setup(self)
+                done.set()
+
+            def stop(self):
+                self.stopped = True
+    assert tray.show_notification("Done", "x", None, Backend, keep=0)
+    assert done.wait(5)

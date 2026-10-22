@@ -1,6 +1,6 @@
 [project]
 name = "orbida"
-version = "1.2.3"  # keep equal to version.py (tests/test_build.py checks)
+version = "1.2.4"  # keep equal to version.py (tests/test_build.py checks)
 description = "Orbida: a video and audio downloader for Windows and Android built on yt-dlp and FFmpeg"
 requires-python = ">=3.11"
 # Exact pins live in requirements.txt / requirements-dev.txt.
@@ -16,6 +16,31 @@ line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-# Start with errors that are always bugs (syntax, undefined names, unused imports).
-# Widen the rule set once the existing code has been cleaned up step by step.
-select = ["E9", "F"]
+# pycodestyle, pyflakes, bugbear, pyupgrade, comprehensions and pylint's errors.
+select = ["E", "W", "F", "B", "UP", "C4", "PIE", "PLE"]
+ignore = [
+    "E402",   # entry points and tests put folders on sys.path before importing
+    "B905",   # zip() of lists built to the same length
+    "C408",   # dict(key=value) reads well for keyword-like data
+    "UP042",  # ItemStatus is a str Enum on purpose: its values go into JSON
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Translated texts, the Kivy layout and a JavaScript page kept as Python strings.
+"android/app/texts.py" = ["E501"]
+"android/app/layout.py" = ["E501"]
+"android/app/browser_route.py" = ["E501"]
+"tests/*" = ["B017"]  # a destroyed window raises Tk's own error types
+
+[tool.mypy]
+# Type checking for the shared code. The UI modules (CustomTkinter, Kivy)
+# have no type information; they are checked for obvious mistakes only.
+python_version = "3.11"
+platform = "win32"  # the desktop app is a Windows app (ctypes.windll, winreg)
+files = ["download_archive.py", "download_history.py", "events.py", "filenames.py", "formats.py", "i18n.py",
+         "playlist.py", "resume.py", "results.py", "settings.py", "spotify.py", "updates.py", "urls.py",
+         "utils.py", "version.py", "ytdlp_updates.py", "app_setup.py", "logic.py", "media_tools.py"]
+ignore_missing_imports = true
+follow_imports = "silent"
+check_untyped_defs = true
+warn_unused_ignores = true

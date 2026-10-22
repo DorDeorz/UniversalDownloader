@@ -332,7 +332,7 @@ class DownloadNotice:
         self._clock = clock or time.monotonic
         self._service = None
         self.running = False
-        self._last = (None, None, None)
+        self._last = (None, None, None, False)
         self._last_time = 0.0
 
     def _java(self):
@@ -341,27 +341,40 @@ class DownloadNotice:
             self._service = autoclass("io.github.dordeorz.universaldownloader.DownloadService")
         return self._service
 
-    def start(self, channel, title, text="", percent=-1):
+    def start(self, channel, title, text="", percent=-1, labels=None):
+        """``labels`` = (pause, resume, cancel, open): the notification's buttons, translated."""
         if self.running:
             return
         service = self._java()
         service.clearDone(_activity())
+        if labels:
+            service.setLabels(*labels)
         service.start(_activity(), channel, title, text, int(percent))
         self.running = True
-        self._last = (title, text, int(percent))
+        self._last = (title, text, int(percent), False)
         self._last_time = self._clock()
 
-    def update(self, title, text="", percent=-1, force=False):
-        """Show new progress; returns whether it was sent to Android."""
+    def update(self, title, text="", percent=-1, force=False, paused=False):
+        """Show new progress; returns whether it was sent to Android.
+
+        ``paused`` turns the notification's Pause button into Resume.
+        """
         if not self.running:
             return False
-        state = (title, text, int(percent))
+        state = (title, text, int(percent), bool(paused))
         now = self._clock()
+        force = force or state[3] != self._last[3]  # Pause / Resume shows at once
         if state == self._last or (not force and now - self._last_time < self.MIN_INTERVAL):
             return False
         self._java().update(_activity(), *state)
         self._last, self._last_time = state, now
         return True
+
+    def take_action(self):
+        """"pause", "resume" or "cancel" when a notification button was pressed since the last call, else ""."""
+        if self._service is None:
+            return ""
+        return self._java().takeAction() or ""
 
     def service_running(self):
         """Whether Android actually started the service (for the self-test)."""
@@ -435,15 +448,105 @@ _listeners = []
 
 
 def system_bar_insets(window_height):
-    """(top, bottom) pixels of the app hidden under the status and navigation bars.
+    """(left, top, right, bottom) pixels of the app hidden under the system bars.
 
     Apps built for Android 15 draw edge to edge: the window reaches under
-    the system bars. When the app's surface is as tall as the whole
-    window, keep its content clear of them; when Android already stops the
-    surface at the bars, nothing is hidden.
+    the status and navigation bars (and, in landscape, the navigation bar
+    and the camera cut-out sit at a side). When the app's surface is as tall
+    as the whole window, keep its content clear of them; when Android
+    already stops the surface at the bars, nothing is hidden.
     """
     view = _activity().getWindow().getDecorView()
     insets = view.getRootWindowInsets()
     if insets is None or window_height < view.getHeight() - 1:
-        return 0, 0
-    return insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetBottom()
+        return 0, 0, 0, 0
+    return insets_of(insets, sdk_version())
+
+
+def insets_of(insets, sdk):
+    """(left, top, right, bottom) of a WindowInsets: Android 11's API, or the old one before it."""
+    if sdk >= 30:
+        from jnius import autoclass
+        types = autoclass("android.view.WindowInsets$Type")
+        bars = insets.getInsets(types.systemBars() | types.displayCutout())
+        return bars.left, bars.top, bars.right, bars.bottom
+    return (insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+            insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom())
+
+
+def announce(text):
+    """Have TalkBack (or another screen reader) read ``text`` out.
+
+    Kivy draws the whole app on one surface, which screen readers cannot
+    look into; announcing what changed (the tab, a finished download, an
+    error) is what they can be given.
+    """
+    if not on_android() or not text:
+        return
+    from android.runnable import run_on_ui_thread
+    from jnius import autoclass
+    String = autoclass("java.lang.String")
+
+    @run_on_ui_thread
+    def say():
+        view = _activity().getWindow().getDecorView()
+        view.setContentDescription(String(text))
+        view.announceForAccessibility(String(text))
+
+    say()
+
+
+def ignoring_battery_optimizations():
+    """True when Android lets the app run in the background without battery limits."""
+    from jnius import autoclass
+    Context = autoclass("android.content.Context")
+    manager = _activity().getSystemService(Context.POWER_SERVICE)
+    return bool(manager.isIgnoringBatteryOptimizations(_activity().getPackageName()))
+
+
+def ask_ignore_battery_optimizations():
+    """Show Android's "Let the app always run in the background?" question.
+
+    Needs REQUEST_IGNORE_BATTERY_OPTIMIZATIONS in the manifest
+    (buildozer.spec). Some phones only offer their own battery settings;
+    those open instead.
+    """
+    from jnius import autoclass
+    Intent = autoclass("android.content.Intent")
+    Settings = autoclass("android.provider.Settings")
+    Uri = autoclass("android.net.Uri")
+    activity = _activity()
+    try:
+        intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+        intent.setData(Uri.parse("package:" + activity.getPackageName()))
+        activity.startActivity(intent)
+    except Exception:
+        activity.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+
+
+def format_date(stamp):
+    """``stamp`` (seconds since the epoch) as the phone writes a date and time, e.g. 21/10/2026 18:40."""
+    if on_android():
+        try:
+            from jnius import autoclass
+            DateFormat = autoclass("java.text.DateFormat")
+            Date = autoclass("java.util.Date")
+            return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(int(stamp * 1000)))
+        except Exception as e:
+            _log.debug("Date format: %s", e)
+    import time
+    moment = time.localtime(stamp)
+    return f"{time.strftime('%x', moment)} {time.strftime('%H:%M', moment)}"
+
+
+def surface_offset():
+    """Where the app's drawing surface starts on the screen, in pixels (x, y).
+
+    The emulator test taps widgets by their names; this turns Kivy's window
+    coordinates into the screen coordinates ``adb shell input tap`` uses.
+    """
+    from jnius import autoclass
+    view = _activity().findViewById(autoclass("android.R$id").content)
+    shown = autoclass("android.graphics.Rect")()
+    view.getGlobalVisibleRect(shown)  # fills a Java object; an int[] would not come back through pyjnius
+    return shown.left, shown.top

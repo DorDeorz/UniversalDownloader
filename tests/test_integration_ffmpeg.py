@@ -33,6 +33,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     throttle = 0.0
     drop_after = None  # bytes after which the next response is cut off once (a dropped connection)
+    # "cut": the second response (the download; the first is yt-dlp's look
+    # at the link) stops after 64 KB and the server is then "down" (503)
+    # until the test sets it back to None.
+    outage = None
+    ranges = []  # the Range header of each request
 
     def log_message(self, *args):
         pass
@@ -41,6 +46,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         self._range = None
         header = self.headers.get("Range", "")
         path = self.translate_path(self.path)
+        _Handler.ranges.append(header)
+        if _Handler.outage == "down":
+            self.send_error(503)
+            return None
+        self._cut = _Handler.outage == "cut" and len(_Handler.ranges) == 2
         if not header.startswith("bytes=") or not os.path.isfile(path):
             return super().send_head()
         size = os.path.getsize(path)
@@ -74,6 +84,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 _Handler.drop_after = None
                 self.close_connection = True
                 return
+            if getattr(self, "_cut", False) and sent >= 64 * 1024:
+                _Handler.outage = "down"
+                self.close_connection = True
+                return
             sent += len(chunk)
             if remaining is not None:
                 remaining -= len(chunk)
@@ -102,7 +116,8 @@ def media(tmp_path_factory):
          "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac")
     (folder / "big.bin").write_bytes(os.urandom(4 * 1024 * 1024))
     # HLS whose segments are byte ranges of one file, as Reddit serves video.
-    subprocess.run([ff, "-loglevel", "error", "-y", "-i", str(folder / "clip.mp4"), "-c:a", "copy", "-c:v", "libx264", "-g", "25", "-f", "hls",
+    subprocess.run([ff, "-loglevel", "error", "-y", "-i", str(folder / "clip.mp4"), "-c:a", "copy",
+                    "-c:v", "libx264", "-g", "25", "-f", "hls",
                     "-hls_time", "1", "-hls_playlist_type", "vod", "-hls_flags", "single_file",
                     str(folder / "ranges.m3u8")], check=True)
     return folder
@@ -320,12 +335,121 @@ def test_sponsorblock_unavailable_keeps_the_whole_video(manager, server, tmp_pat
     assert probe(result.path)[1] == pytest.approx(6, abs=0.5)
 
 
-def test_sponsorblock_is_skipped_for_a_trimmed_download(manager, server, tmp_path, monkeypatch):
-    _sponsor_segments(monkeypatch, lambda: pytest.fail("SponsorBlock asked for a trimmed download"))
-    lines = []
-    result = manager.download_video(f"{server}/clip.mp4", {"save_path": str(tmp_path), "trim_start": "1",
-                                                           "trim_end": "5", "sponsorblock": True},
-                                    log_callback=lines.append)
+@pytest.mark.parametrize("trim, segment, length", [
+    (("1", "5"), [2, 4], 2),      # the segment's part inside the trimmed range is cut
+    (("0", "3"), [4.5, 6], 3),    # a segment outside the range changes nothing
+    (("2", ""), [1, 4], 2),       # cut at the range's start edge: 4 s kept, 2 s of them sponsor
+])
+def test_sponsorblock_cuts_inside_a_trimmed_download(manager, server, tmp_path, monkeypatch, trim, segment, length):
+    _sponsor_segments(monkeypatch, lambda: [{"segment": list(segment), "category": "sponsor", "actionType": "skip",
+                                             "videoDuration": 0, "description": ""}])
+    result = manager.download_video(f"{server}/clip.mp4", {"save_path": str(tmp_path), "trim_start": trim[0],
+                                                           "trim_end": trim[1], "sponsorblock": True})
     assert result.status is ItemStatus.COMPLETED, result.error
-    assert probe(result.path)[1] == pytest.approx(4, abs=0.3)
-    assert "SponsorBlock: skipped for a trimmed download" in lines
+    assert probe(result.path)[1] == pytest.approx(length, abs=0.4)
+
+
+def test_only_the_sponsorblock_categories_chosen_are_cut(manager, server, tmp_path, monkeypatch):
+    _sponsor_segments(monkeypatch, lambda: [
+        {"segment": [1, 2], "category": "sponsor", "actionType": "skip", "videoDuration": 0, "description": ""},
+        {"segment": [4, 5], "category": "intro", "actionType": "skip", "videoDuration": 0, "description": ""}])
+    result = download(manager, server, tmp_path, mode="Video + Audio", format="mp4", quality="Best",
+                      sponsorblock=True, sponsorblock_categories=["intro"])
+    assert result.status is ItemStatus.COMPLETED, result.error
+    assert probe(result.path)[1] == pytest.approx(5, abs=0.5)
+
+
+def test_a_failed_download_is_continued_from_its_part_file(manager, server, media, tmp_path, monkeypatch):
+    subprocess.run([TOOLS.ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=25",
+                    "-f", "lavfi", "-i", "sine=frequency=440", "-t", "20", "-c:v", "libx264", "-preset", "ultrafast",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", str(media / "long.mp4")], check=True)
+    assert (media / "long.mp4").stat().st_size > 300 * 1024
+    monkeypatch.setattr(_Handler, "ranges", [])
+    monkeypatch.setattr(_Handler, "outage", "cut")
+    lines = []
+    options = {"save_path": str(tmp_path), "mode": "Video + Audio", "format": "mp4", "quality": "Best"}
+
+    first = manager.download_video(f"{server}/long.mp4", dict(options), log_callback=lines.append)
+    assert first.status is ItemStatus.FAILED
+    kept = sorted(p.name for p in tmp_path.rglob("*") if p.is_file())
+    assert any(name.endswith(".part") for name in kept) and any(name.endswith(".orbida-resume") for name in kept)
+    assert any("Kept the partial download" in line for line in lines)
+
+    monkeypatch.setattr(_Handler, "outage", None)
+    _Handler.ranges.clear()
+    second = manager.download_video(f"{server}/long.mp4", dict(options), log_callback=lines.append)
+    assert second.status is ItemStatus.COMPLETED, second.error
+    assert os.path.basename(second.path) == "long.mp4"  # the same name, not "long (2).mp4"
+    assert any(r.startswith("bytes=") and int(r[6:].split("-")[0]) > 32 * 1024 for r in _Handler.ranges)
+    assert any("Continuing the unfinished download" in line for line in lines)
+    assert probe(second.path)[1] == pytest.approx(20, abs=0.5)
+    assert sorted(p.name for p in second_folder_files(second.path)) == ["long.mp4"]
+
+
+def second_folder_files(path):
+    return [p for p in __import__("pathlib").Path(path).parent.iterdir() if p.is_file()]
+
+
+def test_another_video_never_continues_a_part_file(manager, server, tmp_path, monkeypatch):
+    # A partial file of one video, under the name another video would get.
+    monkeypatch.setattr(_Handler, "ranges", [])
+    folder = tmp_path / "Other"
+    folder.mkdir()
+    (folder / "clip.mp4.part").write_bytes(b"x" * 100_000)
+    (folder / "clip.orbida-resume").write_text(json.dumps(
+        {"video": "Generic:something-else", "formats": "mp4", "ext": "mp4", "mode": "Video + Audio"}))
+    result = download(manager, server, tmp_path, mode="Video + Audio", format="mp4", quality="Best")
+    assert result.status is ItemStatus.COMPLETED, result.error
+    assert os.path.basename(result.path) == "clip (2).mp4"
+    assert probe(result.path)[1] == pytest.approx(6, abs=0.5)
+    assert not any(r.startswith("bytes=100000") for r in _Handler.ranges)
+
+
+def test_a_video_download_without_a_video_track_fails(manager, server, media, tmp_path):
+    # An audio file opened in Video + Audio mode used to be saved as a "video"
+    # that only holds sound; ffprobe now finds the missing video track.
+    subprocess.run([TOOLS.ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440", "-t", "3",
+                    "-c:a", "aac", str(media / "sound.m4a")], check=True)
+    result = manager.download_video(f"{server}/sound.m4a", {"save_path": str(tmp_path), "mode": "Video + Audio",
+                                                            "format": "mkv", "quality": "Best"})
+    assert result.status is ItemStatus.FAILED
+    assert result.error == "The downloaded file has no video track"
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
+
+
+@pytest.mark.parametrize("ext, codec", [("mp4", "mov_text"), ("mkv", "subrip"), ("webm", "webvtt")])
+def test_subtitles_are_put_into_the_video(media, tmp_path, ext, codec):
+    video = tmp_path / f"clip.{ext}"
+    if ext == "webm":
+        subprocess.run([TOOLS.ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=10",
+                        "-t", "2", "-c:v", "libvpx-vp9", "-b:v", "100k", str(video)], check=True)
+    else:
+        subprocess.run([TOOLS.ffmpeg, "-loglevel", "error", "-y", "-i", str(media / "clip.mp4"), "-c", "copy",
+                        str(video)], check=True)
+    subs = []
+    for lang, text in (("en", "Hello"), ("tr", "Merhaba")):
+        sub = tmp_path / f"clip.{lang}.srt"
+        sub.write_text(f"1\n00:00:00,500 --> 00:00:01,500\n{text}\n\n", encoding="utf-8")
+        subs.append(str(sub))
+    lines = []
+    assert logic.embed_subtitles(str(video), subs, TOOLS.ffmpeg, lines.append)
+    out = subprocess.run([TOOLS.ffprobe, "-v", "error", "-select_streams", "s", "-show_entries",
+                          "stream=codec_name:stream_tags=language", "-of", "json", str(video)],
+                         capture_output=True, text=True, check=True).stdout
+    streams = json.loads(out)["streams"]
+    assert [s["codec_name"] for s in streams] == [codec, codec]
+    assert [s.get("tags", {}).get("language") for s in streams] == ["eng", "tur"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == [f"clip.{ext}"]
+    assert lines == ["Subtitles: 2 put into the video"]
+
+
+def test_subtitles_that_cannot_be_embedded_stay_next_to_the_video(media, tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes((media / "clip.mp4").read_bytes())
+    sub = tmp_path / "clip.en.srt"
+    sub.write_text("not a subtitle file at all", encoding="utf-8")
+    before = video.read_bytes()
+    lines = []
+    assert not logic.embed_subtitles(str(video), [str(sub)], TOOLS.ffmpeg, lines.append)
+    assert video.read_bytes() == before and sub.exists()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["clip.en.srt", "clip.mp4"]

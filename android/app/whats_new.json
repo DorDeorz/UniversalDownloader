@@ -1,5 +1,25 @@
 [
   {
+    "version": "1.2.4",
+    "date": "2026-10-22",
+    "en": [
+      "Notification buttons: Pause/Resume and Cancel while downloading, Open when finished.",
+      "A single video shows its picture and about how big the file will be; after a download: Open, Share, Retry failed, Download again.",
+      "The Download button stays at the bottom; trimming is under More options; errors stay in a card; the log has Copy and Clear.",
+      "Playlist picker and History have search; History has Undo and Download again; the playlist choice is remembered.",
+      "Settings: search, subtitle languages and embedding, SponsorBlock parts, update channel and Skip this version, battery, Licenses.",
+      "Landscape and tablets; dark sign-in page; screen readers hear tab changes and results."
+    ],
+    "tr": [
+      "Bildirim düğmeleri: indirirken Duraklat/Devam ve İptal, bitince Aç.",
+      "Tek bir video resmini ve dosyanın yaklaşık boyutunu gösterir; indirme bitince Aç, Paylaş, Başarısızları yeniden dene, Yeniden indir.",
+      "İndir düğmesi altta sabit; kırpma Diğer seçenekler altında; hatalar kapatılana kadar kartta kalır; günlükte Kopyala ve Temizle var.",
+      "Playlist seçicide ve Geçmiş'te arama var; Geçmiş'te Geri al ve Yeniden indir var; playlist seçimi hatırlanır.",
+      "Ayarlar: arama, altyazı dilleri ve gömme, SponsorBlock bölümleri, güncelleme kanalı ve Bu sürümü atla, pil, Lisanslar.",
+      "Yatay ekran ve tablet; koyu giriş sayfası; ekran okuyucu sekme değişimlerini ve sonuçları duyurur."
+    ]
+  },
+  {
     "version": "1.2.3",
     "date": "2026-10-21",
     "en": [

@@ -210,8 +210,9 @@ workflow makes a debug build, which it tests but never publishes.
 
 The release workflow (`.github/workflows/release.yml`) calls this
 workflow (`workflow_call`), refuses an APK it did not sign, and publishes
-the release with both apps. `version` in `android/buildozer.spec` and
-`APP_VERSION` in `android/app/main.py` must match the release version. The emulator test
+the release with both apps. The APK's version comes from `version.py`, like
+the Windows app's: `buildozer.spec` reads it there (`version.regex`) and
+`APP_VERSION` in `android/app/main.py` is `version.__version__`. The emulator test
 installs an update end to end: it serves the APK as a newer release and
 taps **Update** on Android's screen.
 

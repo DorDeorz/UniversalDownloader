@@ -1,6 +1,17 @@
-**Orbida for Android**, version 1.2.3 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
+**Orbida for Android**, version 1.2.4 (64-bit ARM phones, Android 7 or newer). Not on Google Play; Android's Play Protect may scan it when it is installed.
 
 Coming from an Android preview (UniversalDownloader or Orbida 0.x)? Uninstall it once: 1.0 has a new app id and signing key. From 1.0 on, the app updates itself (Settings › About › Check for updates).
+
+**New in 1.2.4**
+- Notification buttons: Pause/Resume and Cancel while downloading, Open when finished.
+- A single video shows its picture and about how big the file will be.
+- After a download: Open, Share, Retry the failed ones, Download again.
+- The Download button stays at the bottom; trimming sits under More options; errors stay in a card until closed; the activity log wraps, scrolls and has Copy and Clear.
+- Waiting links can be moved up or taken out of the queue.
+- Playlist picker: search, entries left out with the reason, 100 rows at a time; the choice is remembered per playlist.
+- History: search, Show more, the phone's date format, Download again, Undo after Remove or Clear.
+- Settings: search, subtitle languages and embedding, SponsorBlock parts, update channel (stable/beta) and Skip this version, battery optimisation, Licenses.
+- Landscape and tablets; the sign-in page follows the dark theme; screen readers hear tab changes and results.
 
 **New in 1.2.3**
 - Pause and resume: the button on the progress card holds a download and lets it go on.

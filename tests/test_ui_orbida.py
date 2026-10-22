@@ -52,6 +52,9 @@ def test_finished_downloads_appear_in_history(app, tmp_path):
     app._on_item_done(ItemResult("https://a", "Clip", ItemStatus.COMPLETED, path=str(video)))
     app._on_item_done(ItemResult("https://b", "Broken", ItemStatus.FAILED, error="boom"))
     assert [(e.title, e.path, e.mode) for e in app.history.entries] == [("Clip", str(video), "Audio Only")]
+    assert "https://a" in app.archive and "https://b" not in app.archive
+    app._on_job_done(JobSummary([]))
+    assert len(ui.download_history.History(app.history.path).entries) == 1  # written at the job's end
 
     app.open_history()
     pump(app, timeout=0.2)
@@ -73,7 +76,7 @@ def test_finished_downloads_appear_in_history(app, tmp_path):
 def test_history_is_not_kept_when_switched_off(app, tmp_path):
     app.settings.save_history = False
     app._on_item_done(ItemResult("https://a", "Clip", ItemStatus.COMPLETED, path=str(tmp_path / "c.mp4")))
-    assert app.history.entries == []
+    assert app.history.entries == [] and "https://a" not in app.archive
 
 
 @needs_display

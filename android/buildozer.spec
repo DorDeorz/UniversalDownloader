@@ -10,7 +10,10 @@ package.domain = io.github.dordeorz
 # Filled by android/stage.py: android/app plus the shared modules.
 source.dir = .build/src
 source.include_exts = py,json
-version = 1.2.3
+# The version comes from version.py (staged next to main.py), the one place
+# every part of Orbida reads it from.
+version.regex = __version__ = ['"](.*)['"]
+version.filename = .build/src/version.py
 # The app icon and start screen, drawn from android/icon/icon.svg (see
 # android/icon/render.py). Android 8+ shows the adaptive layers in the
 # launcher's shape; older versions show icon.png.
@@ -19,7 +22,8 @@ icon.adaptive_foreground.filename = icon/icon_fg.png
 icon.adaptive_background.filename = icon/icon_bg.png
 presplash.filename = icon/presplash.png
 android.presplash_color = #221B4F
-orientation = portrait
+# Portrait and landscape; on wide screens the pages keep a readable width (main._fit_width).
+orientation = portrait, landscape, portrait-reverse, landscape-reverse
 fullscreen = 0
 
 # Local recipes in android/recipes: udtools adds FFmpeg, ffprobe and
@@ -40,7 +44,9 @@ requirements = python3,kivy==2.3.1,pyjnius,android,udtools,charset_normalizer,ma
 # (asked for on Android 13+ when the first download starts).
 # REQUEST_INSTALL_PACKAGES lets the app hand a downloaded update to Android's
 # installer (self_update.py, UpdateInstaller.java).
-android.permissions = INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK, FOREGROUND_SERVICE, FOREGROUND_SERVICE_DATA_SYNC, POST_NOTIFICATIONS, REQUEST_INSTALL_PACKAGES, (name=android.permission.WRITE_EXTERNAL_STORAGE;maxSdkVersion=29), (name=android.permission.READ_EXTERNAL_STORAGE;maxSdkVersion=29)
+# REQUEST_IGNORE_BATTERY_OPTIMIZATIONS lets Settings ask Android to leave
+# long downloads in the background alone (android_env.ask_ignore_battery_optimizations).
+android.permissions = INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK, FOREGROUND_SERVICE, FOREGROUND_SERVICE_DATA_SYNC, POST_NOTIFICATIONS, REQUEST_INSTALL_PACKAGES, REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, (name=android.permission.WRITE_EXTERNAL_STORAGE;maxSdkVersion=29), (name=android.permission.READ_EXTERNAL_STORAGE;maxSdkVersion=29)
 android.extra_manifest_application_arguments = manifest_application_arguments.xml
 # Offer the app in Android's Share menu for links (text); a link shared
 # while the app runs reaches the same activity (singleTask).

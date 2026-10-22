@@ -203,7 +203,7 @@ class FakeManager:
         self.calls = []
         self.infos = []
 
-    def fetch_info(self, url, log_callback=None, cancel_event=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None, progress=None):
         log_callback("fetching")
         return self.info
 
@@ -253,7 +253,7 @@ def test_session_analysis_can_be_cancelled():
     release = threading.Event()
 
     class Slow(FakeManager):
-        def fetch_info(self, url, log_callback=None, cancel_event=None):
+        def fetch_info(self, url, log_callback=None, cancel_event=None, progress=None):
             self.cancel_event = cancel_event
             release.wait(5)
             return self.info
@@ -733,10 +733,17 @@ def test_release_notes_cover_the_app_version():
     import json
     with open(os.path.join(ROOT, "android", "app", "whats_new.json"), encoding="utf-8") as f:
         notes = json.load(f)
+    # One version for both apps (B5-8): buildozer.spec and main.py read version.py.
     spec = open(os.path.join(ROOT, "android", "buildozer.spec"), encoding="utf-8").read()
-    version = re.search(r"^version = (\S+)", spec, re.M).group(1)
+    assert not re.search(r"^version = ", spec, re.M)
+    pattern = re.search(r"^version\.regex = (.+)$", spec, re.M).group(1)
+    assert re.search(r"^version\.filename = \.build/src/version\.py$", spec, re.M)
+    import version as shared_version
+    source = open(os.path.join(ROOT, "version.py"), encoding="utf-8").read()
+    version = re.search(pattern, source).group(1)
+    assert version == shared_version.__version__
     main = open(os.path.join(ROOT, "android", "app", "main.py"), encoding="utf-8").read()
-    assert f'APP_VERSION = "{version}"' in main
+    assert "APP_VERSION = version.__version__" in main
     assert notes[0]["version"] == version
     for release in notes:
         assert release["en"] and len(release["tr"]) == len(release["en"])
@@ -1407,10 +1414,17 @@ def test_build_hook_adds_the_download_service_once():
     java = open(os.path.join(ROOT, "android", "java", "io", "github", "dordeorz", "universaldownloader",
                              "DownloadService.java"), encoding="utf-8").read()
     for method in ("start(Context context, String channel, String newTitle, String newText, int newPercent)",
-                   "update(Context context, String newTitle, String newText, int newPercent)",
+                   "update(Context context, String newTitle, String newText, int newPercent,\n"
+                   "                              boolean newPaused)",
                    "stop(Context context)", "done(Context context, String newTitle, String newText)",
-                   "clearDone(Context context)"):
+                   "clearDone(Context context)",
+                   "setLabels(String pause, String resume, String cancel, String open)"):
         assert f"public static void {method}" in java
+    assert "public static String takeAction()" in java
+    # The buttons reach the service, which keeps the action for Python (B4-1).
+    for action in ("PAUSE", "RESUME", "CANCEL"):
+        assert f"ACTION_{action}.equals(pressed)" in java
+    assert java.count("builder.addAction(") == 3
 
 
 class FakeService:
@@ -1427,20 +1441,38 @@ def test_download_notice_throttles_progress(monkeypatch):
     notice = android_env.DownloadNotice(clock=lambda: now[0])
     notice._service = service = FakeService()
     assert not notice.update("t", "x", 5)  # not running yet
-    notice.start("Downloads", "Starting")
+    notice.start("Downloads", "Starting", labels=("Pause", "Resume", "Cancel", "Open"))
     notice.start("Downloads", "Again")  # already running
-    assert [c[0] for c in service.calls] == ["clearDone", "start"]
+    assert [c[0] for c in service.calls] == ["clearDone", "setLabels", "start"]
+    assert service.calls[1] == ("setLabels", ("Resume", "Cancel", "Open"))  # args[1:]: the first is "Pause"
     assert not notice.update("t", "10%", 10)  # too soon
     assert notice.update("t", "10%", 10, force=True)
     now[0] += 2
     assert not notice.update("t", "10%", 10)  # nothing changed
     assert notice.update("t", "60%", 60.7)
-    assert service.calls[-1] == ("update", ("t", "60%", 60))
+    assert service.calls[-1] == ("update", ("t", "60%", 60, False))
+    assert notice.update("t", "60%", 60, paused=True)  # Pause turns into Resume at once
+    assert service.calls[-1] == ("update", ("t", "60%", 60, True))
     notice.stop("Done", "1 completed")
     assert [c[0] for c in service.calls[-2:]] == ["stop", "done"]
     assert not notice.running
     notice.stop("Done")  # not running: nothing happens
-    assert service.calls[-1][0] == "done" and len(service.calls) == 6
+    assert service.calls[-1][0] == "done" and len(service.calls) == 8
+
+
+def test_notification_buttons_reach_the_app(monkeypatch):
+    monkeypatch.setattr(android_env, "_activity", lambda: "activity")
+    notice = android_env.DownloadNotice()
+    assert notice.take_action() == ""  # no service yet
+
+    class Service:
+        pressed = "pause"
+
+        def takeAction(self):
+            action, self.pressed = self.pressed, ""
+            return action
+    notice._service = Service()
+    assert notice.take_action() == "pause" and notice.take_action() == ""
 
 
 _QUEUE_PROBE = """
@@ -1465,11 +1497,14 @@ class Notice:
     running = False
     def __init__(self):
         self.calls = []
-    def start(self, channel, title, text="", percent=-1):
+    def start(self, channel, title, text="", percent=-1, labels=None):
         self.running = True
         self.calls.append(["start", channel])
-    def update(self, title, text="", percent=-1, force=False):
+        self.labels = labels
+    def update(self, title, text="", percent=-1, force=False, paused=False):
         self.calls.append(["update", percent])
+    def take_action(self):
+        return ""
     def stop(self, title=None, text=""):
         self.running = False
         self.calls.append(["stop", title])
@@ -1569,8 +1604,12 @@ def test_playlist_picker_queue_and_background_service(tmp_path):
     (tmp_path / "old.mp4").write_bytes(b"x")
     env = dict(os.environ, KIVY_HOME=str(tmp_path / "kivy"), XDG_CONFIG_HOME=str(tmp_path / "config"),
                HOME=str(tmp_path), KIVY_NO_ARGS="1")
-    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env,
-                         cwd=tmp_path)
+    try:
+        out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env,
+                             cwd=tmp_path)
+    except subprocess.TimeoutExpired as e:
+        output = f"{(e.stdout or b'')[-4000:]!r} {(e.stderr or b'')[-6000:]!r}"
+        raise AssertionError(f"the probe did not finish: {output}") from e
     line = next((x for x in out.stdout.splitlines() if x.startswith("UIPROBE ")), None)
     assert line, out.stdout[-3000:] + out.stderr[-3000:]
     r = json.loads(line[len("UIPROBE "):])
@@ -1690,7 +1729,8 @@ def probe(*_):
     Clock.schedule_once(hints, 0.5)
 
 def hints(*_):
-    result["hints"] = [sorted({{w.text for w in app.ids[name].walk(restrict=True) if isinstance(w, MDTextFieldHintText)}})
+    result["hints"] = [sorted({{w.text for w in app.ids[name].walk(restrict=True)
+                                if isinstance(w, MDTextFieldHintText)}})
                        for name in ("trim_start", "trim_end")]
     print("UIPROBE " + json.dumps(result), flush=True)
     app.stop()

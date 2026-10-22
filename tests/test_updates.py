@@ -221,3 +221,58 @@ def test_update_requests_go_direct_without_a_proxy(monkeypatch):
     monkeypatch.setattr(logic, "open_through_proxy", lambda *a, **kw: pytest.fail("no proxy is set"))
     updates._open("https://api.github.com/x")
     assert opened == ["https://api.github.com/x"]
+
+
+# --- Check once a day, with ETag; beta channel; skip a version (review #44, B4-9) ----
+
+class GitHub:
+    """Answers like GitHub's API: 304 when the ETag still matches."""
+
+    def __init__(self, data, etag='"v1"'):
+        self.data, self.etag, self.asked = data, etag, []
+
+    def __call__(self, url, accept="application/octet-stream", headers=None):
+        sent = (headers or {}).get("If-None-Match")
+        self.asked.append((url, sent))
+        if sent == self.etag:
+            raise urllib.error.HTTPError(url, 304, "Not Modified", {}, None)
+        return Response(json.dumps(self.data).encode(), headers={"ETag": self.etag})
+
+
+def test_an_automatic_check_asks_github_once_a_day(tmp_path):
+    cache = str(tmp_path / "update-check.json")
+    github = GitHub(release_json(tag="orbida-v99.0.0"))
+    for _ in range(3):
+        assert REAL_CHECK("1.0.0", github, cache_path=cache, max_age=updates.CHECK_EVERY).version == "99.0.0"
+    assert len(github.asked) == 1
+
+
+def test_an_unchanged_release_is_not_downloaded_again(tmp_path):
+    cache = str(tmp_path / "update-check.json")
+    github = GitHub(release_json(tag="orbida-v99.0.0"))
+    REAL_CHECK("1.0.0", github, cache_path=cache)
+    release = REAL_CHECK("1.0.0", github, cache_path=cache)  # "Check now": asks with the ETag
+    assert release.version == "99.0.0"
+    assert github.asked == [(updates.LATEST_URL, None), (updates.LATEST_URL, '"v1"')]
+
+
+def test_a_damaged_cache_is_ignored(tmp_path):
+    cache = tmp_path / "update-check.json"
+    cache.write_text("{not json")
+    assert REAL_CHECK("1.0.0", GitHub(release_json(tag="orbida-v99.0.0")), cache_path=str(cache)).version == "99.0.0"
+
+
+def test_the_beta_channel_offers_pre_releases():
+    listing = [release_json(tag="orbida-v1.3.0", prerelease=True), release_json(tag="orbida-v1.2.9"),
+               release_json(tag="orbida-v9.9.9", draft=True), release_json(tag="android-preview-99")]
+    github = GitHub(listing)
+    beta = REAL_CHECK("1.2.4", github, channel="beta")
+    assert beta.version == "1.3.0" and beta.prerelease
+    assert github.asked[0][0] == updates.RELEASES_URL
+    stable = REAL_CHECK("1.2.4", GitHub(release_json(tag="orbida-v1.2.9")), channel="stable")
+    assert stable.version == "1.2.9" and not stable.prerelease
+
+
+def test_a_skipped_version_is_not_offered_but_a_later_one_is():
+    assert REAL_CHECK("1.0.0", GitHub(release_json(tag="orbida-v1.2.0")), skipped="1.2.0") is None
+    assert REAL_CHECK("1.0.0", GitHub(release_json(tag="orbida-v1.3.0")), skipped="1.2.0").version == "1.3.0"

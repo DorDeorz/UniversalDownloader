@@ -2,6 +2,7 @@ import functools
 import logging
 import math
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -11,9 +12,11 @@ import webbrowser
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
+from customtkinter.windows.widgets.core_widget_classes import CTkBaseClass
 
 import app_setup
 import browser_cookies
+import download_archive
 import download_history
 import events
 import filenames
@@ -59,6 +62,7 @@ SECONDARY_HOVER = ("#cfd0ca", "#3e413a")
 DANGER = ("#b3261e", "#f2b8b5")
 SUCCESS = ("#1b6b3a", "#7fd49a")
 WARNING = ("#7a5300", "#f0c05a")
+BAND_ERROR = ("#f6dcd9", "#4a2523")  # the band that shows an error (TEXT stays readable on it)
 
 CARD_RADIUS = 16
 FIELD_RADIUS = 12
@@ -108,6 +112,38 @@ def _keep_size_on_state_change(set_cursor):
 ctk.CTkButton._set_cursor = _keep_size_on_state_change(ctk.CTkButton._set_cursor)
 
 
+def _keep_hidden_on_rescale(base):
+    """Make grid_remove() on CustomTkinter widgets survive a text size change.
+
+    CustomTkinter repeats a widget's last grid() call when the scaling
+    changes, but grid_remove() does not clear that call, so every hidden
+    widget (the closed error band, the queue panel, the finished buttons)
+    came back after the text size was changed. grid_remove() now keeps the
+    call aside, and a bare grid() puts the widget back with it, so its
+    padding still follows the text size.
+    """
+    grid = base.grid
+
+    def grid_remove(self):
+        if self._last_geometry_manager_call is not None:
+            self._hidden_grid_call = self._last_geometry_manager_call
+        self._last_geometry_manager_call = None
+        return tkinter.Grid.grid_remove(self)
+
+    def grid_again(self, **kwargs):
+        hidden = getattr(self, "_hidden_grid_call", None)
+        if not kwargs and hidden is not None:
+            kwargs = dict(hidden["kwargs"])
+        self._hidden_grid_call = None
+        return grid(self, **kwargs)
+
+    base.grid_remove = grid_remove
+    base.grid = grid_again
+
+
+_keep_hidden_on_rescale(CTkBaseClass)
+
+
 def font(size=13, weight="normal"):
     return ctk.CTkFont(size=size, weight=weight)
 
@@ -115,6 +151,105 @@ def font(size=13, weight="normal"):
 def card(parent, **kw):
     """A filled, borderless card (Material 3 "filled card", as in FitWren)."""
     return ctk.CTkFrame(parent, fg_color=CARD, corner_radius=CARD_RADIUS, border_width=0, **kw)
+
+
+class Tooltip:
+    """A short explanation shown when the pointer rests on ``widget``.
+
+    ``text`` is a string or a function giving the (translated) text, read
+    each time the tip shows. The tip also names icon-only buttons, which
+    have no words of their own.
+    """
+
+    DELAY_MS = 600
+
+    def __init__(self, widget, text):
+        self.widget, self.text = widget, text
+        self._after = None
+        self.tip = None
+        for sequence, action in (("<Enter>", self._schedule), ("<Leave>", self.hide), ("<ButtonPress>", self.hide)):
+            widget.bind(sequence, action, add="+")
+        widget._tooltip = self
+
+    def current_text(self):
+        return self.text() if callable(self.text) else self.text
+
+    def _schedule(self, _event=None):
+        self._cancel()
+        self._after = self.widget.after(self.DELAY_MS, self.show)
+
+    def _cancel(self):
+        if self._after is not None:
+            try:
+                self.widget.after_cancel(self._after)
+            except tkinter.TclError:
+                pass
+            self._after = None
+
+    def show(self):
+        self._after = None
+        text = self.current_text()
+        if not text or self.tip is not None:
+            return
+        try:
+            x = self.widget.winfo_rootx() + 8
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+            tip = self.tip = tkinter.Toplevel(self.widget)
+            tip.wm_overrideredirect(True)
+            tip.wm_geometry(f"+{x}+{y}")
+            dark = ctk.get_appearance_mode() == "Dark"
+            tkinter.Label(tip, text=text, justify="left", wraplength=320, padx=8, pady=4,
+                          background="#2b2b31" if dark else "#fffbe6", foreground="#f2f2f5" if dark else "#1b1b1f",
+                          relief="solid", borderwidth=1, font=("Segoe UI", 10)).pack()
+        except tkinter.TclError:
+            self.tip = None
+
+    def hide(self, _event=None):
+        self._cancel()
+        tip, self.tip = self.tip, None
+        if tip is not None:
+            try:
+                tip.destroy()
+            except tkinter.TclError:
+                pass
+
+
+def local_time(stamp):
+    """``stamp`` as the user's system writes a date, with the time in hours and minutes."""
+    moment = time.localtime(stamp)
+    return f"{time.strftime('%x', moment)} {time.strftime('%H:%M', moment)}"
+
+
+def use_system_date_format():
+    """Dates (History) in the format the user's system uses (strftime's %x)."""
+    import locale
+    try:
+        locale.setlocale(locale.LC_TIME, "")
+    except (locale.Error, ValueError):
+        pass
+
+
+def shorten_link(link, limit=80):
+    """A link short enough for one line: its middle is left out."""
+    return link if len(link) <= limit else f"{link[:limit // 2 - 1]}…{link[-(limit // 2 - 1):]}"
+
+
+def wrap_with(container, label, margin):
+    """Wrap ``label``'s text at ``container``'s width (less ``margin`` units), so a
+    long title takes more lines instead of widening the window."""
+    def wrap(_event=None):
+        try:
+            width = container.winfo_width() / ctk.ScalingTracker.get_widget_scaling(container) - margin
+            if width > 50 and abs(label.cget("wraplength") - width) > 4:
+                label.configure(wraplength=width)
+        except tkinter.TclError:
+            pass
+    tkinter.Misc.bind(container, "<Configure>", wrap, "+")
+
+
+def tooltip(widget, text):
+    Tooltip(widget, text)
+    return widget
 
 
 # Seconds between progress updates while bytes arrive.
@@ -448,7 +583,7 @@ def _hex(colour):
 def mix(colour, other, amount):
     """``colour`` laid over ``other`` at ``amount`` (0-1) opacity, as "#rrggbb"."""
     a, b = _hex(colour), _hex(other)
-    return "#%02x%02x%02x" % tuple(round(x * amount + y * (1 - amount)) for x, y in zip(a, b))
+    return "#{:02x}{:02x}{:02x}".format(*(round(x * amount + y * (1 - amount)) for x, y in zip(a, b)))
 
 
 def tonal(accent):
@@ -588,9 +723,16 @@ class PlaylistSelector(ctk.CTkToplevel):
 
     Calls ``callback(items)`` with the chosen queue items on confirm, or
     ``callback(None)`` when the dialog is cancelled or closed.
+
+    A playlist of thousands of entries stays quick: every entry has its
+    tick (``vars``), but only one page of ``PAGE`` rows is drawn at a time,
+    and the same row widgets are reused for every page. The search field
+    narrows the list to the titles that contain its words; Select all and
+    Select none then apply to the entries found.
     """
 
-    BATCH = 50  # checkboxes created per idle step, so big playlists stay responsive
+    PAGE = 100  # rows drawn at a time
+    SEARCH_DELAY_MS = 200
 
     def __init__(self, parent, analysis, callback, downloaded=()):
         """``downloaded``: items downloaded before, which start unticked."""
@@ -607,7 +749,11 @@ class PlaylistSelector(ctk.CTkToplevel):
         self.callback = callback
         self.items = list(analysis.items)
         self.downloaded = {id(item) for item in downloaded}
-        self.vars = []
+        self.vars = [ctk.IntVar(value=0 if id(item) in self.downloaded else 1) for item in self.items]
+        self.shown = list(range(len(self.items)))  # indexes the search leaves
+        self.page = 0
+        self.rows = []  # reused checkboxes of the current page
+        self._search_after = None
         self._done = False
 
         if analysis.skipped:
@@ -627,8 +773,14 @@ class PlaylistSelector(ctk.CTkToplevel):
             ctk.CTkLabel(self, text=detail, font=font(12), text_color=MUTED, wraplength=600, anchor="w",
                          justify="left").pack(fill="x", padx=20)
 
+        self.ent_search = ctk.CTkEntry(self, height=34, fg_color=FIELD, border_width=0, corner_radius=17,
+                                       font=font(13), placeholder_text=tr("playlist.search"))
+        self.ent_search.bind("<KeyRelease>", lambda _e: self._search_soon())
+        if len(self.items) > 10:
+            self.ent_search.pack(fill="x", padx=20, pady=(10, 0))
+
         self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.btn_frame.pack(fill="x", padx=20, pady=(12, 0))
+        self.btn_frame.pack(fill="x", padx=20, pady=(10, 0))
         self.btn_all = secondary_button(self.btn_frame, tr("playlist.select_all"), self.select_all, width=100,
                                         height=32)
         self.btn_all.pack(side="left")
@@ -643,17 +795,29 @@ class PlaylistSelector(ctk.CTkToplevel):
 
         self.scroll = ctk.CTkScrollableFrame(self, fg_color=CARD, corner_radius=CARD_RADIUS, border_width=0,
                                              border_color=CARD_BORDER)
-        self.scroll.pack(pady=12, padx=20, fill="both", expand=True)
+        self.scroll.pack(pady=(12, 0), padx=20, fill="both", expand=True)
+        self.lbl_nothing = ctk.CTkLabel(self.scroll, text=tr("playlist.no_match"), font=font(13), text_color=MUTED)
+
+        # Pages (only for lists longer than PAGE)
+        self.pager = ctk.CTkFrame(self, fg_color="transparent")
+        self.btn_prev = secondary_button(self.pager, "\u25c0", lambda: self.show_page(self.page - 1), width=40,
+                                         height=30)
+        self.btn_prev.pack(side="left")
+        self.lbl_page = ctk.CTkLabel(self.pager, text="", font=font(12), text_color=MUTED)
+        self.lbl_page.pack(side="left", padx=10)
+        self.btn_next = secondary_button(self.pager, "\u25b6", lambda: self.show_page(self.page + 1), width=40,
+                                         height=30)
+        self.btn_next.pack(side="left")
 
         self.bottom = ctk.CTkFrame(self, fg_color="transparent")
-        self.bottom.pack(fill="x", padx=20, pady=(0, 18))
+        self.bottom.pack(side="bottom", fill="x", padx=20, pady=(12, 18))
         self.btn_cancel = secondary_button(self.bottom, tr("action.cancel"), self.cancel, width=110, height=40)
         self.btn_cancel.pack(side="right", padx=(8, 0))
         self.btn_confirm = primary_button(self.bottom, tr("playlist.add", count=0), self.confirm_selection, height=40)
         self.btn_confirm.pack(side="right", fill="x", expand=True)
 
-        self._add_rows(0)
-        fit_dialog(self, (640, 540), (420, 360))
+        self.show_page(0)
+        fit_dialog(self, (640, 560), (420, 380))
         self.after(100, self._grab)
 
     def _grab(self):
@@ -663,20 +827,63 @@ class PlaylistSelector(ctk.CTkToplevel):
         except Exception:
             pass  # window not viewable yet or already closed
 
-    def _add_rows(self, start):
-        for item in self.items[start:start + self.BATCH]:
-            before = id(item) in self.downloaded
-            var = ctk.IntVar(value=0 if before else 1)
-            label = f"{item.index:>3}. {item.title}" if item.index else item.title
-            if before:
-                label += f"  ({tr('playlist.downloaded')})"
-            ctk.CTkCheckBox(self.scroll, text=label, variable=var, command=self._update_count, font=font(13),
-                            text_color=TEXT, fg_color=ACCENT, hover_color=ACCENT_HOVER, checkbox_width=20,
-                            checkbox_height=20, corner_radius=5).pack(anchor="w", pady=4, padx=8)
-            self.vars.append(var)
+    def _label(self, item):
+        label = f"{item.index:>3}. {item.title}" if item.index else item.title
+        if id(item) in self.downloaded:
+            label += f"  ({tr('playlist.downloaded')})"
+        return label
+
+    @property
+    def pages(self):
+        return max(1, -(-len(self.shown) // self.PAGE))
+
+    def show_page(self, page):
+        """Draw page ``page`` of the entries the search leaves, reusing the row widgets."""
+        self.page = min(max(0, page), self.pages - 1)
+        indexes = self.shown[self.page * self.PAGE:(self.page + 1) * self.PAGE]
+        while len(self.rows) < len(indexes):
+            self.rows.append(ctk.CTkCheckBox(self.scroll, text="", command=self._update_count, font=font(13),
+                                             text_color=TEXT, fg_color=ACCENT, hover_color=ACCENT_HOVER,
+                                             checkbox_width=20, checkbox_height=20, corner_radius=5))
+        for row, index in zip(self.rows, indexes):
+            row.configure(text=self._label(self.items[index]), variable=self.vars[index])
+            row.pack(anchor="w", pady=4, padx=8)
+        for row in self.rows[len(indexes):]:
+            row.pack_forget()
+        if indexes:
+            self.lbl_nothing.pack_forget()
+        else:
+            self.lbl_nothing.pack(pady=20)
+        try:
+            self.scroll._parent_canvas.yview_moveto(0)
+        except (AttributeError, tkinter.TclError):
+            pass
+        if len(self.shown) > self.PAGE:
+            first = self.page * self.PAGE + 1
+            self.lbl_page.configure(text=tr("playlist.page", first=first, last=first + len(indexes) - 1,
+                                            total=len(self.shown)))
+            self.btn_prev.configure(state="normal" if self.page > 0 else "disabled")
+            self.btn_next.configure(state="normal" if self.page < self.pages - 1 else "disabled")
+            self.pager.pack(pady=(8, 0))
+        else:
+            self.pager.pack_forget()
         self._update_count()
-        if start + self.BATCH < len(self.items):
-            self.after(1, self._add_rows, start + self.BATCH)
+
+    def _search_soon(self):
+        if self._search_after is not None:
+            self.after_cancel(self._search_after)
+        self._search_after = self.after(self.SEARCH_DELAY_MS, self.search)
+
+    def search(self, text=None):
+        """Show only the entries whose title (or number) has every word of ``text``."""
+        self._search_after = None
+        if text is not None:
+            self.ent_search.delete(0, "end")
+            self.ent_search.insert(0, text)
+        words = self.ent_search.get().casefold().split()
+        self.shown = [i for i, item in enumerate(self.items)
+                      if all(w in f"{item.index or ''} {item.title}".casefold() for w in words)]
+        self.show_page(0)
 
     def selected_items(self):
         return [item for item, var in zip(self.items, self.vars) if var.get() == 1]
@@ -688,16 +895,20 @@ class PlaylistSelector(ctk.CTkToplevel):
         set_primary_state(self.btn_confirm, "normal" if count else "disabled",
                           text=tr("playlist.add", count=count) if count else tr("playlist.none"))
 
+    def _set_shown(self, value):
+        """Tick (1) or untick (0) every entry the search leaves; a function gets the item."""
+        for i in self.shown:
+            self.vars[i].set(value(self.items[i]) if callable(value) else value)
+        self._update_count()
+
     def select_all(self):
-        for var in self.vars: var.set(1)
-        self._update_count()
+        self._set_shown(1)
+
     def select_none(self):
-        for var in self.vars: var.set(0)
-        self._update_count()
+        self._set_shown(0)
+
     def select_new(self):
-        for item, var in zip(self.items, self.vars):
-            var.set(0 if id(item) in self.downloaded else 1)
-        self._update_count()
+        self._set_shown(lambda item: 0 if id(item) in self.downloaded else 1)
 
     def confirm_selection(self):
         selected = self.selected_items()
@@ -721,8 +932,10 @@ class PlaylistSelector(ctk.CTkToplevel):
 
 class SettingsView(ctk.CTkFrame):
     """The settings page, shown inside the main window in place of the
-    download page: appearance and language, downloads and what happens
-    after them, updates, and the keyboard shortcuts.
+    download page. Three tabs: General (appearance and language, downloads
+    and what happens after them, updates, the keyboard shortcuts), Advanced
+    (subtitles, SponsorBlock categories, network and diagnostics, other
+    choices) and About (versions and licenses).
 
     The page never scrolls: its cards sit in two columns, each setting on
     one line with a hint under its name. When the window is too short
@@ -746,9 +959,17 @@ class SettingsView(ctk.CTkFrame):
     TWO_COLUMNS = 680  # narrowest width (in unscaled units) for two columns
     FRAGMENT_CHOICES = (1, 2, 4, 8, 16)
 
-    def __init__(self, parent, settings, on_change, on_back, on_check_updates=None, update_status=None):
+    TABS = ("general", "advanced", "about")
+
+    def __init__(self, parent, settings, on_change, on_back, on_check_updates=None, update_status=None,
+                 actions=None, tab="general", versions=None):
+        """``actions``: name -> function for the Advanced tab's buttons (test_connection,
+        copy_diagnostics, forget_archive, reset); ``versions``: (name, version) lines for About."""
         super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.on_change = on_change
+        self.actions = actions or {}
+        self.settings = settings
+        self.tab = None  # set by show_tab
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self._hints = []
@@ -763,17 +984,12 @@ class SettingsView(ctk.CTkFrame):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=32, pady=(14, 10))
         self._spacing.append((header, (14, 10), (8, 8)))
-        header.grid_columnconfigure(2, weight=1)
+        header.grid_columnconfigure(3, weight=1)
         self.btn_back = secondary_button(header, "←  " + tr("settings.back"), on_back, width=100, height=34)
         self.btn_back.grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(header, text=tr("settings.title"), font=font(26, "bold"), text_color=TEXT).grid(
-            row=0, column=1, sticky="w", padx=16)
-        ctk.CTkLabel(header, text=f"{DISPLAY_NAME} {__version__}", font=font(12), text_color=MUTED).grid(
-            row=0, column=2, sticky="e", padx=12)
-        self.btn_extension = secondary_button(header, tr("extension.title"), self.open_extension_help, height=34)
-        self.btn_extension.grid(row=0, column=3, sticky="e", padx=(0, 8))
-        self.btn_logs = secondary_button(header, tr("settings.logs"), self.open_logs, height=34)
-        self.btn_logs.grid(row=0, column=4, sticky="e")
+        # The tabs name the page (the top bar's Settings button is lit), so no title takes their room.
+        self.seg_tabs = segmented(header, list(self.TABS), self.show_tab, label=lambda t: tr(f"settings.tab_{t}"))
+        self.seg_tabs.grid(row=0, column=1, sticky="w", padx=16)
 
         self.body = body = ctk.CTkFrame(self, fg_color="transparent")
         body.grid(row=1, column=0, sticky="new", padx=32, pady=(0, 16))
@@ -855,11 +1071,13 @@ class SettingsView(ctk.CTkFrame):
         self._spacing.append((row, (0, 10), (0, 8)))
         self.btn_check = secondary_button(row, tr("settings.check_now"), on_check_updates or (lambda: None),
                                           height=32)
-        self.btn_check.pack(side="left", padx=(0, 8))
-        self.btn_whats_new = secondary_button(row, tr("settings.whats_new"), self.open_whats_new, height=32)
-        self.btn_whats_new.pack(side="left")
-        self.lbl_update = ctk.CTkLabel(upd, text="", font=font(12), text_color=MUTED, anchor="w", justify="left")
-        self.lbl_update.grid(row=3, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 12))
+        self.btn_check.pack(side="left", padx=(0, 10))
+        # Beside the button, so a result costs no height (the page must not scroll).
+        # "What's new" is on the About tab.
+        self.lbl_update = ctk.CTkLabel(row, text="", font=font(12), text_color=MUTED, anchor="w", justify="left",
+                                       wraplength=220)
+        self.lbl_update.pack(side="left", fill="x", expand=True)
+        self._spacing[-1] = (row, (0, 14), (0, 10))
         self.show_update_status(update_status)
 
         # Keyboard
@@ -877,9 +1095,209 @@ class SettingsView(ctk.CTkFrame):
                 self._spacing.append((widget, (0, 14 if last else 6), (0, 10 if last else 3)))
         self.card_keys.grid_columnconfigure(0, weight=0)
 
+        self._build_advanced(settings)
+        self._build_about(versions or ())
+        self.show_tab(tab if tab in self.TABS else "general")
         self._set_tight(False)
         # The frame's own resize event (CTkFrame.bind would bind its canvas).
         tkinter.Misc.bind(self, "<Configure>", self._schedule_fit, "+")
+
+    def _page(self):
+        """A tab's page: two columns of cards, like General's (see _layout)."""
+        page = ctk.CTkFrame(self, fg_color="transparent")
+        page.columns = [ctk.CTkFrame(page, fg_color="transparent") for _ in range(2)]
+        for column in page.columns:
+            column.grid_columnconfigure(0, weight=1)
+        page.cards = ([], [])  # cards of the left and right column
+        return page
+
+    def _build_advanced(self, settings):
+        self.page_advanced = page = self._page()
+        left, right = page.cards
+
+        # Subtitles: which languages, which file type, inside the video or next to it
+        self.card_subtitles = subs = self._section(page, tr("settings.card_subtitles"))
+        self.ent_sub_langs = ctk.CTkEntry(subs, width=150, height=34, fg_color=FIELD, border_width=0,
+                                          corner_radius=FIELD_RADIUS, font=font(13), placeholder_text="en, tr")
+        if settings.subtitle_langs:
+            self.ent_sub_langs.insert(0, settings.subtitle_langs)
+        self.ent_sub_langs.bind("<Return>", lambda _e: self._save_sub_langs())
+        self.ent_sub_langs.bind("<FocusOut>", lambda _e: self._save_sub_langs())
+        self._setting_row(subs, 1, tr("settings.sub_langs"), tr("settings.sub_langs_hint"), self.ent_sub_langs)
+        self.seg_sub_format = segmented(subs, list(settings_store.SUBTITLE_FORMATS),
+                                        lambda v: self.on_change("subtitle_format", v), label=str.upper)
+        self.seg_sub_format.set(settings.subtitle_format)
+        self._inline_row(subs, 3, tr("settings.sub_format"), self.seg_sub_format)
+        self.sw_sub_embed = self._switch(subs, 4, tr("settings.sub_embed"), settings.subtitle_embed,
+                                         "subtitle_embed")
+        self._spacing[-1] = (self._spacing[-1][0], (0, 14), (0, 10))
+        left.append(subs)
+
+        # SponsorBlock: which kinds of segments are cut
+        self.card_sponsor = sponsor = self._section(page, tr("settings.card_sponsorblock"))
+        hint = ctk.CTkLabel(sponsor, text=tr("settings.sponsorblock_hint", option=tr("options.sponsorblock")),
+                            font=font(12), text_color=MUTED,
+                            anchor="w", justify="left", wraplength=300)
+        hint.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 8))
+        self._hints.append(hint)
+        chosen = set(formats.sponsorblock_categories(settings.sponsorblock_categories))
+        self.sponsor_boxes = {}
+        boxes = ctk.CTkFrame(sponsor, fg_color="transparent")
+        boxes.grid(row=2, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((boxes, (0, 14), (0, 8)))
+        for i, category in enumerate(formats.SPONSORBLOCK_CATEGORIES):
+            box = ctk.CTkCheckBox(boxes, text=tr(f"sponsor.{category}"), font=font(12), text_color=TEXT,
+                                  fg_color=ACCENT, hover_color=ACCENT_HOVER, checkbox_width=18,
+                                  checkbox_height=18, command=self._save_sponsor_categories)
+            if category in chosen:
+                box.select()
+            box.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 12), pady=2)
+            self.sponsor_boxes[category] = box
+        left.append(sponsor)
+
+        # Network and diagnostics
+        self.card_diag = diag = self._section(page, tr("settings.diagnostics"))
+        row = ctk.CTkFrame(diag, fg_color="transparent")
+        row.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 8), (0, 4)))
+        self.btn_test = secondary_button(row, tr("settings.test_connection"), self.test_connection, height=32)
+        self.btn_test.pack(side="left", padx=(0, 10))
+        self.lbl_test = ctk.CTkLabel(row, text="", font=font(12), text_color=MUTED, anchor="w", justify="left")
+        self.lbl_test.pack(side="left", fill="x", expand=True)
+        self.sw_verbose = self._switch(diag, 2, tr("settings.verbose_log"), settings.verbose_log, "verbose_log")
+        row = ctk.CTkFrame(diag, fg_color="transparent")
+        row.grid(row=3, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 14), (0, 10)))
+        self.btn_diagnostics = secondary_button(row, tr("settings.copy_diagnostics"), self.copy_diagnostics,
+                                                height=32)
+        self.btn_diagnostics.pack(side="left", padx=(0, 8))
+        self.btn_logs = secondary_button(row, tr("settings.logs"), self.open_logs, height=32)
+        self.btn_logs.pack(side="left")
+        right.append(diag)
+
+        # Other
+        self.card_other = other = self._section(page, tr("settings.other"))
+        self.sw_live = self._switch(other, 1, tr("settings.live_from_start"), settings.live_from_start,
+                                    "live_from_start")
+        self.seg_channel = segmented(other, list(settings_store.UPDATE_CHANNELS),
+                                     lambda v: self.on_change("update_channel", v),
+                                     label=lambda c: tr(f"settings.channel_{c}"))
+        self.seg_channel.set(settings.update_channel)
+        self._setting_row(other, 2, tr("settings.update_channel"), tr("settings.update_channel_hint"),
+                          self.seg_channel)
+        row = ctk.CTkFrame(other, fg_color="transparent")
+        row.grid(row=4, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 14), (0, 10)))
+        self.btn_forget = secondary_button(row, tr("settings.forget_archive"),
+                                           lambda: self._act("forget_archive"), height=32)
+        self.btn_forget.pack(side="left", padx=(0, 8))
+        self.btn_reset = secondary_button(row, tr("settings.reset"), lambda: self._act("reset"), height=32)
+        self.btn_reset.pack(side="left")
+        right.append(other)
+
+    def _build_about(self, versions):
+        self.page_about = page = self._page()
+        left, right = page.cards
+        self.card_about = about = self._section(page, f"{DISPLAY_NAME} {__version__}")
+        lines = [tr("about.text")] + [f"{name}: {version}" for name, version in versions]
+        self.lbl_versions = ctk.CTkLabel(about, text="\n".join(lines), font=font(12), text_color=TEXT,
+                                         anchor="w", justify="left", wraplength=320)
+        self.lbl_versions.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((self.lbl_versions, (0, 10), (0, 6)))
+        row = ctk.CTkFrame(about, fg_color="transparent")
+        row.grid(row=2, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 14), (0, 10)))
+        secondary_button(row, tr("settings.whats_new"), self.open_whats_new, height=32).pack(
+            side="left", padx=(0, 8))
+        secondary_button(row, "GitHub", lambda: webbrowser.open(f"https://github.com/{GITHUB_REPO}"),
+                         height=32).pack(side="left")
+        left.append(about)
+
+        # Browser extension (on this tab: the header has no room for it with large text)
+        self.card_extension = ext = self._section(page, tr("extension.title"))
+        hint = ctk.CTkLabel(ext, text=tr("extension.description"), font=font(12), text_color=MUTED, anchor="w",
+                            justify="left", wraplength=300)
+        hint.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 8))
+        self._hints.append(hint)
+        self.btn_extension = secondary_button(ext, tr("extension.title") + "…", self.open_extension_help, height=32)
+        self.btn_extension.grid(row=2, column=0, sticky="w", padx=16)
+        self._spacing.append((self.btn_extension, (0, 14), (0, 10)))
+        left.append(ext)
+
+        self.card_licenses = lic = self._section(page, tr("about.licenses"))
+        self.txt_licenses = ctk.CTkTextbox(lic, font=font(11), fg_color=FIELD, text_color=TEXT, wrap="word",
+                                           height=230, border_width=0, corner_radius=FIELD_RADIUS)
+        self.txt_licenses.insert("1.0", license_text())
+        self.txt_licenses.configure(state="disabled")
+        self.txt_licenses.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((self.txt_licenses, (0, 14), (0, 10)))
+        right.append(lic)
+
+    def show_tab(self, tab):
+        """Show one tab's page: "general", "advanced" or "about"."""
+        if tab == self.tab:
+            return
+        self.tab = tab
+        self.seg_tabs.set(tab)
+        pages = {"general": self.body, "advanced": self.page_advanced, "about": self.page_about}
+        for name, page in pages.items():
+            if name == tab:
+                page.grid(row=1, column=0, sticky="new", padx=32, pady=(0, 16))
+            else:
+                page.grid_remove()
+        self._columns = None  # lay out the new page's cards
+        self._schedule_fit()
+
+    def _act(self, name, *args):
+        action = self.actions.get(name)
+        if action is not None:
+            return action(*args)
+
+    def _save_sub_langs(self):
+        text = ", ".join(logic.subtitle_languages("", self.ent_sub_langs.get())) \
+            if self.ent_sub_langs.get().strip() else ""
+        if text != self.ent_sub_langs.get().strip():
+            self.ent_sub_langs.delete(0, "end")
+            self.ent_sub_langs.insert(0, text)
+        if text != self.settings.subtitle_langs:
+            self.on_change("subtitle_langs", text)
+
+    def _save_sponsor_categories(self):
+        chosen = [c for c, box in self.sponsor_boxes.items() if box.get()]
+        self.on_change("sponsorblock_categories", ",".join(chosen))
+
+    def test_connection(self):
+        """Ask the app to test the connection (with the proxy); show_test_result shows the answer."""
+        self.btn_test.configure(state="disabled")
+        self.lbl_test.configure(text=tr("settings.testing"), text_color=MUTED)
+        if self._act("test_connection") is None and "test_connection" not in self.actions:
+            self.show_test_result(None, "no test")
+
+    def show_test_result(self, seconds, error):
+        try:
+            self.btn_test.configure(state="normal")
+            if error:
+                self.lbl_test.configure(text=tr("settings.test_failed", error=i18n.tr_message(error)[:120]),
+                                        text_color=DANGER)
+            else:
+                self.lbl_test.configure(text=tr("settings.test_ok", ms=round(seconds * 1000)), text_color=SUCCESS)
+        except tkinter.TclError:
+            pass  # page closed
+
+    def copy_diagnostics(self):
+        text = self._act("copy_diagnostics")
+        if text:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self.btn_diagnostics.configure(text=tr("settings.copied"))
+            self.after(2000, lambda: self._restore_text(self.btn_diagnostics, tr("settings.copy_diagnostics")))
+
+    @staticmethod
+    def _restore_text(widget, text):
+        try:
+            widget.configure(text=text)
+        except tkinter.TclError:
+            pass
 
     def _section(self, parent, title):
         frame = card(parent)
@@ -936,6 +1354,9 @@ class SettingsView(ctk.CTkFrame):
     def _layout(self, columns):
         """Place the cards in one column or two."""
         self._columns = columns
+        if self.tab not in (None, "general"):
+            self._layout_page(self.page_advanced if self.tab == "advanced" else self.page_about, columns)
+            return
         body = self.body
         body.grid_columnconfigure(0, weight=1, uniform="col")
         body.grid_columnconfigure(1, weight=1 if columns == 2 else 0, uniform="col" if columns == 2 else "")
@@ -964,6 +1385,25 @@ class SettingsView(ctk.CTkFrame):
         if not self.shortcuts_shown:
             self.card_keys.grid_remove()
 
+    @staticmethod
+    def _layout_page(page, columns):
+        page.grid_columnconfigure(0, weight=1, uniform="col")
+        page.grid_columnconfigure(1, weight=1 if columns == 2 else 0, uniform="col" if columns == 2 else "")
+        left, right = page.columns
+        if columns == 2:
+            left.grid(row=0, column=0, columnspan=1, sticky="new", padx=(0, 8))
+            right.grid(row=0, column=1, sticky="new", padx=(8, 0))
+            order = [(c, left) for c in page.cards[0]] + [(c, right) for c in page.cards[1]]
+        else:
+            left.grid(row=0, column=0, columnspan=2, sticky="new", padx=0)
+            right.grid_remove()
+            order = [(c, left) for c in page.cards[0] + page.cards[1]]
+        rows = {}
+        for widget, column in order:
+            row = rows.get(column, 0)
+            rows[column] = row + 1
+            widget.grid(in_=column, row=row, column=0, sticky="ew", pady=(0 if row == 0 else 12, 0))
+
     # Spacing taken off every tight gap at the tightest level (TIGHTEST).
     TIGHTEST_TRIM = 4
     TIGHTEST = 2
@@ -974,7 +1414,9 @@ class SettingsView(ctk.CTkFrame):
         trim = self.TIGHTEST_TRIM if tight == self.TIGHTEST else 0
         for widget, normal, small in self._spacing:
             widget.grid_configure(pady=tuple(max(0, v - trim) for v in small) if tight else normal)
-        self.body.grid_configure(pady=(0, 4 if trim else 16))
+        for page in (self.body, self.page_advanced, self.page_about):
+            if page.winfo_manager():
+                page.grid_configure(pady=(0, 4 if trim else 16))
 
     def _show_hints(self, show):
         self.hints_shown = show
@@ -983,6 +1425,8 @@ class SettingsView(ctk.CTkFrame):
 
     def _show_shortcuts(self, show):
         self.shortcuts_shown = show
+        if self.tab != "general":
+            return
         if self._columns == 2:
             self._layout(2)  # the cards change columns (see _layout)
         else:
@@ -1046,7 +1490,6 @@ class SettingsView(ctk.CTkFrame):
         """``text`` is a function giving the (translated) result of the last check, or None."""
         try:
             self.lbl_update.configure(text=text() if text else "")
-            self.lbl_update.grid() if text else self.lbl_update.grid_remove()
         except tkinter.TclError:
             return
         self._schedule_fit()
@@ -1054,6 +1497,26 @@ class SettingsView(ctk.CTkFrame):
     @staticmethod
     def open_whats_new():
         webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases/tag/{updates.TAG_PREFIX}{__version__}")
+
+
+def license_text():
+    """THIRD_PARTY_NOTICES.md (bundled with the app) as plain text for the About tab."""
+    try:
+        with open(resource_path("THIRD_PARTY_NOTICES.md"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return f"https://github.com/{GITHUB_REPO}/blob/main/THIRD_PARTY_NOTICES.md"
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
+        line = re.sub(r"\*\*|__|`", "", line)
+        line = re.sub(r"^#+\s*", "", line)
+        if re.fullmatch(r"\|?[-| :]+\|?", line.strip()):
+            continue  # a table's divider
+        if line.startswith("|"):
+            line = " · ".join(cell.strip() for cell in line.strip().strip("|").split("|"))
+        lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
 def open_file(path):
@@ -1073,19 +1536,25 @@ def show_in_folder(path):
 
 
 class HistoryView(ctk.CTkFrame):
-    """The History page: recent downloads with Open, Folder and Remove.
+    """The History page: recent downloads with Open, Folder, Download again and Remove.
 
     Shown inside the main window in place of the download page, like the
-    settings page. At most ``SHOWN`` entries are drawn, newest first.
+    settings page. The search field narrows the list by title, link or
+    file; ``STEP`` entries are drawn at a time, newest first, and "Show
+    more" draws the next ones. Remove takes the entry off the list only
+    (the file stays), and can be undone.
     """
 
-    SHOWN = 100
+    STEP = 50
 
-    def __init__(self, parent, history, on_back):
+    def __init__(self, parent, history, on_back, on_download_again=None):
         super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.history = history
+        self.on_download_again = on_download_again
+        self.limit = self.STEP
+        self.removed = None  # (entry, index) of the last entry removed, for Undo
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=32, pady=(14, 10))
         header.grid_columnconfigure(2, weight=1)
@@ -1093,27 +1562,71 @@ class HistoryView(ctk.CTkFrame):
         self.btn_back.grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(header, text=tr("history.title"), font=font(26, "bold"), text_color=TEXT).grid(
             row=0, column=1, sticky="w", padx=16)
+        self.ent_search = ctk.CTkEntry(header, height=34, fg_color=FIELD, border_width=0, corner_radius=17,
+                                       font=font(13), placeholder_text=tr("history.search"))
+        self.ent_search.grid(row=0, column=2, sticky="ew", padx=(0, 12))
+        self.ent_search.bind("<KeyRelease>", lambda _e: self._search_soon())
+        self._search_after = None
         self.btn_clear = secondary_button(header, tr("history.clear"), self.clear, height=34)
         self.btn_clear.grid(row=0, column=3, sticky="e")
+        # "Removed from the history (the file stays)", with Undo
+        self.notice = ctk.CTkFrame(self, fg_color=FIELD, corner_radius=FIELD_RADIUS)
+        self.notice.grid_columnconfigure(0, weight=1)
+        self.lbl_notice = ctk.CTkLabel(self.notice, text="", font=font(12), text_color=TEXT, anchor="w",
+                                       justify="left")
+        self.lbl_notice.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=6)
+        self.btn_undo = secondary_button(self.notice, tr("history.undo"), self.undo, height=28)
+        self.btn_undo.grid(row=0, column=1, padx=(0, 8), pady=6)
         self.list = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
-        self.list.grid(row=1, column=0, sticky="nsew", padx=(32, 16), pady=(0, 16))
+        self.list.grid(row=2, column=0, sticky="nsew", padx=(32, 16), pady=(0, 16))
         self.list.grid_columnconfigure(0, weight=1)
         self.rows = []
+        self.refresh()
+
+    def matching(self):
+        """The entries the search leaves, newest first."""
+        words = self.ent_search.get().casefold().split()
+        if not words:
+            return list(self.history.entries)
+        return [e for e in self.history.entries
+                if all(w in f"{e.title} {e.url} {e.path}".casefold() for w in words)]
+
+    def _search_soon(self):
+        if self._search_after is not None:
+            self.after_cancel(self._search_after)
+        self._search_after = self.after(200, self.search)
+
+    def search(self, text=None):
+        self._search_after = None
+        if text is not None:
+            self.ent_search.delete(0, "end")
+            self.ent_search.insert(0, text)
+        self.limit = self.STEP
         self.refresh()
 
     def refresh(self):
         for row in self.rows:
             row.destroy()
         self.rows = []
-        entries = self.history.entries[:self.SHOWN]
-        self.btn_clear.configure(state="normal" if entries else "disabled")
-        if not entries:
-            empty = ctk.CTkLabel(self.list, text=tr("history.empty"), font=font(13), text_color=MUTED)
+        found = self.matching()
+        self.btn_clear.configure(state="normal" if self.history.entries else "disabled")
+        if not found:
+            text = tr("history.no_match") if self.history.entries else tr("history.empty")
+            empty = ctk.CTkLabel(self.list, text=text, font=font(13), text_color=MUTED)
             empty.grid(row=0, column=0, pady=40)
             self.rows.append(empty)
             return
-        for i, entry in enumerate(entries):
+        for i, entry in enumerate(found[:self.limit]):
             self.rows.append(self._row(i, entry))
+        left = len(found) - self.limit
+        if left > 0:
+            more = secondary_button(self.list, tr("history.more", count=left), self.show_more, height=32)
+            more.grid(row=len(self.rows), column=0, pady=(4, 12))
+            self.rows.append(more)
+
+    def show_more(self):
+        self.limit += self.STEP
+        self.refresh()
 
     def _row(self, index, entry):
         row = card(self.list)
@@ -1121,9 +1634,10 @@ class HistoryView(ctk.CTkFrame):
         row.grid_columnconfigure(0, weight=1)
         exists = os.path.exists(entry.path)
         ctk.CTkLabel(row, text=entry.title or os.path.basename(entry.path), font=font(13, "bold"),
-                     text_color=TEXT if exists else MUTED, anchor="w", justify="left").grid(
+                     text_color=TEXT if exists else MUTED, anchor="w", justify="left", wraplength=560).grid(
             row=0, column=0, sticky="ew", padx=14, pady=(10, 0))
-        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(entry.time)) if entry.time else ""
+        # The date and time as the user's system writes them.
+        when = local_time(entry.time) if entry.time else ""
         parts = [p for p in (when, tr(MODE_KEYS[entry.mode]) if entry.mode in MODE_KEYS else "") if p]
         parts.append(shorten_path(entry.path, 70) if exists else tr("history.missing"))
         ctk.CTkLabel(row, text="  \u00b7  ".join(parts), font=font(12), text_color=MUTED, anchor="w",
@@ -1135,8 +1649,14 @@ class HistoryView(ctk.CTkFrame):
                          width=70, state=state).pack(side="left", padx=(0, 6))
         secondary_button(buttons, tr("history.folder"), lambda: self._run(show_in_folder, entry.path), height=30,
                          width=70, state=state).pack(side="left", padx=(0, 6))
-        secondary_button(buttons, tr("history.remove"), lambda: self.remove(entry.path), height=30,
-                         width=70).pack(side="left")
+        again = secondary_button(buttons, "\u21bb", lambda: self.download_again(entry), height=30, width=36,
+                                 state="normal" if entry.url and self.on_download_again else "disabled")
+        tooltip(again, lambda: tr("history.again"))
+        again.pack(side="left", padx=(0, 6))
+        remove = secondary_button(buttons, tr("history.remove"), lambda: self.remove(entry.path), height=30,
+                                  width=70)
+        tooltip(remove, lambda: tr("history.remove_hint"))
+        remove.pack(side="left")
         return row
 
     def _run(self, action, path):
@@ -1145,13 +1665,35 @@ class HistoryView(ctk.CTkFrame):
         except OSError as e:
             messagebox.showerror(tr("history.title"), str(e), parent=self)
 
+    def download_again(self, entry):
+        if entry.url and self.on_download_again:
+            self.on_download_again(entry.url)
+
     def remove(self, path):
+        """Take the entry off the list; the file is not touched."""
+        index = next((i for i, e in enumerate(self.history.entries) if e.path == path), None)
+        if index is None:
+            return
+        entry = self.history.entries[index]
         self.history.remove(path)
+        self.removed = (entry, index)
+        self.lbl_notice.configure(text=tr("history.removed", title=entry.title or os.path.basename(path)))
+        self.notice.grid(row=1, column=0, sticky="ew", padx=(32, 32), pady=(0, 10))
+        self.refresh()
+
+    def undo(self):
+        if self.removed is not None:
+            entry, index = self.removed
+            self.history.restore(entry, index)
+            self.removed = None
+        self.notice.grid_remove()
         self.refresh()
 
     def clear(self):
         if messagebox.askyesno(tr("history.title"), tr("history.clear_confirm"), parent=self):
             self.history.clear()
+            self.removed = None
+            self.notice.grid_remove()
             self.refresh()
 
 
@@ -1276,6 +1818,8 @@ class UpdateDialog(ctk.CTkToplevel):
         self.progress.set(0)
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.grid(row=3, column=0, sticky="e", padx=20, pady=(12, 18))
+        self.btn_skip = secondary_button(buttons, tr("update.skip"), self.skip)
+        self.btn_skip.pack(side="left", padx=(0, 8))
         self.btn_page = secondary_button(buttons, tr("update.page"), lambda: webbrowser.open(release.page))
         if can_install:  # otherwise the main button opens the page
             self.btn_page.pack(side="left", padx=(0, 8))
@@ -1321,6 +1865,11 @@ class UpdateDialog(ctk.CTkToplevel):
         self.app.update_dialog = None
         self.destroy()
 
+    def skip(self):
+        """Do not offer this version again (a later one is offered as usual)."""
+        self.app.skip_update(self.release.version)
+        self.later()
+
 
 def open_path(folder):
     """Show ``folder`` in Explorer (or the platform's file manager)."""
@@ -1349,9 +1898,15 @@ class App(ctk.CTk):
         # CustomTkinter sets its own icon shortly after start; set ours again.
         self.after(200, self.set_icon)
 
+        use_system_date_format()
         self.settings_path = os.path.join(app_setup.data_dir(), "settings.json")
         self.settings = settings_store.load(self.settings_path, default_download_dir())
+        if self.settings.window_geometry:
+            # Where the window was when it last closed (kept on screen by _fit_to_content).
+            self.geometry(self.settings.window_geometry)
         logic.set_network_options(self.settings.proxy)
+        logic.set_verbose(self.settings.verbose_log)
+        app_setup.set_verbose_logging(self.settings.verbose_log)
         self._reddit = None  # browser_cookies.RedditSignIn while the setting is on
         self._apply_reddit_sign_in()
         ctk.set_appearance_mode(appearance_mode(self.settings.theme))
@@ -1360,7 +1915,13 @@ class App(ctk.CTk):
         apply_accent(self.settings.accent)
         apply_pure_black(self.settings.theme == "Black")
         self.history = download_history.History(os.path.join(app_setup.data_dir(), "history.json"))
+        # Every link downloaded, for "only new" in playlists; starts from the History.
+        self.archive = download_archive.Archive(os.path.join(app_setup.data_dir(), "archive.txt"),
+                                                seed=[e.url for e in self.history.entries])
         self._job_mode = None
+        # (mode, format, quality) the user had chosen before a Spotify link
+        # switched to Audio Only; saved instead and brought back afterwards.
+        self._auto_mode = None
         self._analysed = None  # (time, url, info) of the last single video analysed
         # Widgets whose text is translated: (widget, option) -> function giving
         # the text, re-run when the language changes (see _live).
@@ -1388,6 +1949,7 @@ class App(ctk.CTk):
         self.events.register(events.STAGE, self._show_stage)
         self.events.register(events.ITEM_STARTED, self._on_item_started)
         self.events.register(events.ANALYSIS_DONE, self._on_analysis_done)
+        self.events.register(events.ANALYSIS_PROGRESS, self._on_analysis_progress)
         self.events.register(events.ANALYSIS_FAILED, self._on_analysis_failed)
         self.events.register(events.ITEM_DONE, self._on_item_done)
         self.events.register(events.JOB_DONE, self._on_job_done)
@@ -1396,6 +1958,7 @@ class App(ctk.CTk):
         self.events.register(events.UPDATE_PROGRESS, self._on_update_progress)
         self.events.register(events.UPDATE_READY, self._on_update_ready)
         self.events.register(events.UPDATE_FAILED, self._on_update_failed)
+        self.events.register(events.CONNECTION_TESTED, self._on_connection_tested)
         self.available_update = None   # updates.Release newer than this version
         self.update_dialog = None
         self._update_status = None     # function giving the last check's result text
@@ -1410,6 +1973,7 @@ class App(ctk.CTk):
         self.tools = None
 
         self.settings_view = None
+        self._settings_tab = "general"  # the settings tab shown last
         self.history_view = None
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -1455,6 +2019,7 @@ class App(ctk.CTk):
     def _poll_events(self):
         """Drain the event queue on the main thread, then reschedule."""
         try:
+            self._update_clear_url()
             self.events.dispatch_pending()
         finally:
             self._poll_id = self.after(self.POLL_INTERVAL_MS, self._poll_events)
@@ -1469,6 +2034,9 @@ class App(ctk.CTk):
             super().report_callback_exception(kind, value, tb)
 
     def destroy(self):
+        if getattr(self, "history", None) is not None:
+            self.history.flush()
+        self._remember_geometry()
         for call in getattr(self, "_startup_calls", ()):
             try:
                 self.after_cancel(call)
@@ -1494,6 +2062,17 @@ class App(ctk.CTk):
                 pass
             self._poll_id = None
         super().destroy()
+
+    def _remember_geometry(self):
+        """Keep the window's size and place for the next start (not when maximised or hidden)."""
+        try:
+            if getattr(self, "settings", None) is not None and self.state() == "normal":
+                geometry = self.geometry()
+                if geometry != self.settings.window_geometry:
+                    self.settings.window_geometry = geometry
+                    self._save_settings()
+        except (tkinter.TclError, AttributeError):  # closed while it was being built
+            pass
 
     def set_icon(self):
         set_window_icon(self)
@@ -1570,11 +2149,23 @@ class App(ctk.CTk):
         # the spare height (see _fill_height).
         self.main_frame = ctk.CTkScrollableFrame(self, corner_radius=0, fg_color="transparent",
                                                  scrollbar_button_color=BG, scrollbar_button_hover_color=BG)
-        self.main_frame.grid(row=1, column=0, sticky="nsew", padx=(32, 12), pady=(20, 16))
+        self.main_frame.grid(row=1, column=0, sticky="nsew", padx=(32, 12), pady=(20, 10))
         self.main_frame.grid_columnconfigure(0, weight=1)
         self._scroll_canvas = self.main_frame._parent_canvas
 
-        # The top bar names the app, so the link card comes first.
+        # The top bar names the app, so the link card comes first. Above it, a
+        # band for an error (or the first-run tips) that the user can close.
+        self.band = ctk.CTkFrame(self.main_frame, fg_color=FIELD, corner_radius=FIELD_RADIUS)
+        self.band.grid_columnconfigure(0, weight=1)
+        self.lbl_band = ctk.CTkLabel(self.band, text="", font=font(13), text_color=TEXT, anchor="w",
+                                     justify="left")
+        self.lbl_band.grid(row=0, column=0, sticky="ew", padx=(14, 8), pady=8)
+        self.btn_band = secondary_button(self.band, "", lambda: self._band_action(), height=30)
+        self.btn_band_close = tooltip(secondary_button(self.band, "\u2715", self.hide_band, width=30, height=30),
+                                      lambda: tr("band.close"))
+        self.btn_band_close.grid(row=0, column=2, padx=(0, 8), pady=8)
+        self._band_action = lambda: None
+        self.band_kind = None
 
         # Link
         url_card = card(self.main_frame)
@@ -1585,26 +2176,40 @@ class App(ctk.CTk):
         self.url_entry.grid(row=0, column=0, sticky="ew", padx=(16, 8), pady=16)
         self.url_entry.bind("<KeyRelease>", self._on_url_changed)
         self.url_entry.bind("<Return>", lambda _e: self.start_analysis_thread())
+        # Clears the field; shown while it holds text.
+        self.btn_clear_url = tooltip(secondary_button(url_card, "\u2715", self.clear_url, width=36, height=44),
+                                     lambda: tr("link.clear"))
         self.btn_paste = secondary_button(url_card, "", self.paste_url, width=80, height=44)
         self._live(self.btn_paste, lambda: tr("link.paste"))
-        self.btn_paste.grid(row=0, column=1, padx=(0, 8), pady=16)
+        self.btn_paste.grid(row=0, column=2, padx=(0, 8), pady=16)
         self.btn_analyze = primary_button(url_card, "", self.start_analysis_thread, width=120, height=44,
                                           font=font(14, "bold"))
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
-        self.btn_analyze.grid(row=0, column=2, padx=(0, 16), pady=16)
+        self.btn_analyze.grid(row=0, column=3, padx=(0, 16), pady=16)
         self.lbl_media = ctk.CTkLabel(url_card, text="", font=font(13), text_color=MUTED,
                                       anchor="w", justify="left")
-        self.lbl_media.grid(row=1, column=0, columnspan=3, sticky="ew", padx=18, pady=(0, 14))
-        # Links waiting in the queue (shown while there are any).
+        self.lbl_media.grid(row=1, column=0, columnspan=4, sticky="ew", padx=18, pady=(0, 14))
+        # Long titles wrap at the card's width instead of widening the window.
+        wrap_with(url_card, self.lbl_media, 40)
+        # Links waiting in the queue (shown while there are any): each can be
+        # moved up or down, or taken out.
         self.queue_row = ctk.CTkFrame(url_card, fg_color="transparent")
-        self.lbl_queue = ctk.CTkLabel(self.queue_row, text="", font=font(13, "bold"), text_color=TEXT, anchor="w")
+        self.queue_row.grid_columnconfigure(0, weight=1)
+        head = ctk.CTkFrame(self.queue_row, fg_color="transparent")
+        head.grid(row=0, column=0, sticky="ew")
+        self.lbl_queue = ctk.CTkLabel(head, text="", font=font(13, "bold"), text_color=TEXT, anchor="w")
         self.lbl_queue.pack(side="left")
-        self.btn_clear_queue = secondary_button(self.queue_row, "", self.clear_link_queue, height=28)
+        self.btn_clear_queue = secondary_button(head, "", self.clear_link_queue, height=28)
         self._live(self.btn_clear_queue, lambda: tr("queue.clear"))
         self.btn_clear_queue.pack(side="left", padx=(10, 0))
+        self.queue_list = ctk.CTkFrame(self.queue_row, fg_color="transparent")
+        self.queue_list.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.queue_list.grid_columnconfigure(0, weight=1)
+        self.queue_rows = []
         # A link just copied to the clipboard (Settings: clipboard "watch").
         self.copied_row = ctk.CTkFrame(url_card, fg_color=FIELD, corner_radius=FIELD_RADIUS)
         self.copied_row.grid_columnconfigure(0, weight=1)
+        url_card.grid_columnconfigure(1, weight=0)
         self.lbl_copied = ctk.CTkLabel(self.copied_row, text="", font=font(13), text_color=TEXT, anchor="w")
         self.lbl_copied.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=6)
         self.btn_copied = primary_button(self.copied_row, "", lambda: self._offer(), height=28)
@@ -1665,8 +2270,8 @@ class App(ctk.CTk):
         self.lbl_trim_hint.grid(row=0, column=4)
         self.toggle_trim()
 
-        ctk.CTkFrame(opt_card, height=1, corner_radius=0, fg_color=CARD_BORDER).grid(row=3, column=0, columnspan=4, sticky="ew",
-                                                                    padx=16)
+        ctk.CTkFrame(opt_card, height=1, corner_radius=0, fg_color=CARD_BORDER).grid(
+            row=3, column=0, columnspan=4, sticky="ew", padx=16)
         self._section_label(opt_card, "options.save_to").grid(row=4, column=0, sticky="w", padx=(16, 12), pady=12)
         folder_row = ctk.CTkFrame(opt_card, fg_color="transparent")
         folder_row.grid(row=4, column=1, columnspan=3, sticky="ew", padx=(0, 16), pady=12)
@@ -1683,9 +2288,9 @@ class App(ctk.CTk):
         self.btn_open.grid(row=0, column=2)
         self._show_folder()
 
-        # Actions
-        actions = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        actions.grid(row=3, column=0, sticky="ew", pady=(0, 12))
+        # Actions: a bar below the page that never scrolls away (UI-1)
+        actions = self.action_bar = ctk.CTkFrame(self, fg_color="transparent")
+        actions.grid(row=2, column=0, sticky="ew", padx=(32, 28), pady=(0, 16))
         actions.grid_columnconfigure(0, weight=1)
         self.btn_download = primary_button(actions, "", self.start_download_queue, height=48,
                                            font=font(16, "bold"))
@@ -1704,9 +2309,9 @@ class App(ctk.CTk):
         prog_card.grid(row=4, column=0, sticky="ew", pady=(0, 12))
         # FitWren's step ring, here for the current download.
         prog_card.grid_columnconfigure(1, weight=1)
-        prog_card.grid_rowconfigure((0, 4), weight=1)
+        prog_card.grid_rowconfigure((0, 5), weight=1)
         self.progress_bar = ProgressRing(prog_card, size=76, thickness=8)
-        self.progress_bar.grid(row=0, column=0, rowspan=5, padx=(14, 16), pady=12)
+        self.progress_bar.grid(row=0, column=0, rowspan=6, padx=(14, 16), pady=12)
         self.lbl_item = ctk.CTkLabel(prog_card, text="", font=font(15, "bold"), text_color=TEXT, anchor="w",
                                      justify="left")
         self._live(self.lbl_item, lambda: tr("progress.ready"))
@@ -1715,6 +2320,26 @@ class App(ctk.CTk):
         self.lbl_progress.grid(row=2, column=1, sticky="w", padx=(0, 16), pady=(2, 0))
         self.lbl_detail = ctk.CTkLabel(prog_card, text="", font=font(13), text_color=MUTED, anchor="w")
         self.lbl_detail.grid(row=3, column=1, sticky="w", padx=(0, 16))
+        wrap_with(prog_card, self.lbl_item, 140)
+        # The whole job (several items): "3 / 10" and a bar (UI-5)
+        self.overall = ctk.CTkFrame(prog_card, fg_color="transparent")
+        self.overall.grid_columnconfigure(0, weight=1)
+        self.overall_bar = ctk.CTkProgressBar(self.overall, height=6, progress_color=ACCENT, fg_color=SECONDARY)
+        self.overall_bar.set(0)
+        self.overall_bar.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self.lbl_overall = ctk.CTkLabel(self.overall, text="", font=font(12), text_color=MUTED)
+        self.lbl_overall.grid(row=0, column=1)
+        # The file just downloaded (UI-6)
+        self.done_buttons = ctk.CTkFrame(prog_card, fg_color="transparent")
+        self.btn_open_file = secondary_button(self.done_buttons, "", self.open_last_file, height=32)
+        self._live(self.btn_open_file, lambda: tr("done.open_file"))
+        self.btn_open_file.pack(side="left", padx=(0, 6))
+        self.btn_show_file = secondary_button(self.done_buttons, "", self.show_last_file, height=32)
+        self._live(self.btn_show_file, lambda: tr("done.show_file"))
+        self.btn_show_file.pack(side="left")
+        self.last_file = None
+        self._job_total = 0
+        self._job_position = 0
 
         # Activity log
         log_card = self.log_card = card(self.main_frame)
@@ -1722,15 +2347,132 @@ class App(ctk.CTk):
         log_card.grid_columnconfigure(0, weight=1)
         log_card.grid_rowconfigure(1, weight=1)
         self._section_label(log_card, "activity.title").grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+        log_buttons = ctk.CTkFrame(log_card, fg_color="transparent")
+        log_buttons.grid(row=0, column=1, sticky="e", padx=12, pady=(10, 2))
+        self.btn_copy_log = secondary_button(log_buttons, "", self.copy_log, height=26)
+        self._live(self.btn_copy_log, lambda: tr("activity.copy"))
+        self.btn_copy_log.pack(side="left", padx=(0, 6))
+        self.btn_clear_log = secondary_button(log_buttons, "", self.clear_log, height=26)
+        self._live(self.btn_clear_log, lambda: tr("activity.clear"))
+        self.btn_clear_log.pack(side="left")
         self.console = ctk.CTkTextbox(log_card, height=100, font=ctk.CTkFont(family="Consolas", size=12),
                                       fg_color="transparent", text_color=TEXT, wrap="word",
                                       state="disabled")  # read-only; text can still be selected and copied
-        self.console.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        self.console.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=8, pady=(0, 8))
         # Keep a gap between the cards and the (usually hidden) scrollbar.
         for card_widget in self.main_frame.grid_slaves():
             card_widget.grid_configure(padx=(0, 16))
         self._scroll_canvas.bind("<Configure>", lambda _e: self.after_idle(self._fill_height), add="+")
         self.log(tr("activity.welcome"))
+        self._add_tooltips()
+        if not self.settings.onboarded:
+            self.show_band(lambda: tr("onboarding.tip"), "info", on_close=self._onboarded)
+
+    # --- the band above the link card: an error or the first-run tips (UI-4, UI-16) ---
+
+    def show_band(self, text, kind="error", action=None, on_close=None):
+        """Show ``text`` (a function giving translated text) in the band.
+
+        ``kind`` "error" or "info"; ``action`` an optional (label function,
+        command) button; ``on_close`` runs when the user closes the band.
+        """
+        self.band_kind = kind
+        self._band_closed = on_close
+        self.band.configure(fg_color=BAND_ERROR if kind == "error" else FIELD)
+        self.lbl_band.configure(text_color=TEXT)
+        self._live(self.lbl_band, text)
+        if action is not None:
+            label, command = action
+            self._live(self.btn_band, label)
+            self._band_action = command
+            self.btn_band.grid(row=0, column=1, padx=(0, 6), pady=8)
+        else:
+            self.btn_band.grid_remove()
+        self.band.grid(row=0, column=0, sticky="ew", pady=(0, 12), padx=(0, 16))
+        self.after_idle(self._fill_height)
+
+    def hide_band(self):
+        if self.band_kind is None:
+            return
+        self.band_kind = None
+        self.band.grid_remove()
+        closed, self._band_closed = getattr(self, "_band_closed", None), None
+        if closed is not None:
+            closed()
+        self.after_idle(self._fill_height)
+
+    def _onboarded(self):
+        self.settings.onboarded = True
+        self._save_settings()
+
+    # --- link field ---------------------------------------------------------
+
+    def clear_url(self):
+        """The ✕ in the link field: empty it (and drop what was analysed for it)."""
+        self.url_entry.delete(0, "end")
+        self._on_url_changed()
+        self._update_clear_url()
+        if not self.is_busy():
+            self._show_media(lambda: tr("link.hint"), MUTED)
+        self.url_entry.focus_set()
+
+    def _update_clear_url(self):
+        try:
+            has_text = bool(self.url_entry.get())
+            if has_text != bool(self.btn_clear_url.winfo_manager()):
+                if has_text:
+                    self.btn_clear_url.grid(row=0, column=1, padx=(0, 8), pady=16)
+                else:
+                    self.btn_clear_url.grid_remove()
+        except tkinter.TclError:
+            pass
+
+    # --- activity log (UI-2) ---------------------------------------------------
+
+    def copy_log(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.console.get("1.0", "end-1c"))
+        self._live(self.btn_copy_log, lambda: tr("settings.copied"))
+        self.after(1500, lambda: self._live(self.btn_copy_log, lambda: tr("activity.copy")))
+
+    def clear_log(self):
+        self.console.configure(state="normal")
+        self.console.delete("1.0", "end")
+        self.console.configure(state="disabled")
+
+    # --- the file just downloaded (UI-6) ----------------------------------------------
+
+    def open_last_file(self):
+        if self.last_file and os.path.exists(self.last_file):
+            try:
+                open_file(self.last_file)
+            except OSError as e:
+                messagebox.showerror(tr("done.open_file"), str(e), parent=self)
+
+    def show_last_file(self):
+        if self.last_file:
+            try:
+                show_in_folder(self.last_file)
+            except OSError as e:
+                messagebox.showerror(tr("done.show_file"), str(e), parent=self)
+
+    def _show_done_buttons(self, show):
+        if show:
+            self.done_buttons.grid(row=1, column=2, rowspan=3, sticky="e", padx=(8, 16))
+        else:
+            self.done_buttons.grid_remove()
+
+    def _add_tooltips(self):
+        """Explain what the buttons do when the pointer rests on them (UI-16)."""
+        for widget, key in ((self.btn_paste, "tip.paste"), (self.btn_analyze, "tip.analyze"),
+                            (self.btn_download, "tip.download"), (self.btn_cancel, "tip.cancel"),
+                            (self.btn_retry, "tip.retry"), (self.chk_subtitles, "tip.subtitles"),
+                            (self.chk_sponsorblock, "tip.sponsorblock"), (self.chk_trim, "tip.trim"),
+                            (self.btn_open, "tip.open_folder"), (self.btn_dest, "tip.change_folder"),
+                            (self.btn_history, "tip.history"), (self.btn_settings, "tip.settings"),
+                            (self.btn_home, "tip.home"), (self.btn_copy_log, "tip.copy_log"),
+                            (self.btn_clear_log, "tip.clear_log")):
+            tooltip(widget, lambda key=key: tr(key))
 
     # --- small UI helpers ---------------------------------------------------
 
@@ -1774,6 +2516,8 @@ class App(ctk.CTk):
     def _show_progress(self, fraction, text, detail=""):
         """``text`` and ``detail`` are strings, or functions for translated text."""
         self.progress_bar.set(fraction)
+        if self._job_total > 1:  # the whole job: items done plus this one's part
+            self.overall_bar.set((self._job_position - 1 + max(0.0, min(1.0, fraction))) / self._job_total)
         self._live(self.lbl_progress, text if callable(text) else (lambda: text))
         if self.tray is not None and self.state() == "withdrawn":
             self.tray.set_title(f"{APP_NAME} · {text() if callable(text) else text}")
@@ -1783,6 +2527,11 @@ class App(ctk.CTk):
     def _show_stage(self, text):
         self._live(self.lbl_detail, lambda: i18n.tr_message(text))
     def _on_item_started(self, position, total, title):
+        self._job_position, self._job_total = position, total
+        if total > 1:
+            self.overall_bar.set((position - 1) / total)
+            self.lbl_overall.configure(text=f"{position} / {total}")
+            self.overall.grid(row=4, column=1, sticky="ew", padx=(0, 16), pady=(4, 0))
         if total > 1:
             self._live(self.lbl_item, lambda: tr("progress.item", position=position, total=total, title=title))
         else:
@@ -1846,12 +2595,16 @@ class App(ctk.CTk):
                 messagebox.showinfo(tr("reddit.ask_title"), self.reddit_status(), parent=self)
         if name == "close_to_tray":
             self._apply_tray()
+        if name == "verbose_log":
+            logic.set_verbose(value)
+            app_setup.set_verbose_logging(value)
         if name == "accent":
             recolor(self, apply_accent(value))
 
         elif name == "text_size":
+            smaller = settings_store.TEXT_SIZES[value] < ctk.ScalingTracker.get_widget_scaling(self)
             ctk.set_widget_scaling(settings_store.TEXT_SIZES[value])
-            self.after(50, self._fit_to_content)
+            self._fit_after_rescale(shrink=smaller)
         elif name == "language":
             i18n.set_language(value)
             self._apply_language()
@@ -1859,12 +2612,24 @@ class App(ctk.CTk):
     LOG_HEIGHT = 100  # activity box height the window is sized for
     LOG_MIN_HEIGHT = 60
 
-    def _fit_to_content(self):
+    DEFAULT_SIZE = (1040, 800)  # the window's size at the first start (units)
+
+    def _fit_after_rescale(self, shrink=False):
+        """Fit the window after a text size change, and again once CustomTkinter
+        lets it change size: after a scaling change it holds the window at its
+        old size for a second (maxsize, on Windows), so the first fit alone
+        could leave Larger text scrolling in a window that has room to grow."""
+        self.after(50, lambda: self._fit_to_content(shrink=shrink))
+        self.after(1100, lambda: self._fit_to_content(shrink=shrink))
+
+    def _fit_to_content(self, shrink=False):
         """Fit the window to its content within the screen's work area.
 
         Larger text sizes need more room: the window grows up to the work
         area, so the taskbar stays visible. If that is still not enough the
-        content scrolls instead of being cut off.
+        content scrolls instead of being cut off. ``shrink`` (a smaller text
+        size) lets the window become smaller again, down to what the
+        content needs or the first-start size, whichever is larger.
         """
         try:
             self.console.configure(height=self.LOG_HEIGHT)
@@ -1876,8 +2641,12 @@ class App(ctk.CTk):
             # Never narrower than the top bar, whose navigation grows with the
             # text size and the language.
             base_min = (max(self.MIN_SIZE[0] * scale, self.top_bar.winfo_reqwidth()), self.MIN_SIZE[1] * scale)
-            width = max(self.winfo_width(), need[0])
-            height = max(self.winfo_height(), need[1])
+            if shrink:
+                width = max(need[0], round(self.DEFAULT_SIZE[0] * scale), base_min[0])
+                height = max(need[1], round(self.DEFAULT_SIZE[1] * scale))
+            else:
+                width = max(self.winfo_width(), need[0])
+                height = max(self.winfo_height(), need[1])
             # The content scrolls when the window is made smaller than it.
             place_on_screen(self, width, height, min_px=base_min)
             self.after_idle(self._fill_height)
@@ -1908,6 +2677,7 @@ class App(ctk.CTk):
         self.close_history()
         self._build_settings_view()
         self.main_frame.grid_remove()
+        self.action_bar.grid_remove()
         self._sync_nav()
         self.settings_view.btn_back.focus_set()
     def toggle_settings(self):
@@ -1920,31 +2690,126 @@ class App(ctk.CTk):
             self._build_settings_view()
             self.settings_view.cmb_language.focus_set()
     def _build_settings_view(self):
+        tab = self.settings_view.tab if self.settings_view is not None else self._settings_tab
         if self.settings_view is not None:
             self.settings_view.destroy()
         self.settings_view = SettingsView(self, self.settings, self._on_setting_changed, self.close_settings,
                                           on_check_updates=lambda: self.check_for_updates(manual=True),
-                                          update_status=self._update_status)
+                                          update_status=self._update_status, tab=tab,
+                                          actions={"test_connection": self.test_connection,
+                                                   "copy_diagnostics": self.diagnostics,
+                                                   "forget_archive": self.forget_archive,
+                                                   "reset": self.reset_settings},
+                                          versions=self.versions())
         self.settings_view.grid(row=1, column=0, sticky="nsew")
     def close_settings(self):
         """Back to the download page."""
         if self.settings_view is None:
             return
+        self._settings_tab = self.settings_view.tab
         self.settings_view.destroy()
         self.settings_view = None
         self.main_frame.grid()
+        self.action_bar.grid()
         self._sync_nav()
         self.after_idle(self._fill_height)
+    # --- Settings › Advanced and About ---------------------------------------------
+
+    def test_connection(self):
+        """Reach a site (through the proxy, when one is set) on a worker thread."""
+        proxy = self.settings.proxy
+
+        def work():
+            seconds, error = logic.check_connection(proxy)
+            self.events.post(events.CONNECTION_TESTED, seconds=seconds, error=error)
+        threading.Thread(target=work, name="orbida-connection-test", daemon=True).start()
+        return True
+
+    def _on_connection_tested(self, seconds, error):
+        if error:
+            self._append_log(tr("settings.test_failed", error=i18n.tr_message(error)))
+        if self.settings_view is not None:
+            self.settings_view.show_test_result(seconds, error)
+
+    def versions(self):
+        """(name, version) of the parts Orbida runs on, for About."""
+        import platform
+        ffmpeg = self.tools.version.split("-")[0] if self.tools is not None and self.tools.version else "-"
+        return [("yt-dlp", ytdlp_updates.running_version()), ("FFmpeg", ffmpeg),
+                ("Python", platform.python_version()), (tr("about.system"), platform.platform(terse=True))]
+
+    def diagnostics(self):
+        """Text for a bug report (Settings › Advanced › Copy diagnostics)."""
+        return app_setup.diagnostics(self.settings, self.tools, ytdlp_updates.running_version(),
+                                     os.path.join(app_setup.log_dir(), "app.log"))
+
+    def forget_archive(self):
+        """Forget every link downloaded before; playlists then offer every entry as new."""
+        if not messagebox.askyesno(tr("settings.forget_archive"), tr("settings.forget_archive_confirm"),
+                                   parent=self):
+            return False
+        self.archive.clear()
+        self._append_log(tr("log.archive_cleared"))
+        return True
+
+    # Settings a reset keeps: where files go, and what the app remembers about itself.
+    KEPT_ON_RESET = ("download_folder", "last_version", "onboarded", "window_geometry", "skipped_version")
+
+    def reset_settings(self, confirm=True):
+        """Every setting back to its default (the download folder stays)."""
+        if confirm and not messagebox.askyesno(tr("settings.reset"), tr("settings.reset_confirm"), parent=self):
+            return False
+        old = self.settings
+        fresh = settings_store.Settings(**{name: getattr(old, name) for name in self.KEPT_ON_RESET})
+        self.settings = fresh.normalized(default_download_dir())
+        logic.set_network_options(self.settings.proxy)
+        logic.set_verbose(self.settings.verbose_log)
+        app_setup.set_verbose_logging(self.settings.verbose_log)
+        self._apply_reddit_sign_in()
+        self._apply_tray()
+        self._watch_clipboard()
+        for widget, on in ((self.chk_subtitles, self.settings.subtitles),
+                           (self.chk_sponsorblock, self.settings.sponsorblock)):
+            widget.select() if on else widget.deselect()
+        self._auto_mode = None
+        self._apply_mode(self.settings.mode, self.settings.format, self.settings.quality)
+        if old.accent != self.settings.accent:
+            recolor(self, apply_accent(self.settings.accent))
+        if old.theme != self.settings.theme:
+            self._on_theme_changed(self.settings.theme)
+        if old.text_size != self.settings.text_size:
+            ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
+            self._fit_after_rescale(shrink=True)
+        if old.language != self.settings.language:
+            i18n.set_language(self.settings.language)
+            self._apply_language()  # also rebuilds the settings page
+        self._save_settings()
+        self._rebuild_settings_view()
+        self._append_log(tr("log.settings_reset"))
+        return True
+
     def open_history(self):
         """Show the History page in place of the download page."""
         if self.history_view is not None:
             return
         self.close_settings()
-        self.history_view = HistoryView(self, self.history, self.close_history)
+        self.history_view = HistoryView(self, self.history, self.close_history,
+                                        on_download_again=self.download_again)
         self.history_view.grid(row=1, column=0, sticky="nsew")
         self.main_frame.grid_remove()
+        self.action_bar.grid_remove()
         self._sync_nav()
         self.history_view.btn_back.focus_set()
+
+    def download_again(self, url):
+        """History › Download again: back to the download page with the link analysed."""
+        self.close_history()
+        if self.is_busy():
+            self.queue_links([url])
+            return
+        self.url_entry.delete(0, "end")
+        self.url_entry.insert(0, url)
+        self.start_analysis_thread()
 
     def toggle_history(self):
         if self.history_view is None:
@@ -1958,6 +2823,7 @@ class App(ctk.CTk):
         self.history_view.destroy()
         self.history_view = None
         self.main_frame.grid()
+        self.action_bar.grid()
         self._sync_nav()
         self.after_idle(self._fill_height)
 
@@ -1985,9 +2851,13 @@ class App(ctk.CTk):
         return "break"
     def _save_settings(self):
         self.settings.download_folder = self.download_folder
-        self.settings.mode = self.cmb_mode.get()
-        self.settings.format = self.cmb_format.get()
-        self.settings.quality = self.cmb_quality.get()
+        if self._auto_mode is not None:
+            # Audio Only chosen by the app for a Spotify link is not the user's choice.
+            self.settings.mode, self.settings.format, self.settings.quality = self._auto_mode
+        else:
+            self.settings.mode = self.cmb_mode.get()
+            self.settings.format = self.cmb_format.get()
+            self.settings.quality = self.cmb_quality.get()
         settings_store.save(self.settings_path, self.settings)
     def _apply_mode(self, mode, fmt=None, quality=None):
         self.cmb_mode.set(mode)
@@ -1998,6 +2868,8 @@ class App(ctk.CTk):
             self.cmb_quality.set(quality)
     def _on_mode_changed(self, mode, save=True):
         """Offer only the formats and qualities that are valid for ``mode``."""
+        if save:
+            self._auto_mode = None  # the user picked a mode: it is theirs now
         choices = formats.formats_for_mode(mode)
         self.cmb_format.set_choices(choices)
         if self.cmb_format.get() not in choices:
@@ -2230,11 +3102,15 @@ class App(ctk.CTk):
             self.tray = None
             self.show_window()
 
+    def _notifier(self, title, text):
+        """A notification from the tray icon, or from a short-lived one of its own (no PowerShell)."""
+        return tray.show_notification(title, text, self.tray)
+
     def hide_to_tray(self):
         self.withdraw()
         if not self._told_tray:
             self._told_tray = True
-            app_setup.notify(tr("tray.hidden_title"), tr("tray.hidden_body"))
+            app_setup.notify(tr("tray.hidden_title"), tr("tray.hidden_body"), notifier=self._notifier)
 
     def show_window(self):
         if self._closing:
@@ -2315,7 +3191,10 @@ class App(ctk.CTk):
         if url != self.url_entry.get().strip():
             self.url_entry.delete(0, "end")
             self.url_entry.insert(0, url)
-        # A new analysis invalidates the previous queue and progress.
+        # A new analysis invalidates the previous queue, progress and error.
+        if self.band_kind == "error":
+            self.hide_band()
+        self._show_done_buttons(False)
         self.analyzed_url = None
         self.set_queue([])
         self._show_progress(0, "0%")
@@ -2355,7 +3234,9 @@ class App(ctk.CTk):
                 self.events.post(kind, job=cancel, **payload)
         try:
             self.log(tr("log.fetching"))
-            info = self.manager.fetch_info(url, cancel_event=cancel)
+            info = self.manager.fetch_info(
+                url, cancel_event=cancel,
+                progress=lambda count, total: post(events.ANALYSIS_PROGRESS, count=count, total=total))
             if cancel is not None and cancel.is_set():
                 return
             if info is None:
@@ -2366,7 +3247,7 @@ class App(ctk.CTk):
                 post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
                      **({'sign_in': site} if site else {}))
             else:
-                analysis = playlist.analyze(info, url)
+                analysis = playlist.analyze(info, url, allow_live=self.settings.live_from_start)
                 if cancel is not None and cancel.is_set():
                     return
                 if not analysis.is_playlist and analysis.items and info.get('formats'):
@@ -2379,12 +3260,22 @@ class App(ctk.CTk):
         """True for an event of an analysis that was cancelled (or replaced)."""
         return job is not None and (job.is_set() or job is not self._cancel_event)
 
+    def _on_analysis_progress(self, count, total=None, job=None):
+        """A long playlist is being read: "120 / 850 read" (Cancel stops it)."""
+        if self._stale(job) or self._job_kind != "analysis":
+            return
+        if total:
+            self._show_media(lambda: tr("link.read_count_of", count=count, total=total), MUTED)
+        else:
+            self._show_media(lambda: tr("link.read_count", count=count), MUTED)
+
     def _on_analysis_failed(self, message, sign_in=False, job=None):
         if self._stale(job):
             return
         self._append_log(message)
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._show_media(lambda: message, DANGER)
+        self.show_band(lambda: message, "error")
         self._end_job()
         if self._from_queue:
             self._from_queue = False
@@ -2423,9 +3314,15 @@ class App(ctk.CTk):
             self._append_log(tr("log.skipped_entry", title=item.title, reason=i18n.tr_message(item.skip_reason)))
         from_queue, self._from_queue = self._from_queue, False
         if playlist.found_by_search(analysis) and self.cmb_mode.get() != formats.AUDIO_ONLY:
-            # Spotify links are songs: download them as audio (the user can switch back).
+            # Spotify links are songs: download them as audio (the user can
+            # switch back). Only for this link: the saved mode stays the user's.
+            self._auto_mode = (self.cmb_mode.get(), self.cmb_format.get(), self.cmb_quality.get())
             self._apply_mode(formats.AUDIO_ONLY)
             self._append_log(tr("log.spotify"))
+        elif not playlist.found_by_search(analysis) and self._auto_mode is not None:
+            mode, self._auto_mode = self._auto_mode, None
+            self._apply_mode(*mode)
+            self._append_log(tr("log.mode_back", mode=tr(MODE_KEYS[mode[0]])))
         if not analysis.items:
             message = tr("link.nothing")
             if analysis.skipped:
@@ -2441,7 +3338,8 @@ class App(ctk.CTk):
             # the entries not downloaded before.
             items = analysis.items
             if analysis.is_playlist:
-                before = {id(i) for i in playlist.downloaded_before(items, [e.url for e in self.history.entries])}
+                before = {id(i) for i in playlist.downloaded_before(
+                    items, [e.url for e in self.history.entries], self.archive.keys)}
                 items = [i for i in items if id(i) not in before]
                 if not items:
                     self._append_log(tr("log.queue_nothing_new", title=analysis.title))
@@ -2456,7 +3354,8 @@ class App(ctk.CTk):
             self._append_log(tr("log.playlist", title=analysis.title, count=len(analysis.items),
                                 skipped=len(analysis.skipped)))
             self._pending_skipped = [item.as_dict() for item in analysis.skipped]
-            before = playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries])
+            before = playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries],
+                                                self.archive.keys)
             self.playlist_dialog = PlaylistSelector(
                 self, analysis, lambda items: self._on_playlist_selected(url, items), downloaded=before)
         else:
@@ -2590,7 +3489,7 @@ class App(ctk.CTk):
             count = len(links)
             self._live(self.lbl_copied, lambda: tr("clipboard.copied_many", count=count))
         self._live(self.btn_copied, lambda: tr("clipboard.download"))
-        self.copied_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 14))
+        self.copied_row.grid(row=3, column=0, columnspan=4, sticky="ew", padx=16, pady=(0, 14))
 
     def _hide_copied(self):
         self._copied = []
@@ -2604,7 +3503,7 @@ class App(ctk.CTk):
         self._offer = self.use_mix
         self._live(self.lbl_copied, lambda: tr("mix.offer"))
         self._live(self.btn_copied, lambda: tr("mix.download"))
-        self.copied_row.grid(row=3, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 14))
+        self.copied_row.grid(row=3, column=0, columnspan=4, sticky="ew", padx=16, pady=(0, 14))
 
     def use_mix(self):
         """Analyze the whole Mix the last song was opened in (offered after its analysis)."""
@@ -2629,13 +3528,51 @@ class App(ctk.CTk):
             self._append_log(tr("log.queue_cleared"))
         self._show_link_queue()
 
+    QUEUE_ROWS = 5  # waiting links listed; the rest are counted
+
     def _show_link_queue(self):
         count = len(self.link_queue)
-        if count:
-            self._live(self.lbl_queue, lambda: tr("queue.waiting", count=count))
-            self.queue_row.grid(row=2, column=0, columnspan=3, sticky="w", padx=18, pady=(0, 14))
-        else:
+        for row in self.queue_rows:
+            row.destroy()
+        self.queue_rows = []
+        if not count:
             self.queue_row.grid_remove()
+            return
+        self._live(self.lbl_queue, lambda: tr("queue.waiting", count=count))
+        for i, link in enumerate(self.link_queue[:self.QUEUE_ROWS]):
+            row = ctk.CTkFrame(self.queue_list, fg_color=FIELD, corner_radius=FIELD_RADIUS)
+            row.grid(row=i, column=0, sticky="ew", pady=(0, 4))
+            row.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(row, text=f"{i + 1}. {shorten_link(link)}", font=font(12), text_color=TEXT,
+                         anchor="w").grid(row=0, column=0, sticky="ew", padx=(10, 6))
+            for column, (text, tip, action, enabled) in enumerate((
+                    ("\u2191", "queue.up", lambda i=i: self.move_link(i, -1), i > 0),
+                    ("\u2193", "queue.down", lambda i=i: self.move_link(i, 1), i < count - 1),
+                    ("\u2715", "queue.remove", lambda i=i: self.remove_link(i), True)), start=1):
+                button = secondary_button(row, text, action, width=28, height=26,
+                                          state="normal" if enabled else "disabled")
+                button.grid(row=0, column=column, padx=(0, 4 if column < 3 else 6), pady=3)
+                tooltip(button, lambda key=tip: tr(key))
+            self.queue_rows.append(row)
+        if count > self.QUEUE_ROWS:
+            more = ctk.CTkLabel(self.queue_list, text=tr("queue.more", count=count - self.QUEUE_ROWS), font=font(12),
+                                text_color=MUTED, anchor="w")
+            more.grid(row=self.QUEUE_ROWS, column=0, sticky="w", padx=10)
+            self.queue_rows.append(more)
+        self.queue_row.grid(row=2, column=0, columnspan=4, sticky="ew", padx=18, pady=(0, 14))
+
+    def move_link(self, index, step):
+        """Move a waiting link up (step -1) or down (step 1) in the queue."""
+        target = index + step
+        if 0 <= index < len(self.link_queue) and 0 <= target < len(self.link_queue):
+            self.link_queue[index], self.link_queue[target] = self.link_queue[target], self.link_queue[index]
+            self._show_link_queue()
+
+    def remove_link(self, index):
+        """Take one waiting link out of the queue."""
+        if 0 <= index < len(self.link_queue):
+            del self.link_queue[index]
+            self._show_link_queue()
 
     def _next_in_queue(self):
         """Analyze and download the next queued link, if any."""
@@ -2665,7 +3602,8 @@ class App(ctk.CTk):
         if self._job_kind == "download":
             self.toggle_pause()  # the button pauses and resumes while a download runs
             return
-        if not self.download_queue or self.is_busy(): return
+        if not self.download_queue or self.is_busy():
+            return
         if self.chk_trim.get():
             # Kötü trim değerleriyle kuyruğu hiç başlatma
             try:
@@ -2673,12 +3611,12 @@ class App(ctk.CTk):
                     raise TrimError(tr("trim.empty"))
             except TrimError as e:
                 self.log(f"Trim error: {e}")
-                messagebox.showerror(tr("trim.error_title"), str(e), parent=self)
+                messagebox.showerror(tr("trim.error_title"), i18n.tr_message(str(e)), parent=self)
                 return
         error, warning = filenames.check_folder(self.download_folder)
         if error:
-            self._append_log(error)
-            messagebox.showerror(tr("folder.error_title"), error, parent=self)
+            self._append_log(i18n.tr_message(error))
+            messagebox.showerror(tr("folder.error_title"), i18n.tr_message(error), parent=self)
             return
         if warning:
             _log.warning(warning)
@@ -2694,10 +3632,18 @@ class App(ctk.CTk):
             **settings_store.download_speed_options(self.settings),
         }
         if self.settings.subtitles and opts['mode'] != formats.AUDIO_ONLY:
-            opts.update(subtitles=True, subtitle_langs=logic.subtitle_languages(i18n.current()))
+            opts.update(subtitles=True,
+                        subtitle_langs=logic.subtitle_languages(i18n.current(), self.settings.subtitle_langs),
+                        subtitle_format=self.settings.subtitle_format, subtitle_embed=self.settings.subtitle_embed)
         if self.settings.sponsorblock:
-            opts['sponsorblock'] = True
+            opts.update(sponsorblock=True, sponsorblock_categories=self.settings.sponsorblock_categories)
+        if self.settings.live_from_start:
+            opts['live_from_start'] = True
         self._job_mode = opts['mode']
+        self.last_file = None
+        self._show_done_buttons(False)
+        if self.band_kind == "error":
+            self.hide_band()
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
             # The field is free for the next link, which joins the queue.
             self.url_entry.delete(0, "end")
@@ -2765,9 +3711,17 @@ class App(ctk.CTk):
         self.run_queue(items, opts, self._cancel_event, self._pause_event)
     def _on_item_done(self, result):
         self._append_log(describe_result(result))
-        if result.status is ItemStatus.COMPLETED and result.path and self.settings.save_history:
-            self.history.add(result.title, result.path, result.url, self._job_mode or "")
+        if result.status is ItemStatus.COMPLETED and result.path:
+            self.last_file = result.path
+        if result.status is ItemStatus.COMPLETED and self.settings.save_history:
+            # History off also means no record of the link ("only new" in playlists).
+            if result.path:
+                self.history.add(result.title, result.path, result.url, self._job_mode or "", save=False)
+            if result.url:
+                self.archive.add(result.url)
+
     def _on_job_done(self, summary):
+        self.history.flush()
         self._append_log(tr("log.result", summary=summary.headline(
             label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))))
         self.last_summary = summary
@@ -2789,12 +3743,19 @@ class App(ctk.CTk):
             self._show_progress(1, lambda: tr("progress.complete"))
         else:
             self._show_progress(done / len(summary.results) if summary.results else 0, headline)
+        self._job_total = 0
+        self.overall.grid_remove()
+        self._show_done_buttons(bool(done and self.last_file and os.path.exists(self.last_file)))
+        failed = len(summary.with_status(ItemStatus.FAILED))
+        if failed:
+            self.show_band(lambda: tr("band.failed", count=failed), "error",
+                           action=(lambda: tr("action.retry"), self.retry_failed))
         if more:
             self._next_in_queue()
             return
         if not self._in_front():
             # The user is in another window: say that the downloads finished.
-            app_setup.notify(tr(summary.title_key()), headline(), window=self)
+            app_setup.notify(tr(summary.title_key()), headline(), window=self, notifier=self._notifier)
         if done and self.settings.open_folder_when_done:
             self.open_folder()
         if self.settings.show_summary:
@@ -2822,7 +3783,8 @@ class App(ctk.CTk):
         if progress is not None:
             self._last_progress = now
             fraction, text = progress
-            self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=events.detail_from_hook(d, left=tr("progress.left", time="{time}")))
+            detail = events.detail_from_hook(d, left=tr("progress.left", time="{time}"))
+            self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=detail)
 
 
     # --- updates ------------------------------------------------------------
@@ -2844,8 +3806,13 @@ class App(ctk.CTk):
             self._set_update_status(lambda: tr("update.checking"))
 
         def work():
+            channel, skipped = self.settings.update_channel, self.settings.skipped_version
             try:
-                release, error = updates.check(), None
+                # A check at start asks GitHub at most once a day; "Check now" always asks.
+                release, error = updates.check(
+                    channel=channel, skipped="" if manual else skipped,
+                    cache_path=os.path.join(app_setup.data_dir(), "update-check.json"),
+                    max_age=0 if manual else updates.CHECK_EVERY), None
             except updates.UpdateError as e:
                 release, error = None, str(e)
             except Exception as e:  # never let a check break the app
@@ -2898,6 +3865,14 @@ class App(ctk.CTk):
         self._append_log(tr("log.update_available", version=version))
         if manual:
             self.show_update_dialog()
+
+    def skip_update(self, version):
+        self.settings.skipped_version = version
+        self._save_settings()
+        self.available_update = None
+        self.btn_update.pack_forget()
+        self._append_log(tr("log.update_skipped", version=version))
+        self._set_update_status(lambda: tr("update.latest", version=__version__))
 
     def _show_update_button(self):
         version = self.available_update.version

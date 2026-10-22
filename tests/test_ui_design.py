@@ -10,6 +10,7 @@ import pytest
 ctk = pytest.importorskip("customtkinter")
 
 import tkinter  # noqa: E402
+import tkinter.font  # noqa: E402
 
 import events  # noqa: E402
 import i18n  # noqa: E402
@@ -218,8 +219,8 @@ def test_activity_lines_are_translated(monkeypatch):
     monkeypatch.setitem(i18n._catalogs, "tr", {"log.failed": "Başarısız: {title}",
                                                "msg.Cancelled by user": "Kullanıcı iptal etti"})
     i18n.set_language("tr")
-    assert ui.describe_result(ItemResult("u", "A", ItemStatus.FAILED, error="HTTP Error 403")) == \
-        "Başarısız: A (HTTP Error 403)"
+    assert ui.describe_result(ItemResult("u", "A", ItemStatus.FAILED, error="Some new problem")) == \
+        "Başarısız: A (Some new problem)"  # a message Orbida does not know stays as it is
     assert ui.describe_result(ItemResult("u", "B", ItemStatus.CANCELLED, error="Cancelled by user")) == \
         "Cancelled: B (Kullanıcı iptal etti)"  # English for a key the language lacks
 
@@ -350,7 +351,8 @@ def test_folder_is_not_opened_when_nothing_completed(app, monkeypatch):
 @pytest.mark.parametrize("in_front", [True, False])
 def test_finished_downloads_notify_only_in_the_background(app, monkeypatch, in_front):
     shown = []
-    monkeypatch.setattr(ui.app_setup, "notify", lambda title, text, window=None: shown.append((title, text, window)))
+    monkeypatch.setattr(ui.app_setup, "notify",
+                        lambda title, text, window=None, notifier=None: shown.append((title, text, window)))
     monkeypatch.setattr(app, "_in_front", lambda: in_front)
     app.settings.show_summary = False
     app._job_kind = "download"
@@ -412,6 +414,17 @@ def larger_text():
     ctk.set_widget_scaling(1.0)
 
 
+def _heights(window):
+    """The sizes that decide whether the page scrolls, for a failure message."""
+    window.update_idletasks()
+    return {"window": (window.winfo_width(), window.winfo_height()),
+            "canvas": window._scroll_canvas.winfo_height(),
+            "content": window.main_frame.winfo_reqheight(),
+            "cards": [(c.winfo_name(), c.winfo_reqheight()) for c in window.main_frame.winfo_children()
+                      if c.winfo_ismapped()],
+            "fonts": tkinter.font.nametofont("TkDefaultFont").actual()}
+
+
 def _outer_bottom(window):
     return window.winfo_y() + ui.WINDOW_FRAME_PX + window.winfo_height()
 
@@ -422,7 +435,12 @@ def test_larger_text_stays_above_the_taskbar(monkeypatch, larger_text, area_heig
     monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, 1920, area_height))
     window = make_app(monkeypatch)
     try:
+        # Let the start settle first: after a scaling change CustomTkinter
+        # holds every window at its size for a second (_set_scaled_min_max),
+        # which on a slow CI runner still covers this test's fit.
+        pump(window, timeout=1.2)
         window.geometry("+0+300")  # start low, as a restored window might
+        pump(window, timeout=0.2)
         window._fit_to_content()
         pump(window, timeout=0.5)
         assert _outer_bottom(window) <= area_height
@@ -430,17 +448,18 @@ def test_larger_text_stays_above_the_taskbar(monkeypatch, larger_text, area_heig
         content = window.main_frame.winfo_reqheight()
         fits = content <= window._scroll_canvas.winfo_height() + 1
         assert fits != window.content_scrolls
-        assert window.content_scrolls is (area_height < 1000)
+        assert window.content_scrolls is (area_height < 1000), _heights(window)
     finally:
         window.destroy()
 
 
 @needs_display
 def test_activity_box_takes_spare_height(app):
+    pump(app, timeout=1.2)  # the window's own fit at start comes first (see above)
     app.geometry("1040x1000")
     pump(app, timeout=0.5)
     tall = app.console.cget("height")
-    assert tall > app.LOG_HEIGHT
+    assert tall > app.LOG_HEIGHT, _heights(app)
     assert not app.content_scrolls
     app.geometry("1040x640")
     pump(app, timeout=0.5)
@@ -472,10 +491,17 @@ def test_settings_page_fits_without_scrolling(monkeypatch, screen, dpi, text_siz
         window.open_settings()
         pump(window, timeout=0.5)
         view = window.settings_view
+        # The result of an update check takes room too (the longest: a failed check).
+        window._set_update_status(lambda: ui.tr("update.failed"))
         assert not any(isinstance(w, ctk.CTkScrollableFrame) for w in _descendants(view))
-        assert view.content_fits
-        assert view.winfo_reqheight() <= view.winfo_height() + 1
-        assert _outer_bottom(window) <= screen[1] - 40
+        for tab in view.TABS:  # General, Advanced and About
+            view.show_tab(tab)
+            pump(window, timeout=0.4)
+            assert view.content_fits, tab
+            assert view.winfo_reqheight() <= view.winfo_height() + 1, tab
+            assert _outer_bottom(window) <= screen[1] - 40, tab
+            header = view.btn_back.master  # nothing in the header is cut off
+            assert header.winfo_reqwidth() <= header.winfo_width() + 1, tab
     finally:
         window.destroy()
         ctk.set_widget_scaling(1.0)

@@ -70,6 +70,53 @@ KV = r"""
     MDButtonIcon:
         icon: "menu-down"
 
+<SearchField@MDTextField>:
+    mode: "outlined"
+    multiline: False
+    size_hint_y: None
+    MDTextFieldLeadingIcon:
+        icon: "magnify"
+
+# Error, with a button that closes it (B3-6): stays until closed or the next link.
+<ErrorCard@MDCard>:
+    style: "filled"
+    size_hint_y: None
+    height: error_box.height
+    radius: [dp(16)]
+    md_bg_color: app.theme_cls.errorContainerColor
+    MDBoxLayout:
+        id: error_box
+        adaptive_height: True
+        padding: dp(16), dp(12), dp(4), dp(12)
+        spacing: dp(12)
+        MDIcon:
+            icon: "alert-circle-outline"
+            pos_hint: {"center_y": .5}
+            theme_text_color: "Custom"
+            text_color: app.theme_cls.onErrorContainerColor
+        MDLabel:
+            id: error_text
+            text: ""
+            adaptive_height: True
+            pos_hint: {"center_y": .5}
+            theme_text_color: "Custom"
+            text_color: app.theme_cls.onErrorContainerColor
+        MDIconButton:
+            id: error_close
+            icon: "close"
+            pos_hint: {"center_y": .5}
+            theme_icon_color: "Custom"
+            icon_color: app.theme_cls.onErrorContainerColor
+            on_release: app.hide_error()
+
+<LogChunk>:
+    font_size: sp(12)
+    size_hint_y: None
+    height: self.texture_size[1]
+    text_size: self.width, None
+    halign: "left"
+    color: app.theme_cls.onSurfaceVariantColor
+
 <Root>:
     orientation: "vertical"
     md_bg_color: app.theme_cls.surfaceColor
@@ -85,10 +132,12 @@ KV = r"""
                 PageHeader:
                     title: app.title
                     PageAction:
+                        id: btn_paste
                         icon: "content-paste"
                         on_release: app.paste()
 
                 MDScrollView:
+                    id: home_scroll
                     do_scroll_x: False
                     MDBoxLayout:
                         id: home_box
@@ -131,28 +180,31 @@ KV = r"""
                                     id: analyze_text
                                     text: app.tr("link.analyze", app.lang)
 
-                        # Links added while a download runs; they download one after another.
-                        MDBoxLayout:
+                        # Links waiting their turn; tap the text for the list (move up, remove).
+                        # Clear moves to a second line when a translation is long.
+                        StackLayout:
                             id: queue_row
-                            adaptive_height: True
+                            size_hint_y: None
+                            height: self.minimum_height
                             spacing: dp(8)
-                            MDIcon:
-                                icon: "playlist-plus"
-                                pos_hint: {"center_y": .5}
-                                theme_text_color: "Custom"
-                                text_color: app.theme_cls.primaryColor
-                            MDLabel:
-                                id: queue_text
-                                text: ""
-                                bold: True
-                                adaptive_height: True
-                                pos_hint: {"center_y": .5}
                             MDButton:
+                                id: btn_queue
                                 style: "text"
-                                pos_hint: {"center_y": .5}
+                                on_release: app.show_link_queue()
+                                MDButtonIcon:
+                                    icon: "playlist-plus"
+                                MDButtonText:
+                                    id: queue_text
+                                    text: ""
+                            MDButton:
+                                id: btn_queue_clear
+                                style: "text"
                                 on_release: app.clear_link_queue()
                                 MDButtonText:
                                     text: app.tr("queue.clear", app.lang)
+
+                        ErrorCard:
+                            id: error_card
 
                         MDCard:
                             id: media_card
@@ -165,6 +217,13 @@ KV = r"""
                                 adaptive_height: True
                                 padding: dp(16)
                                 spacing: dp(14)
+                                AsyncImage:
+                                    id: media_thumb
+                                    size_hint: None, None
+                                    size: dp(96), dp(54)
+                                    pos_hint: {"center_y": .5}
+                                    fit_mode: "cover"
+                                    on_error: app.thumbnail_failed()
                                 MDIcon:
                                     id: media_icon
                                     icon: "movie-open-outline"
@@ -175,6 +234,7 @@ KV = r"""
                                     orientation: "vertical"
                                     adaptive_height: True
                                     spacing: dp(2)
+                                    pos_hint: {"center_y": .5}
                                     MDLabel:
                                         id: media_title
                                         text: app.tr("activity.welcome", app.lang)
@@ -196,6 +256,17 @@ KV = r"""
                                 id: pick_text
                                 text: app.tr("playlist.title", app.lang)
 
+                        # Why a playlist's entries were left out (B3-4).
+                        MDButton:
+                            id: btn_skipped
+                            style: "text"
+                            on_release: app.show_skipped()
+                            MDButtonIcon:
+                                icon: "information-outline"
+                            MDButtonText:
+                                id: skipped_text
+                                text: ""
+
                         # A song opened inside a YouTube Mix: offer the whole Mix.
                         MDButton:
                             id: btn_mix
@@ -212,8 +283,10 @@ KV = r"""
                             role: "large"
                             adaptive_height: True
 
-                        MDBoxLayout:
-                            adaptive_height: True
+                        StackLayout:
+                            id: mode_row
+                            size_hint_y: None
+                            height: self.minimum_height
                             spacing: dp(8)
                             MDButton:
                                 id: btn_video
@@ -232,8 +305,11 @@ KV = r"""
                                 MDButtonText:
                                     text: app.t("home.audio", app.lang)
 
-                        MDBoxLayout:
-                            adaptive_height: True
+                        # Long translations wrap onto a second line instead of running off the screen.
+                        StackLayout:
+                            id: choice_row
+                            size_hint_y: None
+                            height: self.minimum_height
                             spacing: dp(8)
                             ChoiceButton:
                                 id: btn_quality
@@ -242,94 +318,146 @@ KV = r"""
                                 id: btn_format
                                 on_release: app.choose_format(self)
 
-                        MDBoxLayout:
-                            adaptive_height: True
-                            spacing: dp(12)
-                            MDSwitch:
-                                id: trim_switch
-                                pos_hint: {"center_y": .5}
-                                on_active: app.trim_toggled(self.active)
-                            MDLabel:
-                                text: app.t("home.trim", app.lang)
-                                adaptive_height: True
-                                pos_hint: {"center_y": .5}
-
-                        MDBoxLayout:
-                            id: trim_box
-                            adaptive_height: True
-                            spacing: dp(8)
-                            padding: 0, 0, 0, dp(14)
-                            MDTextField:
-                                id: trim_start
-                                mode: "outlined"
-                                multiline: False
-                                MDTextFieldHintText:
-                                    text: app.tr_label("trim.start", app.lang)
-                                MDTextFieldHelperText:
-                                    text: app.t("home.trim_hint", app.lang)
-                                    mode: "persistent"
-                            MDTextField:
-                                id: trim_end
-                                mode: "outlined"
-                                multiline: False
-                                MDTextFieldHintText:
-                                    text: app.tr_label("trim.end", app.lang)
-                                MDTextFieldHelperText:
-                                    text: app.t("home.trim_hint", app.lang)
-                                    mode: "persistent"
-
+                        # Trimming and the rest stay folded until asked for (B3-2).
                         MDButton:
-                            id: btn_download
-                            style: "filled"
-                            theme_width: "Custom"
-                            size_hint_x: 1
-                            height: dp(56)
-                            on_release: app.download()
+                            id: btn_options
+                            style: "text"
+                            on_release: app.toggle_options()
                             MDButtonIcon:
-                                id: download_icon
-                                icon: "download"
+                                id: options_icon
+                                icon: "chevron-down"
                             MDButtonText:
-                                id: download_text
-                                text: app.tr("action.download", app.lang)
+                                id: options_text
+                                text: app.t("home.more_options", app.lang)
+
+                        MDBoxLayout:
+                            id: options_box
+                            orientation: "vertical"
+                            adaptive_height: True
+                            spacing: dp(14)
+
+                            MDBoxLayout:
+                                adaptive_height: True
+                                spacing: dp(12)
+                                MDSwitch:
+                                    id: trim_switch
+                                    pos_hint: {"center_y": .5}
+                                    on_active: app.trim_toggled(self.active)
+                                MDLabel:
+                                    text: app.t("home.trim", app.lang)
+                                    adaptive_height: True
+                                    pos_hint: {"center_y": .5}
+
+                            MDBoxLayout:
+                                id: trim_box
+                                adaptive_height: True
+                                spacing: dp(8)
+                                padding: 0, 0, 0, dp(14)
+                                MDTextField:
+                                    id: trim_start
+                                    mode: "outlined"
+                                    multiline: False
+                                    MDTextFieldHintText:
+                                        text: app.tr_label("trim.start", app.lang)
+                                    MDTextFieldHelperText:
+                                        text: app.t("home.trim_hint", app.lang)
+                                        mode: "persistent"
+                                MDTextField:
+                                    id: trim_end
+                                    mode: "outlined"
+                                    multiline: False
+                                    MDTextFieldHintText:
+                                        text: app.tr_label("trim.end", app.lang)
+                                    MDTextFieldHelperText:
+                                        text: app.t("home.trim_hint", app.lang)
+                                        mode: "persistent"
+
+                            Hint:
+                                id: options_hint
+                                text: app.t("home.options_hint", app.lang)
 
                         MDCard:
                             id: progress_card
                             style: "filled"
                             size_hint_y: None
-                            height: progress_box.height
+                            height: progress_outer.height
                             radius: [dp(16)]
                             MDBoxLayout:
-                                id: progress_box
+                                id: progress_outer
+                                orientation: "vertical"
                                 adaptive_height: True
                                 padding: dp(16)
-                                spacing: dp(16)
-                                ProgressRing:
-                                    id: progress
-                                    size_hint: None, None
-                                    size: dp(88), dp(88)
-                                    pos_hint: {"center_y": .5}
+                                spacing: dp(8)
                                 MDBoxLayout:
-                                    orientation: "vertical"
+                                    id: progress_box
                                     adaptive_height: True
-                                    spacing: dp(6)
-                                    pos_hint: {"center_y": .5}
-                                    MDLabel:
-                                        id: progress_title
-                                        text: app.tr("progress.ready", app.lang)
-                                        font_style: "Title"
-                                        role: "medium"
-                                        bold: True
+                                    spacing: dp(16)
+                                    ProgressRing:
+                                        id: progress
+                                        size_hint: None, None
+                                        size: dp(88), dp(88)
+                                        pos_hint: {"center_y": .5}
+                                    MDBoxLayout:
+                                        orientation: "vertical"
                                         adaptive_height: True
-                                    Hint:
-                                        id: progress_detail
-                                        text: ""
-                                MDIconButton:
-                                    id: btn_pause
-                                    icon: "pause"
-                                    pos_hint: {"center_y": .5}
-                                    opacity: 0
-                                    disabled: True
-                                    on_release: app.toggle_pause()
+                                        spacing: dp(6)
+                                        pos_hint: {"center_y": .5}
+                                        MDLabel:
+                                            id: progress_title
+                                            text: app.tr("progress.ready", app.lang)
+                                            font_style: "Title"
+                                            role: "medium"
+                                            bold: True
+                                            adaptive_height: True
+                                        Hint:
+                                            id: progress_detail
+                                            text: ""
+                                    MDIconButton:
+                                        id: btn_pause
+                                        icon: "pause"
+                                        pos_hint: {"center_y": .5}
+                                        opacity: 0
+                                        disabled: True
+                                        on_release: app.toggle_pause()
+                                # After a download: open or share the file, retry, download again (B3-5, B4-5).
+                                StackLayout:
+                                    id: done_row
+                                    size_hint_y: None
+                                    height: self.minimum_height
+                                    spacing: dp(8)
+                                    MDButton:
+                                        id: btn_open_file
+                                        style: "tonal"
+                                        on_release: app.open_last_file()
+                                        MDButtonIcon:
+                                            icon: "play-circle-outline"
+                                        MDButtonText:
+                                            text: app.tr("done.open_file", app.lang)
+                                    MDButton:
+                                        id: btn_share_file
+                                        style: "outlined"
+                                        on_release: app.open_last_file(share=True)
+                                        MDButtonIcon:
+                                            icon: "share-variant-outline"
+                                        MDButtonText:
+                                            text: app.t("history.share", app.lang)
+                                    MDButton:
+                                        id: btn_retry
+                                        style: "outlined"
+                                        on_release: app.retry_failed()
+                                        MDButtonIcon:
+                                            icon: "refresh"
+                                        MDButtonText:
+                                            id: retry_text
+                                            text: app.tr("action.retry", app.lang)
+                                    MDButton:
+                                        id: btn_again
+                                        style: "text"
+                                        on_release: app.download_again()
+                                        MDButtonIcon:
+                                            icon: "download-multiple"
+                                        MDButtonText:
+                                            text: app.tr("history.again", app.lang)
 
                         MDBoxLayout:
                             id: week_row
@@ -369,14 +497,70 @@ KV = r"""
                                 id: details_text
                                 text: app.t("home.details", app.lang)
 
-                        MDLabel:
-                            id: log
-                            text: ""
-                            font_style: "Body"
-                            role: "small"
-                            adaptive_height: True
-                            theme_text_color: "Custom"
-                            text_color: app.theme_cls.onSurfaceVariantColor
+                        # The activity log (AN-7): wrapped lines, scrolls on its own, Copy and Clear.
+                        MDCard:
+                            id: log_card
+                            style: "outlined"
+                            size_hint_y: None
+                            height: log_outer.height
+                            radius: [dp(12)]
+                            MDBoxLayout:
+                                id: log_outer
+                                orientation: "vertical"
+                                adaptive_height: True
+                                padding: dp(12), dp(8)
+                                spacing: dp(4)
+                                ScrollView:
+                                    id: log_scroll
+                                    size_hint_y: None
+                                    height: min(dp(320), log.height)
+                                    do_scroll_x: False
+                                    bar_width: dp(4)
+                                    BoxLayout:
+                                        id: log
+                                        orientation: "vertical"
+                                        size_hint_y: None
+                                        height: self.minimum_height
+                                MDBoxLayout:
+                                    adaptive_height: True
+                                    spacing: dp(8)
+                                    Widget:
+                                    MDButton:
+                                        id: btn_log_copy
+                                        style: "text"
+                                        on_release: app.copy_log()
+                                        MDButtonIcon:
+                                            icon: "content-copy"
+                                        MDButtonText:
+                                            text: app.tr("activity.copy", app.lang)
+                                    MDButton:
+                                        id: btn_log_clear
+                                        style: "text"
+                                        on_release: app.clear_log()
+                                        MDButtonIcon:
+                                            icon: "delete-outline"
+                                        MDButtonText:
+                                            text: app.tr("activity.clear", app.lang)
+
+                # Download / Cancel stays on screen while the page scrolls (B3-1).
+                MDBoxLayout:
+                    id: action_bar
+                    adaptive_height: True
+                    padding: dp(16), dp(8), dp(16), dp(8)
+                    md_bg_color: app.theme_cls.surfaceColor
+                    MDButton:
+                        id: btn_download
+                        style: "filled"
+                        theme_width: "Custom"
+                        size_hint_x: 1
+                        height: dp(56)
+                        on_release: app.download()
+                        MDButtonIcon:
+                            id: download_icon
+                            icon: "download"
+                        MDButtonText:
+                            id: download_text
+                            text: app.tr("action.download", app.lang)
 
         MDScreen:
             name: "history"
@@ -385,8 +569,18 @@ KV = r"""
                 PageHeader:
                     title: app.t("nav.history", app.lang)
                     PageAction:
+                        id: btn_clear_history
                         icon: "delete-sweep-outline"
                         on_release: app.confirm_clear_history()
+                MDBoxLayout:
+                    id: history_search_box
+                    adaptive_height: True
+                    padding: dp(16), 0, dp(16), dp(4)
+                    SearchField:
+                        id: history_search
+                        on_text: app.search_history(self.text)
+                        MDTextFieldHintText:
+                            text: app.tr("history.search", app.lang)
                 MDScrollView:
                     do_scroll_x: False
                     MDList:
@@ -399,6 +593,15 @@ KV = r"""
                 orientation: "vertical"
                 PageHeader:
                     title: app.t("nav.settings", app.lang)
+                MDBoxLayout:
+                    id: settings_search_box
+                    adaptive_height: True
+                    padding: dp(16), 0, dp(16), dp(4)
+                    SearchField:
+                        id: settings_search
+                        on_text: app.search_settings(self.text)
+                        MDTextFieldHintText:
+                            text: app.t("settings.search", app.lang)
                 MDScrollView:
                     do_scroll_x: False
                     MDList:

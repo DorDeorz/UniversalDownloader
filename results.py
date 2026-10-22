@@ -5,9 +5,15 @@ say exactly which items completed, failed, were skipped or were cancelled
 instead of an unconditional "Finished!".
 """
 
+import json
+import logging
 import os
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
+
+_log = logging.getLogger(__name__)
 
 
 class ItemStatus(str, Enum):
@@ -122,4 +128,44 @@ def verify_output(path):
         return f"Output file was not created: {path}"
     if os.path.getsize(path) == 0:
         return f"Output file is empty: {path}"
+    return None
+
+
+PROBE_TIMEOUT = 60
+DAMAGED = "The downloaded file is damaged or incomplete"
+NO_VIDEO_TRACK = "The downloaded file has no video track"
+NO_AUDIO_TRACK = "The downloaded file has no audio track"
+
+
+def probe_output(path, ffprobe, need_video=False, need_audio=False, run=subprocess.run):
+    """Error text when ffprobe cannot read the finished file or misses a track, else None.
+
+    A file that ffprobe cannot open, or that has no streams at all, is
+    damaged (a cut-off download that looked finished). ``need_video`` and
+    ``need_audio`` ask for a video track (a cover image does not count) and
+    an audio track. Without ffprobe, or when it does not answer, the file is
+    taken as it is.
+    """
+    if not ffprobe:
+        return None
+    command = [ffprobe, "-v", "error", "-show_entries", "stream=codec_type:stream_disposition=attached_pic",
+               "-of", "json", path]
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    try:
+        proc = run(command, capture_output=True, text=True, timeout=PROBE_TIMEOUT, creationflags=flags)
+    except (OSError, subprocess.SubprocessError) as e:
+        _log.warning("Could not check %s with ffprobe: %s", path, e)
+        return None
+    try:
+        streams = json.loads(proc.stdout or "{}").get("streams") or []
+    except ValueError:
+        streams = []
+    if proc.returncode != 0 or not streams:
+        _log.warning("ffprobe cannot read %s: %s", path, (proc.stderr or "").strip()[:500])
+        return DAMAGED
+    kinds = {s.get("codec_type") for s in streams if not (s.get("disposition") or {}).get("attached_pic")}
+    if need_video and "video" not in kinds:
+        return NO_VIDEO_TRACK
+    if need_audio and "audio" not in kinds:
+        return NO_AUDIO_TRACK
     return None

@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import ssl
+import time
 import urllib.request
 from dataclasses import dataclass
 
@@ -28,6 +29,10 @@ _log = logging.getLogger(__name__)
 
 TAG_PREFIX = "orbida-v"
 LATEST_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+# The newest releases, pre-releases included (the beta channel).
+RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=20"
+CHANNELS = ("stable", "beta")
+CHECK_EVERY = 24 * 3600   # an automatic check asks GitHub at most once a day
 RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
 SUMS_NAME = "SHA256SUMS.txt"
 TIMEOUT = 20
@@ -71,14 +76,16 @@ class Release:
     page: str          # the release's web page
     notes: str         # release notes (Markdown)
     assets: dict       # file name -> download URL
+    prerelease: bool = False
 
     def asset_url(self, name):
         return self.assets.get(name)
 
 
-def parse_release(data):
-    """A :class:`Release` from GitHub's release JSON, or None if it is not an Orbida release."""
-    if not isinstance(data, dict) or data.get("draft") or data.get("prerelease"):
+def parse_release(data, allow_prerelease=False):
+    """A :class:`Release` from GitHub's release JSON, or None if it is not an Orbida release
+    (or a pre-release, unless ``allow_prerelease``)."""
+    if not isinstance(data, dict) or data.get("draft") or (data.get("prerelease") and not allow_prerelease):
         return None
     version = version_from_tag(data.get("tag_name"))
     if version is None:
@@ -89,7 +96,7 @@ def parse_release(data):
                 and isinstance(asset.get("browser_download_url"), str):
             assets[asset["name"]] = asset["browser_download_url"]
     return Release(version, data["tag_name"], data.get("html_url") or RELEASES_PAGE,
-                   data.get("body") or "", assets)
+                   data.get("body") or "", assets, bool(data.get("prerelease")))
 
 
 def parse_sums(text):
@@ -110,8 +117,9 @@ def _context():
         return ssl.create_default_context()
 
 
-def _open(url, accept="application/octet-stream"):
-    headers = {"Accept": accept, "User-Agent": f"Orbida/{__version__} (+https://github.com/{GITHUB_REPO})"}
+def _open(url, accept="application/octet-stream", headers=None):
+    headers = {"Accept": accept, "User-Agent": f"Orbida/{__version__} (+https://github.com/{GITHUB_REPO})",
+               **(headers or {})}
     if logic.network_proxy():
         # The proxy the user set for downloads (urllib cannot use a SOCKS one).
         return logic.open_through_proxy(url, headers, timeout=TIMEOUT)
@@ -119,27 +127,82 @@ def _open(url, accept="application/octet-stream"):
     return urllib.request.urlopen(request, timeout=TIMEOUT, context=_context())
 
 
-def fetch_latest(opener=None):
-    """The latest Orbida release, or None when there is none.
+def _read_cache(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
-    Raises :class:`UpdateError` when GitHub cannot be reached or answers
-    with something unexpected.
+
+def _write_cache(path, cache):
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+        os.replace(path + ".tmp", path)
+    except OSError as e:
+        _log.info("Could not save the update check: %s", e)
+
+
+def fetch_json(url, opener=None, cache_path=None, max_age=0, now=None):
+    """GitHub's JSON answer for ``url``, kept in ``cache_path``.
+
+    An answer younger than ``max_age`` seconds is used without asking
+    again. An older one is asked for with its ETag: GitHub answers
+    "304 Not Modified" without the data, and such answers do not count
+    against GitHub's hourly limit of 60 requests.
     """
     opener = opener or _open
+    now = time.time() if now is None else now
+    cache = _read_cache(cache_path) if cache_path else {}
+    kept = cache.get(url) if isinstance(cache.get(url), dict) else None
+    if kept and "data" in kept and 0 <= now - float(kept.get("time") or 0) < max_age:
+        return kept["data"]
+    etag = (kept or {}).get("etag") if kept and "data" in kept else None
+    accept = "application/vnd.github+json"
     try:
-        with opener(LATEST_URL, "application/vnd.github+json") as response:
+        with (opener(url, accept, {"If-None-Match": etag}) if etag else opener(url, accept)) as response:
             data = json.loads(response.read().decode("utf-8"))
+            headers = getattr(response, "headers", None) or {}
+            etag = headers.get("ETag") if hasattr(headers, "get") else None
+    except Exception as e:
+        if getattr(e, "code", None) != 304 or not kept:
+            raise
+        data = kept["data"]  # not modified
+    if cache_path:
+        cache[url] = {"time": now, "etag": etag, "data": data}
+        _write_cache(cache_path, cache)
+    return data
+
+
+def fetch_latest(opener=None, channel="stable", cache_path=None, max_age=0):
+    """The latest Orbida release, or None when there is none.
+
+    ``channel`` "beta" also counts pre-releases. See fetch_json for
+    ``cache_path`` and ``max_age``. Raises :class:`UpdateError` when GitHub
+    cannot be reached or answers with something unexpected.
+    """
+    beta = channel == "beta"
+    try:
+        data = fetch_json(RELEASES_URL if beta else LATEST_URL, opener, cache_path, max_age)
     except Exception as e:
         if getattr(e, "code", None) == 404:
             return None  # no release published yet
         raise UpdateError(f"Could not check for updates: {e}") from e
-    return parse_release(data)
+    if not beta:
+        return parse_release(data)
+    releases = [parse_release(item, allow_prerelease=True) for item in data] if isinstance(data, list) else []
+    releases = [r for r in releases if r is not None]
+    return max(releases, key=lambda r: parse_version(r.version), default=None)
 
 
-def check(current=__version__, opener=None):
-    """The latest release when it is newer than ``current``, else None."""
-    release = fetch_latest(opener)
-    if release is not None and is_newer(release.version, current):
+def check(current=__version__, opener=None, channel="stable", skipped="", cache_path=None, max_age=0):
+    """The latest release when it is newer than ``current`` and not the
+    version the user chose to skip, else None."""
+    release = fetch_latest(opener, channel, cache_path, max_age)
+    if release is not None and is_newer(release.version, current) and release.version != skipped:
         return release
     return None
 

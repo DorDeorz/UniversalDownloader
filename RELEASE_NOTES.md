@@ -1,15 +1,73 @@
-**Orbida 1.2.3** pauses and resumes downloads, keeps yt-dlp up to date
-on its own, signs in to Instagram and age-restricted YouTube videos, and
-fixes the problems two code reviews found. This release holds both apps
-and the Firefox add-on:
+**Orbida 1.2.4** continues a failed download where it stopped, checks
+every finished file, saves subtitles in several languages, and reworks the
+Download, History and Settings pages of both apps. This release holds both
+apps and the Firefox add-on:
 
-- **Windows:** `Orbida-Setup-1.2.3.exe`, for Windows 10 or 11 (64-bit).
-- **Android:** `Orbida-1.2.3.apk`, for 64-bit ARM phones with Android 7 or newer.
-- **Firefox:** `Orbida-Firefox-1.2.3.xpi`, the browser extension signed by Mozilla.
+- **Windows:** `Orbida-Setup-1.2.4.exe`, for Windows 10 or 11 (64-bit).
+- **Android:** `Orbida-1.2.4.apk`, for 64-bit ARM phones with Android 7 or newer.
+- **Firefox:** `Orbida-Firefox-1.2.4.xpi`, the browser extension signed by Mozilla.
 
 Orbida 1.0 updates itself to this version: on Windows click **Update to
-1.2.3** in the top bar; on Android open Settings › About › Check for
+1.2.4** in the top bar; on Android open Settings › About › Check for
 updates.
+
+## New in 1.2.4
+
+**Both apps:**
+- **Subtitles in several languages**, as srt, ass or vtt, and embedded into
+  the video if you like (Windows: Settings › Advanced; Android: Settings ›
+  Downloads).
+- **SponsorBlock parts** can be chosen (sponsor, self-promotion, intro,
+  outro, reminders, music off-topic).
+- **Update channel:** stable or beta, and **Skip this version** when an
+  update is offered.
+- **History:** search, Show more, Download again, and Undo after Remove
+  (removing never deletes the file); dates in your system's format.
+- **Playlist picker:** search, entries left out with the reason, and pages
+  of 100 rows, so playlists of thousands open at once.
+- **After a download:** Open the file, Retry the failed ones, Download
+  again.
+- **Waiting links** can be moved up or down or taken out of the queue.
+- **Errors stay** in a card or band until you close them.
+- **The activity log** wraps, scrolls and has Copy and Clear.
+- Spotify songs match better: the name counts too, and live takes, covers
+  and remixes lose to the song. Long Spotify playlists are read faster.
+
+**Windows:**
+- **A failed download continues** from its partial files on the next try.
+  Only the same video with the same formats and file type continues;
+  partial files older than 7 days are deleted.
+- **Every finished file is checked** with ffprobe: it opens and has the
+  tracks its mode promises.
+- **Settings has tabs:** General, Advanced (subtitles, SponsorBlock,
+  connection test, detailed log, Copy diagnostics, live streams from their
+  start, update channel, forget downloaded links, reset settings) and About
+  (versions, What's new, licenses). Every tab fits a 1366×768 screen with
+  Larger text.
+- **Live streams** can be downloaded from their start.
+- **Only new** in playlists now uses its own download list, so it keeps
+  working after the history is cleared.
+- The Download, Pause and Cancel buttons stay at the bottom; a clear button
+  in the link field; long titles wrap; a bar for jobs of several items;
+  tooltips and first-run tips.
+- The window opens where it was closed, and shrinks back after a smaller
+  text size.
+- Names Windows reserves (CON, NUL, COM1...) and very long folders are
+  handled; more yt-dlp errors are translated.
+- Notifications come from Orbida's tray icon; the update check runs at most
+  once a day.
+
+**Android:**
+- **Notification buttons:** Pause/Resume and Cancel while downloading, Open
+  when finished.
+- A single video shows its picture and about how big the file will be.
+- The Download button stays at the bottom; trimming sits under **More
+  options**; a long playlist shows how much has been read.
+- Settings has search, a **Licenses** page and an option to stop Android
+  from pausing downloads to save battery.
+- Landscape and tablets; the sign-in page follows the dark theme; screen
+  readers hear tab changes and results.
+- The playlist choice is remembered per playlist.
 
 ## New in 1.2.3
 
@@ -171,7 +229,7 @@ Before this version, the Windows app was called Universal Video Downloader.
 - New downloads go to `Downloads\Orbida` by default. A folder you chose
   before stays the same.
 
-**Install:** run `Orbida-Setup-1.2.3.exe`. It installs for your user only,
+**Install:** run `Orbida-Setup-1.2.4.exe`. It installs for your user only,
 with no administrator password. FFmpeg, ffprobe and Deno are included.
 The setup is not code-signed, so SmartScreen may say "Windows protected
 your PC". Click **More info**, then **Run anyway**.

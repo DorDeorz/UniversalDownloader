@@ -124,6 +124,49 @@ def configure_logging(folder=None):
     return path
 
 
+def set_verbose_logging(on):
+    """Settings › Detailed log: debug lines (yt-dlp's too) go to the log file as well."""
+    logging.getLogger().setLevel(logging.DEBUG if on else logging.INFO)
+
+
+def log_tail(path, lines=150):
+    """The last ``lines`` lines of the text file at ``path`` ("" when it cannot be read)."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - 200 * 1024))
+            text = f.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+    return "\n".join(text.splitlines()[-lines:])
+
+
+def diagnostics(settings=None, tools=None, ytdlp_version=None, log_path=None, lines=150):
+    """Text to paste into a bug report: versions, the tools found, the
+    settings (the proxy only as set or not, as it may hold a password) and
+    the end of the log."""
+    import platform
+    out = [f"{APP_NAME} {__version__}", f"System: {platform.platform()} ({platform.machine()})",
+           f"Python {sys.version.split()[0]}{' (installed app)' if getattr(sys, 'frozen', False) else ''}"]
+    if ytdlp_version:
+        out.append(f"yt-dlp {ytdlp_version}")
+    if tools is not None:
+        out.append(tools.summary())
+    deno = shutil.which("deno")
+    out.append(f"Deno: {deno or 'not found'}")
+    if settings is not None:
+        values = dict(vars(settings)) if not isinstance(settings, dict) else dict(settings)
+        if values.get("proxy"):
+            values["proxy"] = "(set)"
+        values.pop("download_folder", None)
+        out.append("Settings: " + json.dumps(values, sort_keys=True, ensure_ascii=False))
+    if log_path:
+        tail = log_tail(log_path, lines)
+        if tail:
+            out += ["", f"Log ({os.path.basename(log_path)}, last {lines} lines):", tail]
+    return "\n".join(out)
+
+
 def set_app_user_model_id():
     """Group the taskbar icon correctly on Windows; a no-op elsewhere."""
     if sys.platform != "win32":
@@ -152,17 +195,26 @@ _FLASHW_ALL = 0x3
 _FLASHW_TIMERNOFG = 0xC
 
 
-def notify(title, text, window=None, popen=subprocess.Popen):
+def notify(title, text, window=None, popen=subprocess.Popen, notifier=None):
     """Tell the user on Windows that something finished while they looked elsewhere.
 
-    Shows a notification (toast) and flashes ``window``'s taskbar button.
-    Windows shows the toast only for an installed Orbida, whose Start menu
-    shortcut carries APP_USER_MODEL_ID. A no-op elsewhere; never raises.
+    Shows a notification and flashes ``window``'s taskbar button.
+    ``notifier(title, text)`` (tray.show_notification) shows it from
+    Orbida's notification-area icon, which starts no other program; only
+    when that fails is a toast shown through PowerShell. Windows shows that
+    toast only for an installed Orbida, whose Start menu shortcut carries
+    APP_USER_MODEL_ID. A no-op elsewhere; never raises.
     """
     if sys.platform != "win32":
         return False
     if window is not None:
         _flash(window)
+    if notifier is not None:
+        try:
+            if notifier(title, text):
+                return True
+        except Exception as e:
+            _log.warning("Notification failed: %s", e)
     script = base64.b64encode(_TOAST_SCRIPT.encode("utf-16-le")).decode("ascii")
     env = dict(os.environ, ORBIDA_TOAST_TITLE=title, ORBIDA_TOAST_TEXT=text, ORBIDA_TOAST_APP=APP_USER_MODEL_ID)
     try:

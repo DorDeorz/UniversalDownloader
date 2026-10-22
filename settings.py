@@ -7,6 +7,7 @@ back to defaults, and a damaged file never stops the app from starting.
 import json
 import logging
 import os
+import re
 from dataclasses import MISSING, asdict, dataclass, fields, replace
 
 import formats
@@ -26,6 +27,9 @@ SPEED_LIMITS = (0, 1, 2, 5, 10, 20)
 CLIPBOARD_CHOICES = ("off", "start", "watch")
 # Text size choice -> CustomTkinter widget scaling.
 TEXT_SIZES = {"Normal": 1.0, "Large": 1.15, "Larger": 1.3}
+# Subtitle file types (FFmpeg converts to each) and update channels.
+SUBTITLE_FORMATS = ("srt", "ass", "vtt")
+UPDATE_CHANNELS = ("stable", "beta")
 
 
 @dataclass
@@ -53,6 +57,16 @@ class Settings:
     save_history: bool = True
     check_updates: bool = True   # look for a new version at start
     last_version: str = ""       # version that ran last; "what's new" shows after an update
+    subtitle_langs: str = ""     # "en, tr"; empty: the app's language, then English
+    subtitle_format: str = "srt"  # one of SUBTITLE_FORMATS
+    subtitle_embed: bool = False  # put the subtitles into the video instead of next to it
+    sponsorblock_categories: str = ",".join(formats.SPONSORBLOCK_CATEGORIES)  # cut when sponsorblock is on
+    live_from_start: bool = False  # a live stream downloads from its start, not from now
+    verbose_log: bool = False    # yt-dlp's detailed output in the log file (for bug reports)
+    update_channel: str = "stable"  # one of UPDATE_CHANNELS; beta also offers pre-releases
+    skipped_version: str = ""    # the update the user chose to skip
+    window_geometry: str = ""    # "WxH+X+Y" of the main window when it last closed
+    onboarded: bool = False      # the first-run tips were shown
 
     def normalized(self, default_folder):
         """A copy with every value valid for the current version."""
@@ -71,9 +85,14 @@ class Settings:
             proxy = urls.proxy_url(self.proxy)
         except ValueError:
             proxy = ""
+        subtitle_format = self.subtitle_format if self.subtitle_format in SUBTITLE_FORMATS else "srt"
+        channel = self.update_channel if self.update_channel in UPDATE_CHANNELS else "stable"
+        categories = ",".join(formats.sponsorblock_categories(self.sponsorblock_categories))
+        geometry = self.window_geometry if re.fullmatch(r"\d+x\d+[+-]-?\d+[+-]-?\d+", self.window_geometry) else ""
         return replace(self, download_folder=folder, mode=mode, format=fmt, quality=quality, theme=theme,
                        text_size=text_size, language=language, accent=accent, fragments=fragments,
-                       speed_limit=speed_limit, proxy=proxy)
+                       speed_limit=speed_limit, proxy=proxy, subtitle_format=subtitle_format,
+                       update_channel=channel, sponsorblock_categories=categories, window_geometry=geometry)
 
     @property
     def clipboard(self):

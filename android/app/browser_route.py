@@ -174,7 +174,8 @@ window.__udMint = function (id, binding) {
   }).catch(function (error) { return answer(id, [0, 'mint: ' + (error && error.message || error)]); });
 };
 """
-PAGE_HTML = "<!doctype html><html><head><meta charset=utf-8><script>" + PAGE_SCRIPT + "</script></head><body></body></html>"
+PAGE_HTML = ("<!doctype html><html><head><meta charset=utf-8><script>" + PAGE_SCRIPT
+             + "</script></head><body></body></html>")
 
 _lock = threading.Lock()
 _state = {"bridge": None, "enabled": False, "requests": 0}

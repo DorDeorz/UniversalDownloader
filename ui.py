@@ -12,6 +12,7 @@ import webbrowser
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
+from customtkinter.windows.widgets.core_widget_classes import CTkBaseClass
 
 import app_setup
 import browser_cookies
@@ -109,6 +110,38 @@ def _keep_size_on_state_change(set_cursor):
 
 
 ctk.CTkButton._set_cursor = _keep_size_on_state_change(ctk.CTkButton._set_cursor)
+
+
+def _keep_hidden_on_rescale(base):
+    """Make grid_remove() on CustomTkinter widgets survive a text size change.
+
+    CustomTkinter repeats a widget's last grid() call when the scaling
+    changes, but grid_remove() does not clear that call, so every hidden
+    widget (the closed error band, the queue panel, the finished buttons)
+    came back after the text size was changed. grid_remove() now keeps the
+    call aside, and a bare grid() puts the widget back with it, so its
+    padding still follows the text size.
+    """
+    grid = base.grid
+
+    def grid_remove(self):
+        if self._last_geometry_manager_call is not None:
+            self._hidden_grid_call = self._last_geometry_manager_call
+        self._last_geometry_manager_call = None
+        return tkinter.Grid.grid_remove(self)
+
+    def grid_again(self, **kwargs):
+        hidden = getattr(self, "_hidden_grid_call", None)
+        if not kwargs and hidden is not None:
+            kwargs = dict(hidden["kwargs"])
+        self._hidden_grid_call = None
+        return grid(self, **kwargs)
+
+    base.grid_remove = grid_remove
+    base.grid = grid_again
+
+
+_keep_hidden_on_rescale(CTkBaseClass)
 
 
 def font(size=13, weight="normal"):

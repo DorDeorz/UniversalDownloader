@@ -10,6 +10,7 @@ import pytest
 ctk = pytest.importorskip("customtkinter")
 
 import tkinter  # noqa: E402
+import tkinter.font  # noqa: E402
 
 import events  # noqa: E402
 import i18n  # noqa: E402
@@ -413,6 +414,17 @@ def larger_text():
     ctk.set_widget_scaling(1.0)
 
 
+def _heights(window):
+    """The sizes that decide whether the page scrolls, for a failure message."""
+    window.update_idletasks()
+    return {"window": (window.winfo_width(), window.winfo_height()),
+            "canvas": window._scroll_canvas.winfo_height(),
+            "content": window.main_frame.winfo_reqheight(),
+            "cards": [(c.winfo_name(), c.winfo_reqheight()) for c in window.main_frame.winfo_children()
+                      if c.winfo_ismapped()],
+            "fonts": tkinter.font.nametofont("TkDefaultFont").actual()}
+
+
 def _outer_bottom(window):
     return window.winfo_y() + ui.WINDOW_FRAME_PX + window.winfo_height()
 
@@ -432,7 +444,7 @@ def test_larger_text_stays_above_the_taskbar(monkeypatch, larger_text, area_heig
         content = window.main_frame.winfo_reqheight()
         fits = content <= window._scroll_canvas.winfo_height() + 1
         assert fits != window.content_scrolls
-        assert window.content_scrolls is (area_height < 1000)
+        assert window.content_scrolls is (area_height < 1000), _heights(window)
     finally:
         window.destroy()
 
@@ -443,7 +455,7 @@ def test_activity_box_takes_spare_height(app):
     app.geometry("1040x1000")
     pump(app, timeout=0.5)
     tall = app.console.cget("height")
-    assert tall > app.LOG_HEIGHT
+    assert tall > app.LOG_HEIGHT, _heights(app)
     assert not app.content_scrolls
     app.geometry("1040x640")
     pump(app, timeout=0.5)

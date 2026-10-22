@@ -376,35 +376,49 @@ def test_the_window_comes_back_where_it_was(monkeypatch):
     import ui
     isolate_settings(monkeypatch)
     monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    # A known work area: CI's Windows screen is only 1024x768.
+    monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, 1920, 1040))
     window = new_app()
     pump(window, timeout=0.6)  # its own fit at start first
-    window.geometry("1100x820+40+30")
-    pump(window, lambda: window.winfo_height() == 820, timeout=3)
+    window.geometry("1000x730+40+30")
+    pump(window, lambda: window.winfo_height() == 730, timeout=3)
     window.destroy()
     window = new_app()
     try:
-        pump(window, lambda: window.winfo_height() == 820, timeout=3)
-        assert window.settings.window_geometry.startswith("1100x820")
-        assert (window.winfo_width(), window.winfo_height()) == (1100, 820)
+        pump(window, lambda: window.winfo_height() == 730, timeout=3)
+        assert window.settings.window_geometry.startswith("1000x730")
+        assert (window.winfo_width(), window.winfo_height()) == (1000, 730)
     finally:
         window.destroy()
 
 
 @needs_display
-def test_a_smaller_text_size_shrinks_the_window_again(app):
+def test_a_smaller_text_size_shrinks_the_window_again(app, monkeypatch):
     from ui_helpers import pump
     import customtkinter as ctk
+    import ui
+    # The sizes the window asks for, which do not depend on how big the
+    # screen is (CI's Windows screen is only 1024x768).
+    asked = []
+    place = ui.place_on_screen
+    monkeypatch.setattr(ui, "place_on_screen", lambda window, w, h, **kw: asked.append(h) or place(window, w, h, **kw))
+    # Start from what the content needs, not the first-start size.
+    monkeypatch.setattr(ui.App, "DEFAULT_SIZE", (900, 300))
     app.hide_band()
     pump(app, timeout=1.0)
-    start = app.winfo_height()
+    app._fit_to_content(shrink=True)
+    start = asked[-1]
     try:
+        count = len(asked)
         app._on_setting_changed("text_size", "Larger")
-        pump(app, lambda: app.winfo_height() > start, timeout=3)
-        grown = app.winfo_height()
+        pump(app, lambda: len(asked) > count, timeout=3)
+        grown = asked[-1]
         assert grown > start
+        count = len(asked)
         app._on_setting_changed("text_size", "Normal")
-        pump(app, lambda: app.winfo_height() < grown, timeout=3)
-        assert abs(app.winfo_height() - start) <= 2  # back to the size for normal text
+        pump(app, lambda: len(asked) > count, timeout=3)
+        assert abs(asked[-1] - start) <= 2  # back to the size for normal text
+        assert app.band_kind is None and not app.band.winfo_ismapped()  # a closed band stays closed
     finally:
         ctk.set_widget_scaling(1.0)
 

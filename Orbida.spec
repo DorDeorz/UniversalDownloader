@@ -25,7 +25,8 @@ binaries = [(os.path.join('bin', 'ffmpeg.exe'), 'bin'), (os.path.join('bin', 'ff
 # folder build takes it: in a single EXE it would be unpacked on every start.
 if ONEDIR and os.path.isfile(os.path.join('bin', 'deno.exe')):
     binaries.append((os.path.join('bin', 'deno.exe'), 'bin'))
-hiddenimports = []
+# pystray picks its backend at run time, so PyInstaller cannot see it.
+hiddenimports = ['pystray._win32']
 for package in ('customtkinter', 'yt_dlp_ejs'):
     tmp_ret = collect_all(package)
     datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]

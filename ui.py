@@ -23,13 +23,15 @@ import logic
 import media_tools
 import playlist
 import settings as settings_store
+import tray
 import updates
 import urls
+import ytdlp_updates
 from logic import DownloadManager, TrimError, parse_trim_range
 from results import ItemResult, ItemStatus, JobSummary
 from utils import default_download_dir, resource_path
 from i18n import tr
-from version import DISPLAY_NAME, GITHUB_REPO, __version__
+from version import APP_NAME, DISPLAY_NAME, GITHUB_REPO, __version__
 
 _log = logging.getLogger(__name__)
 
@@ -115,6 +117,9 @@ def card(parent, **kw):
     return ctk.CTkFrame(parent, fg_color=CARD, corner_radius=CARD_RADIUS, border_width=0, **kw)
 
 
+# Seconds between progress updates while bytes arrive.
+PROGRESS_INTERVAL = 0.1
+
 # Room for the title bar and frame, which geometry() sizes do not include.
 WINDOW_FRAME_PX = 48
 
@@ -122,17 +127,36 @@ WINDOW_FRAME_PX = 48
 def work_area(window):
     """(left, top, right, bottom) of the usable screen in pixels.
 
-    On Windows this is the monitor minus the taskbar; elsewhere the screen
-    minus room for a panel.
+    On Windows this is the monitor the window is on (the nearest one)
+    minus the taskbar, so a window on a second monitor stays there;
+    elsewhere the screen minus room for a panel.
     """
     if sys.platform == "win32":
         try:
             import ctypes
             from ctypes import wintypes
-            rect = wintypes.RECT()
-            if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):  # SPI_GETWORKAREA
+
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                            ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+            # Own function prototypes: handles are 64-bit, ctypes' default int is not.
+            user32 = ctypes.WinDLL("user32")
+            user32.GetParent.argtypes = [wintypes.HWND]
+            user32.GetParent.restype = wintypes.HWND
+            user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+            user32.MonitorFromWindow.restype = wintypes.HMONITOR
+            user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
+            hwnd = user32.GetParent(window.winfo_id()) or window.winfo_id()
+            monitor = user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+            info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+            if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                rect = info.rcWork
                 return rect.left, rect.top, rect.right, rect.bottom
-        except (AttributeError, OSError):
+            rect = wintypes.RECT()
+            if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):  # SPI_GETWORKAREA
+                return rect.left, rect.top, rect.right, rect.bottom
+        except (AttributeError, OSError, tkinter.TclError):
             pass
     return 0, 0, window.winfo_screenwidth(), window.winfo_screenheight() - 48
 
@@ -777,7 +801,13 @@ class SettingsView(ctk.CTkFrame):
         self.cmb_accent = option_menu(look, list(settings_store.ACCENTS), lambda v: self.on_change("accent", v),
                                       width=200, label=lambda a: tr(f"accent.{a}"))
         self.cmb_accent.set(settings.accent)
-        self._setting_row(look, 7, tr("settings.accent"), tr("settings.accent_hint"), self.cmb_accent, last=True)
+        has_tray = tray.supported()
+        self._setting_row(look, 7, tr("settings.accent"), tr("settings.accent_hint"), self.cmb_accent,
+                          last=not has_tray)
+        if has_tray:
+            # Here rather than under Downloads, whose column is the taller one (the page must not scroll).
+            self.sw_tray = self._switch(look, 9, tr("settings.tray"), settings.close_to_tray, "close_to_tray")
+            self._spacing[-1] = (self._spacing[-1][0], (0, 14), (0, 10))
 
         # Downloads: how they connect, then what happens around them
         self.card_finish = after = self._section(body, tr("settings.downloads"))
@@ -814,7 +844,7 @@ class SettingsView(ctk.CTkFrame):
         self.sw_summary = self._switch(after, 10, tr("settings.summary"), settings.show_summary, "show_summary")
         self.sw_open = self._switch(after, 11, tr("settings.open_folder"), settings.open_folder_when_done,
                                     "open_folder_when_done")
-        self._spacing[-1] = (self.sw_open, (0, 14), (0, 10))
+        self._spacing[-1] = (self._spacing[-1][0], (0, 14), (0, 10))
 
         # Updates
         self.card_updates = upd = self._section(body, tr("settings.updates"))
@@ -991,7 +1021,7 @@ class SettingsView(ctk.CTkFrame):
             pass  # page closed
 
     def open_logs(self):
-        open_path(app_setup.data_dir())
+        open_path(app_setup.log_dir())
 
     def _save_proxy(self):
         """Save the proxy field once it holds a valid address (or is empty)."""
@@ -1346,6 +1376,7 @@ class App(ctk.CTk):
         self._job_thread = None
         self._job_kind = None
         self._cancel_event = threading.Event()
+        self._pause_event = threading.Event()
         self._closing = False
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -1368,6 +1399,7 @@ class App(ctk.CTk):
         self.available_update = None   # updates.Release newer than this version
         self.update_dialog = None
         self._update_status = None     # function giving the last check's result text
+        self._ytdlp_ready = None       # yt-dlp version downloaded for the next start
         self._update_cancel = threading.Event()
         self._update_thread = None
         self.last_summary = None
@@ -1410,8 +1442,15 @@ class App(ctk.CTk):
             self.link_server = None
         if self.settings.check_updates:
             self._startup_calls.append(self.after(1500, self.check_for_updates))
+        # The notification-area icon, while "keep running in the tray" is on.
+        self.tray = None
+        self._told_tray = False
+        self.events.register(events.TRAY_SHOW, self.show_window)
+        self.events.register(events.TRAY_QUIT, self.quit_from_tray)
+        self._apply_tray()
 
     POLL_INTERVAL_MS = 50
+    LOG_LINES = 2000  # activity lines kept on screen
 
     def _poll_events(self):
         """Drain the event queue on the main thread, then reschedule."""
@@ -1419,6 +1458,15 @@ class App(ctk.CTk):
             self.events.dispatch_pending()
         finally:
             self._poll_id = self.after(self.POLL_INTERVAL_MS, self._poll_events)
+
+    def report_callback_exception(self, kind, value, tb):
+        """An error in a button, key or timer callback: log it and keep running.
+
+        Tk would print it to the console, which the installed app does not have.
+        """
+        _log.error("Error in a window callback", exc_info=(kind, value, tb))
+        if sys.stderr is not None:
+            super().report_callback_exception(kind, value, tb)
 
     def destroy(self):
         for call in getattr(self, "_startup_calls", ()):
@@ -1436,6 +1484,9 @@ class App(ctk.CTk):
         if getattr(self, "link_server", None) is not None:
             self.link_server.close()
             self.link_server = None
+        if getattr(self, "tray", None) is not None:
+            self.tray.stop()
+            self.tray = None
         if self._poll_id is not None:
             try:
                 self.after_cancel(self._poll_id)
@@ -1672,7 +1723,8 @@ class App(ctk.CTk):
         log_card.grid_rowconfigure(1, weight=1)
         self._section_label(log_card, "activity.title").grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
         self.console = ctk.CTkTextbox(log_card, height=100, font=ctk.CTkFont(family="Consolas", size=12),
-                                      fg_color="transparent", text_color=TEXT, wrap="word")
+                                      fg_color="transparent", text_color=TEXT, wrap="word",
+                                      state="disabled")  # read-only; text can still be selected and copied
         self.console.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
         # Keep a gap between the cards and the (usually hidden) scrollbar.
         for card_widget in self.main_frame.grid_slaves():
@@ -1711,12 +1763,22 @@ class App(ctk.CTk):
         """Queue a console line; safe to call from any thread."""
         self.events.post(events.LOG, message=message)
     def _append_log(self, message):
+        self.console.configure(state="normal")
         self.console.insert("end", f"> {message}\n")
+        # A long playlist would otherwise grow the box without end.
+        lines = int(self.console.index("end-1c").split(".")[0])
+        if lines > self.LOG_LINES:
+            self.console.delete("1.0", f"{lines - self.LOG_LINES}.0")
+        self.console.configure(state="disabled")
         self.console.see("end")
     def _show_progress(self, fraction, text, detail=""):
         """``text`` and ``detail`` are strings, or functions for translated text."""
         self.progress_bar.set(fraction)
         self._live(self.lbl_progress, text if callable(text) else (lambda: text))
+        if self.tray is not None and self.state() == "withdrawn":
+            self.tray.set_title(f"{APP_NAME} · {text() if callable(text) else text}")
+        if self._job_kind == "download" and self._pause_event.is_set():
+            detail = lambda: tr("progress.paused")  # an update sent just before the pause  # noqa: E731
         self._live(self.lbl_detail, detail if callable(detail) else (lambda: detail))
     def _show_stage(self, text):
         self._live(self.lbl_detail, lambda: i18n.tr_message(text))
@@ -1761,7 +1823,8 @@ class App(ctk.CTk):
         if sign_in is None:
             return tr("settings.reddit_sign_in_hint")
         sign_in.ydl_options()  # reads the browser again when the last look is old
-        return tr(f"reddit.{sign_in.status}", browser=browser_cookies.browser_name(sign_in.browser_database))
+        return tr(f"reddit.{sign_in.status}", browser=browser_cookies.browser_name(sign_in.browser_database),
+                  sites=", ".join(sign_in.sites))
 
     def _on_setting_changed(self, name, value):
         """Called by the settings page; applies and saves one setting."""
@@ -1781,6 +1844,8 @@ class App(ctk.CTk):
             if value and self.settings_view is not None:
                 # Turned on in Settings: say whether the browser is signed in to Reddit.
                 messagebox.showinfo(tr("reddit.ask_title"), self.reddit_status(), parent=self)
+        if name == "close_to_tray":
+            self._apply_tray()
         if name == "accent":
             recolor(self, apply_accent(value))
 
@@ -2001,6 +2066,8 @@ class App(ctk.CTk):
         if len(links) > 1:
             self.queue_links(links)
             return
+        if len(links) == 1 and len(text.split()) > 1:
+            text = links[0]  # "Watch this: https://..." pastes only the link
         self.url_entry.delete(0, "end")
         self.url_entry.insert(0, text)
         self._on_url_changed()
@@ -2012,8 +2079,10 @@ class App(ctk.CTk):
     def is_busy(self):
         return self._job_kind is not None
 
-    def _start_job(self, kind, target, *args):
+    def _start_job(self, kind, target, *args, with_cancel=False):
         """Start a worker thread unless another job is running.
+
+        ``with_cancel`` passes the job's cancel event to ``target`` as its last argument.
 
         Returns False (and starts nothing) when a job is already active, so a
         second click cannot run two workers against the same state.
@@ -2023,6 +2092,9 @@ class App(ctk.CTk):
             return False
         self._job_kind = kind
         self._cancel_event = threading.Event()
+        self._pause_event = threading.Event()  # set while the download is paused
+        if with_cancel:
+            args = (*args, self._cancel_event)
         self._set_controls_busy(True)
         if kind == "download" and self.settings.keep_awake:
             app_setup.keep_awake(True)
@@ -2051,18 +2123,40 @@ class App(ctk.CTk):
         trim_state = "normal" if (not busy and self.chk_trim.get()) else "disabled"
         self.ent_start.configure(state=trim_state)
         self.ent_end.configure(state=trim_state)
-        # Only downloads can be cancelled; analysis is a single request
-        # bounded by the network timeout.
-        self.btn_cancel.configure(state="normal" if busy and self._job_kind == "download" else "disabled")
+        # Downloads and analyses can be cancelled (a long playlist takes a while to read).
+        self.btn_cancel.configure(state="normal" if busy and self._job_kind in ("download", "analysis")
+                                  else "disabled")
         self._live(self.btn_cancel, lambda: tr("action.cancel"))
         set_primary_state(self.btn_analyze, "normal" if queueing else state)
         self._live(self.btn_analyze, lambda: tr("queue.add") if queueing else tr("link.analyze"))
         if busy:
-            set_primary_state(self.btn_download, "disabled")
+            self._refresh_pause_button()
             self.btn_retry.configure(state="disabled")
         else:
             self._refresh_download_button()
             self._refresh_retry_button()
+
+    def _refresh_pause_button(self):
+        """While a download runs, the Download button pauses and resumes it."""
+        if self._job_kind != "download" or self._cancel_event.is_set():
+            set_primary_state(self.btn_download, "disabled")
+            return
+        set_primary_state(self.btn_download, "normal")
+        paused = self._pause_event.is_set()
+        self._live(self.btn_download, lambda: tr("action.resume") if paused else tr("action.pause"))
+
+    def toggle_pause(self):
+        """Pause the running download where it is, or let it go on (logic.wait_while_paused)."""
+        if self._job_kind != "download" or self._cancel_event.is_set():
+            return
+        if self._pause_event.is_set():
+            self._pause_event.clear()
+            self._append_log(tr("log.resumed"))
+        else:
+            self._pause_event.set()
+            self._append_log(tr("log.paused"))
+            self._live(self.lbl_detail, lambda: tr("progress.paused"))
+        self._refresh_pause_button()
 
     def _refresh_download_button(self):
         count = len(self.download_queue)
@@ -2086,13 +2180,32 @@ class App(ctk.CTk):
         self._live(self.btn_retry, lambda: tr("action.retry_n", count=count) if count else tr("action.retry"))
 
     def cancel_job(self):
-        """Ask the running download to stop; results arrive via job_done."""
+        """Ask the running download to stop (results arrive via job_done), or drop the analysis."""
+        if self._job_kind == "analysis" and not self._cancel_event.is_set():
+            self._cancel_analysis()
+            return
         if self._job_kind != "download" or self._cancel_event.is_set():
             return
         self._cancel_event.set()
         self.btn_cancel.configure(state="disabled")
         self._live(self.btn_cancel, lambda: tr("action.cancelling"))
         self._append_log(tr("action.cancelling"))
+        self._refresh_pause_button()
+
+    def _cancel_analysis(self):
+        """Stop waiting for the analysis at once.
+
+        The worker stops at the next page it reads (logic.fetch_info); what
+        it still posts is dropped, so a new analysis can start right away.
+        """
+        self._cancel_event.set()
+        self._append_log(tr("log.analysis_cancelled"))
+        self._live(self.btn_analyze, lambda: tr("link.analyze"))
+        self._show_media(lambda: tr("log.analysis_cancelled"), MUTED)
+        self._mix = None
+        self._from_queue = False
+        self.clear_link_queue()  # Cancel stops the whole queue
+        self._end_job()
 
     def retry_failed(self):
         items = self._failed_items()
@@ -2105,9 +2218,44 @@ class App(ctk.CTk):
 
     CLOSE_TIMEOUT_MS = 15000
 
-    def on_close(self):
-        """Window close: confirm, cancel a running download, wait, then exit."""
+    def _apply_tray(self):
+        """Show the tray icon while the setting is on (Windows only)."""
+        if self.settings.close_to_tray and self.tray is None:
+            icon = tray.Tray(APP_NAME, lambda: self.events.post(events.TRAY_SHOW),
+                             lambda: self.events.post(events.TRAY_QUIT), tr)
+            if icon.start():
+                self.tray = icon
+        elif not self.settings.close_to_tray and self.tray is not None:
+            self.tray.stop()
+            self.tray = None
+            self.show_window()
+
+    def hide_to_tray(self):
+        self.withdraw()
+        if not self._told_tray:
+            self._told_tray = True
+            app_setup.notify(tr("tray.hidden_title"), tr("tray.hidden_body"))
+
+    def show_window(self):
         if self._closing:
+            return
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        if self.tray is not None:
+            self.tray.set_title(APP_NAME)
+
+    def quit_from_tray(self):
+        """Quit in the tray icon's menu: the window's close, without hiding again."""
+        self.show_window()
+        self.on_close(hide=False)
+
+    def on_close(self, hide=True):
+        """Window close: hide to the tray, or confirm, cancel a running download, wait, then exit."""
+        if self._closing:
+            return
+        if hide and self.tray is not None:
+            self.hide_to_tray()
             return
         if self._job_kind == "download":
             if not messagebox.askyesno(tr("quit.title"), tr("quit.body"), parent=self):
@@ -2172,7 +2320,7 @@ class App(ctk.CTk):
         self.set_queue([])
         self._show_progress(0, "0%")
         self._live(self.lbl_item, lambda: tr("progress.ready"))
-        if self._start_job("analysis", self.run_analysis, url):
+        if self._start_job("analysis", self.run_analysis, url, with_cancel=True):
             self._live(self.btn_analyze, lambda: tr("link.checking"))
             self._show_media(lambda: tr("link.reading"), MUTED)
     def run_tool_check(self):
@@ -2194,27 +2342,46 @@ class App(ctk.CTk):
         else:
             self._set_status(lambda: tr("top.ffmpeg_missing"), DANGER)
             messagebox.showerror(tr("top.ffmpeg_missing"), tr("ffmpeg.body", error=status.error), parent=self)
-    def run_analysis(self, url):
-        """Worker thread: fetch info and post the result; no widget access."""
+    def run_analysis(self, url, cancel=None):
+        """Worker thread: fetch info and post the result; no widget access.
+
+        ``cancel`` is the job's cancel event (set by Cancel); a cancelled
+        analysis posts nothing.
+        """
+        def post(kind, **payload):
+            if cancel is None:
+                self.events.post(kind, **payload)
+            elif not cancel.is_set():
+                self.events.post(kind, job=cancel, **payload)
         try:
             self.log(tr("log.fetching"))
-            info = self.manager.fetch_info(url)
+            info = self.manager.fetch_info(url, cancel_event=cancel)
+            if cancel is not None and cancel.is_set():
+                return
             if info is None:
-                self.events.post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
+                post(events.ANALYSIS_FAILED, message="ERROR: Info is None.")
             elif 'error' in info:
-                # A Reddit post that needs a sign-in also offers the browser's (offer_reddit_sign_in).
-                sign_in = {'sign_in': True} if info['error'] == logic.REDDIT_SIGN_IN_OFF else {}
-                self.events.post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
-                                 **sign_in)
+                # A post that needs a sign-in also offers the browser's (offer_reddit_sign_in).
+                site = logic.sign_in_offer(info['error'])
+                post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
+                     **({'sign_in': site} if site else {}))
             else:
                 analysis = playlist.analyze(info, url)
+                if cancel is not None and cancel.is_set():
+                    return
                 if not analysis.is_playlist and analysis.items and info.get('formats'):
                     # Its download starts from this information (see _known_info).
                     self._analysed = (time.monotonic(), analysis.items[0].url, info)
-                self.events.post(events.ANALYSIS_DONE, analysis=analysis, url=url)
+                post(events.ANALYSIS_DONE, analysis=analysis, url=url)
         except Exception as e:
-            self.events.post(events.ANALYSIS_FAILED, message=f"Error: {e}")
-    def _on_analysis_failed(self, message, sign_in=False):
+            post(events.ANALYSIS_FAILED, message=f"Error: {e}")
+    def _stale(self, job):
+        """True for an event of an analysis that was cancelled (or replaced)."""
+        return job is not None and (job.is_set() or job is not self._cancel_event)
+
+    def _on_analysis_failed(self, message, sign_in=False, job=None):
+        if self._stale(job):
+            return
         self._append_log(message)
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._show_media(lambda: message, DANGER)
@@ -2223,20 +2390,29 @@ class App(ctk.CTk):
             self._from_queue = False
             self._next_in_queue()
         elif sign_in and not self.settings.reddit_browser_sign_in:
-            self.offer_reddit_sign_in()
+            self.offer_reddit_sign_in("Reddit" if sign_in is True else sign_in)
 
-    def offer_reddit_sign_in(self):
-        """Reddit refused a post without sign-in: offer the browser's sign-in, then try again."""
-        if not messagebox.askyesno(tr("reddit.ask_title"), tr("reddit.ask_body"), parent=self):
+    def offer_reddit_sign_in(self, site="Reddit"):
+        """``site`` refused a post without sign-in: offer the browser's sign-in, then try again."""
+        if site == "Reddit":
+            title, body = tr("reddit.ask_title"), tr("reddit.ask_body")
+        else:
+            title, body = tr("signin.ask_title", site=site), tr("signin.ask_body", site=site)
+        if not messagebox.askyesno(title, body, parent=self):
             return
         self._on_setting_changed("reddit_browser_sign_in", True)
         status = self.reddit_status()
         self._append_log(status)
-        if self._reddit.status == browser_cookies.SIGNED_IN:
+        if self._reddit.signed_in(site):
             self.start_analysis_thread()
         else:
-            messagebox.showinfo(tr("reddit.ask_title"), status, parent=self)
-    def _on_analysis_done(self, analysis, url):
+            if self._reddit.status == browser_cookies.SIGNED_IN:  # signed in elsewhere, not to this site
+                status = i18n.tr_message(logic.SIGN_IN_MISSING.format(site=site)) if site != "Reddit" \
+                    else i18n.tr_message(logic.REDDIT_SIGN_IN_MISSING)
+            messagebox.showinfo(title, status, parent=self)
+    def _on_analysis_done(self, analysis, url, job=None):
+        if self._stale(job):
+            return
         self._live(self.btn_analyze, lambda: tr("link.analyze"))
         self._end_job()
         self._describe_analysis(analysis)
@@ -2338,15 +2514,21 @@ class App(ctk.CTk):
             self._next_in_queue()
 
     def open_link(self, url):
-        """A link from the browser extension: bring the window up and analyze it."""
+        """A link from the browser extension: bring the window up and analyze it.
+
+        An empty link only brings the window up (Orbida started again while
+        it runs, perhaps hidden in the tray).
+        """
         try:
-            if self.state() == "iconic":
+            if self.state() in ("iconic", "withdrawn"):
                 self.deiconify()
             self.lift()
             self.attributes("-topmost", True)
             self.after(300, lambda: self.attributes("-topmost", False))
             self.focus_force()
         except tkinter.TclError:
+            return
+        if not url:
             return
         if self.settings_view is not None:
             self.close_settings()
@@ -2480,6 +2662,9 @@ class App(ctk.CTk):
         if not self.is_busy():
             self._refresh_download_button()
     def start_download_queue(self):
+        if self._job_kind == "download":
+            self.toggle_pause()  # the button pauses and resumes while a download runs
+            return
         if not self.download_queue or self.is_busy(): return
         if self.chk_trim.get():
             # Kötü trim değerleriyle kuyruğu hiç başlatma
@@ -2496,7 +2681,9 @@ class App(ctk.CTk):
             messagebox.showerror(tr("folder.error_title"), error, parent=self)
             return
         if warning:
-            self._append_log(f"Warning: {warning}")
+            _log.warning(warning)
+            free = filenames.low_space_mb(self.download_folder)
+            self._append_log(tr("folder.low_space", mb=free) if free is not None else warning)
         self._show_progress(0, "0%")
         items = list(self.download_queue) + list(self.skipped_items)
         opts = {
@@ -2512,10 +2699,9 @@ class App(ctk.CTk):
             opts['sponsorblock'] = True
         self._job_mode = opts['mode']
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
-            self._live(self.btn_download, lambda: tr("action.downloading"))
             # The field is free for the next link, which joins the queue.
             self.url_entry.delete(0, "end")
-    def run_queue(self, items, opts, cancel_event=None):
+    def run_queue(self, items, opts, cancel_event=None, pause_event=None):
         """Worker thread: download each item and post events; no widget access."""
         summary = JobSummary()
         total = len(items)
@@ -2537,13 +2723,13 @@ class App(ctk.CTk):
                 item_opts = dict(opts, playlist_index=item.get('index'), playlist_title=item.get('playlist'),
                                  meta=item.get('meta'))
                 info = self._known_info(item['url'])
-                result = self._download_once(item, item_opts, cancel_event, info)
+                result = self._download_once(item, item_opts, cancel_event, info, pause_event)
                 if info is not None and result.status is ItemStatus.FAILED and not (
                         cancel_event is not None and cancel_event.is_set()):
                     # The saved media links may have expired; ask the site again.
                     self._analysed = None
                     self.log(f"Retrying with fresh information ({result.error})")
-                    result = self._download_once(item, item_opts, cancel_event, None)
+                    result = self._download_once(item, item_opts, cancel_event, None, pause_event)
                 result.source = item
                 summary.add(result)
                 self.events.post(events.ITEM_DONE, result=result)
@@ -2563,8 +2749,10 @@ class App(ctk.CTk):
             return None
         return info
 
-    def _download_once(self, item, options, cancel_event, info):
+    def _download_once(self, item, options, cancel_event, info, pause_event=None):
         extra = {'info': info} if info is not None else {}
+        if pause_event is not None:
+            extra['pause_event'] = pause_event
         try:
             return self.manager.download_video(
                 item['url'], options, self.progress_hook, log_callback=self.log, title=item['title'],
@@ -2573,8 +2761,8 @@ class App(ctk.CTk):
             return ItemResult(item['url'], item['title'], ItemStatus.FAILED, error=str(e) or type(e).__name__)
 
     def _run_queue_with_cancel(self, items, opts):
-        # Bound at start so a later job's event cannot leak into this one.
-        self.run_queue(items, opts, self._cancel_event)
+        # Bound at start so a later job's events cannot leak into this one.
+        self.run_queue(items, opts, self._cancel_event, self._pause_event)
     def _on_item_done(self, result):
         self._append_log(describe_result(result))
         if result.status is ItemStatus.COMPLETED and result.path and self.settings.save_history:
@@ -2594,7 +2782,9 @@ class App(ctk.CTk):
             return summary.headline(label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))
         self._live(self.lbl_item, lambda: f"{tr(summary.title_key())}: {headline()}")
         done = len(summary.with_status(ItemStatus.COMPLETED))
-        self.progress_bar.configure(progress_color=SUCCESS if summary.all_ok else WARNING if done else DANGER)
+        good = summary.all_ok or (done and summary.no_problems)
+        self.progress_bar.configure(progress_color=SUCCESS if good else WARNING if done or summary.no_problems
+                                    else DANGER)
         if summary.all_ok:
             self._show_progress(1, lambda: tr("progress.complete"))
         else:
@@ -2608,7 +2798,7 @@ class App(ctk.CTk):
         if done and self.settings.open_folder_when_done:
             self.open_folder()
         if self.settings.show_summary:
-            show = messagebox.showinfo if summary.all_ok else messagebox.showwarning
+            show = messagebox.showinfo if summary.no_problems and done else messagebox.showwarning
             report = summary.report(label=lambda status: tr("status." + status.value),
                                     nothing=tr("summary.nothing"), more=tr("summary.more", count="{count}"))
             show(tr(summary.title_key()), report, parent=self)
@@ -2624,8 +2814,13 @@ class App(ctk.CTk):
         if stage is not None:
             self.events.post(events.STAGE, text=stage)
             return
+        # yt-dlp calls the hook for every few kilobytes; a few redraws a second are enough.
+        now, last = time.monotonic(), getattr(self, "_last_progress", None)
+        if d.get("status") == "downloading" and last is not None and now - last < PROGRESS_INTERVAL:
+            return
         progress = events.progress_from_hook(d)
         if progress is not None:
+            self._last_progress = now
             fraction, text = progress
             self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=events.detail_from_hook(d, left=tr("progress.left", time="{time}")))
 
@@ -2655,17 +2850,38 @@ class App(ctk.CTk):
                 release, error = None, str(e)
             except Exception as e:  # never let a check break the app
                 release, error = None, f"{type(e).__name__}: {e}"
-            self.events.post(events.UPDATE_CHECKED, release=release, error=error, manual=manual)
+            ytdlp = self.update_ytdlp()
+            self.events.post(events.UPDATE_CHECKED, release=release, error=error, manual=manual, ytdlp=ytdlp)
 
         self._update_thread = threading.Thread(target=work, name="orbida-update-check", daemon=True)
         self._update_thread.start()
 
+    def update_ytdlp(self):
+        """Worker thread: download a newer yt-dlp for the next start.
+
+        Returns the version downloaded, or None (up to date, or the check
+        failed; that is only logged, since the bundled yt-dlp still works).
+        """
+        try:
+            return ytdlp_updates.update(app_setup.ytdlp_dir(), lambda url: updates._open(url, "*/*"),
+                                        cancelled=lambda: self._closing)
+        except Exception as e:  # never let a check break the app
+            _log.info("yt-dlp update failed: %s", e)
+            return None
+
     def _set_update_status(self, text):
+        ready = self._ytdlp_ready
+        if ready and text is not None:
+            first = text
+            text = lambda: f"{first()}\n{tr('update.ytdlp_ready', version=ready)}"  # noqa: E731
         self._update_status = text
         if self.settings_view is not None:
             self.settings_view.show_update_status(text)
 
-    def _on_update_checked(self, release, error, manual):
+    def _on_update_checked(self, release, error, manual, ytdlp=None):
+        if ytdlp:
+            self._ytdlp_ready = ytdlp
+            self._append_log(tr("update.ytdlp_ready", version=ytdlp))
         if error:
             _log.info("Update check failed: %s", error)
             if manual:
@@ -2759,6 +2975,8 @@ class App(ctk.CTk):
             flags = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0  # detached, own process group
             subprocess.Popen(updates.installer_command(path), creationflags=flags, close_fds=True)
         except OSError as e:
+            if self.instance is not None:
+                self.instance.acquire()  # the app stays open: keep a second copy out again
             self._on_update_failed(str(e))
             return
         self._closing = True

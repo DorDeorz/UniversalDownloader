@@ -221,6 +221,50 @@ def test_verified_installer_is_started_and_the_app_closes(monkeypatch):
 
 
 @needs_display
+def test_installer_that_cannot_start_keeps_the_single_instance_lock(monkeypatch):
+    ui_helpers.isolate_settings(monkeypatch)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+
+    def popen(cmd, **kw):
+        raise OSError("blocked by antivirus")
+    monkeypatch.setattr(ui.subprocess, "Popen", popen)
+    shown = []
+    monkeypatch.setattr(ui.messagebox, "showerror", lambda *a, **kw: shown.append(a))
+
+    class Instance:
+        held = True
+
+        def release(self):
+            self.held = False
+
+        def acquire(self):
+            self.held = True
+    instance = Instance()
+    window = ui.App(instance=instance)
+    try:
+        window._on_update_ready("/tmp/Orbida-Setup-9.9.9.exe")
+        assert instance.held and not window._closing
+    finally:
+        window.destroy()
+
+
+@needs_display
+def test_callback_errors_are_logged(monkeypatch, caplog):
+    ui_helpers.isolate_settings(monkeypatch)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    monkeypatch.setattr(ui.sys, "stderr", None)  # as in the installed app
+    window = ui.App()
+    try:
+        try:
+            raise ValueError("boom")
+        except ValueError as e:
+            window.report_callback_exception(type(e), e, e.__traceback__)
+        assert "Error in a window callback" in caplog.text and "boom" in caplog.text
+    finally:
+        window.destroy()
+
+
+@needs_display
 def test_update_note_is_logged_once_after_an_update(monkeypatch):
     ui_helpers.isolate_settings(monkeypatch)
     folder = os.path.join(os.environ["LOCALAPPDATA"], "Orbida")
@@ -232,5 +276,19 @@ def test_update_note_is_logged_once_after_an_update(monkeypatch):
     try:
         assert f"was updated to {__version__}" in window.console.get("1.0", "end")
         assert ui.settings_store.load(window.settings_path, "unused").last_version == __version__
+    finally:
+        window.destroy()
+
+
+@needs_display
+def test_a_downloaded_yt_dlp_is_announced(monkeypatch):
+    ui_helpers.isolate_settings(monkeypatch)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    window = ui.App()
+    try:
+        window._on_update_checked(None, None, manual=True, ytdlp="2026.12.01")
+        note = ui.tr("update.ytdlp_ready", version="2026.12.01")
+        assert f"> {note}" in window.console.get("1.0", "end")
+        assert window._update_status().endswith(note)
     finally:
         window.destroy()

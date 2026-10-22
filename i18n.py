@@ -13,6 +13,7 @@ import json
 import locale
 import logging
 import os
+import re
 import sys
 
 from utils import resource_path
@@ -128,7 +129,36 @@ def tr(key, **values):
     return text
 
 
+def tr_label(key):
+    """A text that ends with an example, without it: "Kết thúc  1:30" -> "Kết thúc"."""
+    return tr(key).rsplit(None, 1)[0]
+
+
+# Messages from another module that name a value, as the keys whose English
+# text they are (logic.SIGN_IN_OFF and SIGN_IN_MISSING).
+MESSAGE_TEMPLATES = ("signin.off", "signin.missing")
+
+
+def _template_pattern(template):
+    """A regex for ``template`` with each ``{name}`` as a group (a repeat must be the same text)."""
+    seen = set()
+
+    def group(match):
+        name = match.group(1)
+        if name in seen:
+            return f"(?P={name})"
+        seen.add(name)
+        return f"(?P<{name}>.+?)"
+    return re.sub(r"\\\{(\w+)\\\}", group, re.escape(template)) if template else r"(?!)"
+
+
 def tr_message(text):
     """Translate a fixed English message from another module (a skip
     reason, a processing step); unknown text is returned unchanged."""
-    return tr("msg." + text) if ("msg." + text) in load_catalog(FALLBACK) else text
+    if ("msg." + text) in load_catalog(FALLBACK):
+        return tr("msg." + text)
+    for key in MESSAGE_TEMPLATES:
+        match = re.fullmatch(_template_pattern(load_catalog(FALLBACK).get(key, "")), text)
+        if match:
+            return tr(key, **match.groupdict())
+    return text

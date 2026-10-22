@@ -17,6 +17,18 @@ import threading
 import time
 from collections import deque
 
+import ytdlp_updates
+
+# A yt-dlp the update check downloaded replaces the bundled one; this has
+# to happen before anything imports yt_dlp.
+YTDLP_DIR = os.path.join(os.environ["ANDROID_PRIVATE"], "yt-dlp") if "ANDROID_PRIVATE" in os.environ else None
+try:
+    if ytdlp_updates.activate(YTDLP_DIR):
+        import yt_dlp  # noqa: F401  (proves the download works)
+except Exception:
+    logging.getLogger(__name__).exception("The downloaded yt-dlp does not work; using the bundled one")
+    ytdlp_updates.deactivate(YTDLP_DIR)
+
 from kivy.base import ExceptionHandler, ExceptionManager
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -68,7 +80,7 @@ if android_env.on_android():
     md_patches.disable_hover()
 
 APP_NAME = "Orbida"    # the Android app's name; keep in step with title in android/buildozer.spec
-APP_VERSION = "1.2.2"  # keep in step with android/buildozer.spec
+APP_VERSION = "1.2.3"  # keep in step with android/buildozer.spec
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
@@ -76,6 +88,7 @@ LOG_LINES = 150
 HISTORY_SHOWN = 100  # newest entries listed; each row is a handful of widgets
 TAB_SECONDS = 0.2    # tab switch animation
 PREBUILD_SECONDS = 0.5  # after start-up, fill in Settings and History in the background
+NETWORK_CHECK_SECONDS = 5  # how often Wi-Fi only looks at the network during a download
 SELFTEST_TAG = "UDSELFTEST"
 MODES = {"video": worker.VIDEO_AUDIO, "audio": worker.AUDIO_ONLY}
 MIME = {"mp4": "video/mp4", "mkv": "video/x-matroska", "webm": "video/webm", "mp3": "audio/mpeg",
@@ -238,6 +251,9 @@ class UniversalDownloaderApp(MDApp):
     def tr(self, key, *_lang, **values):
         return i18n.tr(key, **values)
 
+    def tr_label(self, key, *_lang):
+        return i18n.tr_label(key)
+
     # --- Build --------------------------------------------------------------------
 
     def build(self):
@@ -263,9 +279,12 @@ class UniversalDownloaderApp(MDApp):
         self.chosen = []          # the playlist entries picked for download
         self.link_queue = []      # links added while a download runs
         self._from_queue = False  # the running analysis came from link_queue
+        self._analysis_dropped = False  # a cancelled analysis's late result is ignored
         self._mix = None  # the Mix link a song being analyzed was opened in
         self.mix_url = None  # offered on the "Download the Mix" button
         self._cancelled = False
+        self._mobile_data_ok = False  # the user chose to download on mobile data
+        self._wifi_paused = False     # paused by the Wi-Fi-only setting, not by the user
         self.download_dir = None
         self.job = None  # "analyze" or "download" while one runs
         self.mode = self.settings.default_mode
@@ -302,13 +321,24 @@ class UniversalDownloaderApp(MDApp):
         self.ids.screens.transition.duration = TAB_SECONDS
         self._wire_handlers()
         Clock.schedule_interval(lambda *_: self.events.dispatch_pending(), 0.1)
+        Clock.schedule_interval(self._watch_network, NETWORK_CHECK_SECONDS)
         Window.bind(on_keyboard=self._on_key)
         return self.root_view
 
     def _on_key(self, _window, key, *_args):
-        """Back (Escape) closes the YouTube sign-in page instead of the app."""
-        if key == 27 and self._login is not None:
+        """Back (Escape) steps back before it closes the app: it closes an
+        open dialog, then the sign-in page, then returns to the Download tab."""
+        if key != 27:
+            return False
+        dialogs = [w for w in Window.children if isinstance(w, MDDialog) and w._is_open]  # not closing ones
+        if dialogs:
+            dialogs[0].dismiss()  # the topmost
+            return True
+        if self._login is not None:
             self._login.close()
+            return True
+        if self.ids.screens.current != "home":
+            self.go_to("home")
             return True
         return False
 
@@ -750,6 +780,10 @@ class UniversalDownloaderApp(MDApp):
 
     def _use_link(self, link, shared=False):
         self.pending_link = None
+        if self.job == "download":
+            # Shared while a download runs: it waits in the queue, as a typed link does.
+            self.queue_link(link)
+            return
         if self.job is not None:
             self.snack(self.tr("action.downloading"))
             return
@@ -782,6 +816,7 @@ class UniversalDownloaderApp(MDApp):
             self._show_media(self.tr(e.key, **e.values), "", "alert-circle-outline")
             return
         if started:
+            self._analysis_dropped = False
             self.job = "analyze"
             self.analysis = None
             # A song opened inside a YouTube Mix is analyzed alone; the Mix is offered afterwards.
@@ -789,8 +824,7 @@ class UniversalDownloaderApp(MDApp):
             self.mix_url = None
             _show(self.ids.btn_pick, False)
             _show(self.ids.btn_mix, False)
-            self.set_busy(True)
-            self.ids.btn_download.disabled = True
+            self.set_busy(True)  # Download turns into Cancel
             self._show_media(self.tr("link.reading"), "", "timer-sand")
             self.log(self.tr("log.fetching"))
 
@@ -848,14 +882,23 @@ class UniversalDownloaderApp(MDApp):
             self.ids[name].disabled = busy and not queueing
         self.ids.analyze_text.text = self.tr("queue.add" if queueing else "link.analyze")
         self.ids.analyze_icon.icon = "playlist-plus" if queueing else "magnify"
+        # Downloads and analyses can be cancelled (a long playlist takes a while to read).
+        cancellable = busy and self.job in ("download", "analyze")
         self.ids.download_icon.icon = "close" if busy else "download"
-        self.ids.download_text.text = self.tr("action.cancel" if busy and self.job == "download"
-                                              else "action.download")
+        self.ids.download_text.text = self.tr("action.cancel" if cancellable else "action.download")
         self.ids.btn_download.style = "tonal" if busy else "filled"
-        self.ids.btn_download.disabled = busy and self.job != "download"
+        self.ids.btn_download.disabled = busy and not cancellable
+        # A running download can be paused (worker.Session.pause).
+        downloading = busy and self.job == "download"
+        self.ids.btn_pause.opacity = 1 if downloading else 0
+        self.ids.btn_pause.disabled = not downloading
+        self.ids.btn_pause.icon = "play" if downloading and self.session.paused else "pause"
         self._sync_background()
 
-    def download(self):
+    def download(self, mobile_data_ok=False):
+        if self.job == "analyze":
+            self.cancel_analysis()
+            return
         if self.job == "download":
             self._cancelled = True
             self.session.cancel()
@@ -867,6 +910,19 @@ class UniversalDownloaderApp(MDApp):
         if not self.download_dir:
             self.snack(self.tr("folder.error_title"))
             return
+        error, _warning = filenames.check_folder(self.download_dir)
+        if error:
+            self._dialog(self.tr("folder.error_title"), error)
+            return
+        if self.settings.wifi_only and not mobile_data_ok and android_env.is_metered():
+            self._dialog(self.t("wifi.ask_title"), self.t("wifi.ask_body"),
+                         buttons=[(self.t("common.cancel"), None),
+                                  (self.t("wifi.anyway"), lambda: self.download(mobile_data_ok=True))])
+            return
+        free = filenames.low_space_mb(self.download_dir)
+        if free is not None:  # a warning only: the files may still fit
+            self.log(self.tr("folder.low_space", mb=free))
+            self.snack(self.tr("folder.low_space", mb=free))
         trim = self.ids.trim_switch.active
         start, end = (self.ids.trim_start.text, self.ids.trim_end.text) if trim else ("", "")
         if trim and self.analysis.is_playlist:
@@ -890,6 +946,8 @@ class UniversalDownloaderApp(MDApp):
         if self.session.download(dataclasses.replace(self.analysis, items=list(self.chosen)), options):
             self.job = "download"
             self._cancelled = False
+            self._mobile_data_ok = mobile_data_ok
+            self._wifi_paused = False
             self.set_busy(True)
             self._keep_awake(True)
             _show(self.ids.progress_card, True)
@@ -999,9 +1057,9 @@ class UniversalDownloaderApp(MDApp):
         if cookies:
             options["cookiefile"] = cookies
         logic.set_platform_options(options)
-        # Reddit's cookies come in the cookie file; this only tells logic the app is signed in.
-        reddit = youtube_login.saved(self.user_data_dir, youtube_login.REDDIT)
-        logic.set_reddit_sign_in(browser_cookies.AppSignIn() if reddit else None)
+        # The sites' cookies come in the cookie file; this only tells logic where the app is signed in.
+        sites = [site.name for site in youtube_login.SITES if youtube_login.saved(self.user_data_dir, site)]
+        logic.set_reddit_sign_in(browser_cookies.AppSignIn(sites) if sites else None)
         logic.set_network_options(self.settings.proxy)
 
     def _keep_awake(self, on):
@@ -1017,7 +1075,26 @@ class UniversalDownloaderApp(MDApp):
 
     # --- Events (main thread) -----------------------------------------------------
 
+    def cancel_analysis(self):
+        """Stop waiting for the analysis; what it still sends is dropped."""
+        self.session.cancel_analysis()
+        self._analysis_dropped = True
+        self.job = None
+        self._mix = None
+        self._from_queue = False
+        self.clear_link_queue()  # Cancel stops the whole queue
+        self.set_busy(False)
+        self.ids.btn_download.disabled = True
+        self._show_media(self.tr("log.analysis_cancelled"), "", "close-circle-outline")
+        self.log(self.tr("log.analysis_cancelled"))
+
+    def _dropped(self):
+        """True for the result of a cancelled analysis that was already on its way."""
+        return self.job is None and self._analysis_dropped
+
     def _on_analysis_done(self, analysis, url):
+        if self._dropped():
+            return
         self.job = None
         mix, self._mix = self._mix, None
         self.analysis = analysis
@@ -1091,18 +1168,26 @@ class UniversalDownloaderApp(MDApp):
             self.analyze(keep_mix=True)
 
     def _on_analysis_failed(self, message):
+        if self._dropped():
+            return
         self.job = None
         self._mix = None
         self.set_busy(False)
         self.ids.btn_download.disabled = True
+        needs = logic.sign_in_offer(message)
+        site = youtube_login.site_named(needs or "")
+        if site is not None:
+            message = self.t("signin.needed", site=site.name)  # the in-app sign-in, not the browser's
+        elif needs:
+            message = self.t("signin.not_here", site=needs)
         self._show_media(self.tr("link.nothing_reason", reason=i18n.tr_message(message)), "", "alert-circle-outline")
         self.log(i18n.tr_message(message))
         if self._from_queue:
             self._from_queue = False
             Clock.schedule_once(lambda *_: self._next_in_queue(), 0)
         selftest(f"analysis failed: {message} browser_requests={browser_route.request_count()}")
-        if message == logic.REDDIT_SIGN_IN_OFF and android_env.on_android():
-            self._offer_reddit_sign_in()
+        if site is not None and android_env.on_android():
+            self._offer_sign_in(site)
             return
         if not logic.is_bot_check(message) or not android_env.on_android():
             return
@@ -1115,14 +1200,18 @@ class UniversalDownloaderApp(MDApp):
             self._dialog(self.t("youtube.bot_title"), self.t("youtube.bot_body"),
                          buttons=[(self.t("youtube.ok_button"), None)])
 
-    def _offer_reddit_sign_in(self):
-        """Reddit refused a post without sign-in: offer the in-app sign-in, then analyse again."""
+    def _offer_sign_in(self, site):
+        """``site`` refused a post without sign-in: offer the in-app sign-in, then analyse again."""
         def sign_in():
             self._retry_after_sign_in = True
-            self.sign_in_reddit()
+            self._sign_in(site)
 
-        self._dialog(self.t("reddit_login.ask_title"), self.t("reddit_login.ask_body"),
-                     buttons=[(self.t("common.cancel"), None), (self.t("reddit_login.sign_in"), sign_in)])
+        if site is youtube_login.REDDIT:
+            title, body = self.t("reddit_login.ask_title"), self.t("reddit_login.ask_body")
+        else:
+            title, body = self.tr("signin.ask_title", site=site.name), self.t("signin.ask_body", site=site.name)
+        self._dialog(title, body, buttons=[(self.t("common.cancel"), None),
+                                           (self.t("signin.sign_in", site=site.name), sign_in)])
 
     def _on_item_started(self, position, total, title):
         self._stderr.clear()
@@ -1134,8 +1223,42 @@ class UniversalDownloaderApp(MDApp):
 
     def _on_progress(self, fraction, text, detail):
         self.ids.progress.value = fraction * 100
+        if self.session.paused:  # an update sent just before the pause
+            detail = self.t("wifi.paused") if self._wifi_paused else self.tr("progress.paused")
         self.ids.progress_detail.text = f"{text}  {detail}".strip()
         self._notify()
+
+    # --- Pause and Wi-Fi only -----------------------------------------------------
+
+    def toggle_pause(self):
+        """Pause the running download where it is, or let it go on."""
+        if self.job != "download" or self._cancelled:
+            return
+        self._set_paused(not self.session.paused)
+
+    def _set_paused(self, paused, wifi=False):
+        if paused:
+            self.session.pause()
+            self.log(self.t("wifi.paused") if wifi else self.tr("log.paused"))
+            self.ids.progress_detail.text = self.t("wifi.paused") if wifi else self.tr("progress.paused")
+        else:
+            self.session.resume()
+            self.log(self.t("wifi.resumed") if wifi else self.tr("log.resumed"))
+        self._wifi_paused = paused and wifi
+        self.ids.btn_pause.icon = "play" if paused else "pause"
+        self._notify(force=True)
+
+    def _watch_network(self, *_):
+        """With Wi-Fi only on, hold a download while the phone is on mobile data."""
+        if self.job != "download" or self._cancelled or not self.settings.wifi_only or self._mobile_data_ok:
+            return
+        metered = android_env.is_metered()
+        if metered and not self.session.paused:
+            self._set_paused(True, wifi=True)
+            self.snack(self.t("wifi.paused"))
+        elif not metered and self._wifi_paused:
+            self._set_paused(False, wifi=True)
+            self.snack(self.t("wifi.resumed"))
 
     def _on_stage(self, text):
         self.ids.progress_detail.text = i18n.tr_message(text)
@@ -1193,16 +1316,21 @@ class UniversalDownloaderApp(MDApp):
 
     def add_to_queue(self):
         """Put the link in the field at the end of the queue (while a download runs)."""
+        if self.queue_link(self.ids.url.text):
+            self.ids.url.text = ""
+
+    def queue_link(self, text):
+        """Put one link at the end of the queue; False when it is not a link."""
         try:
-            url = urls.normalize_url(self.ids.url.text)
+            url = urls.normalize_url(text)
         except urls.UrlError as e:
             self.snack(self.tr(e.key, **e.values))
-            return
+            return False
         self.link_queue.append(url)
-        self.ids.url.text = ""
         self.log(self.tr("log.queue_added", url=url))
         self.snack(self.tr("log.queue_added", url=url))
         self._show_link_queue()
+        return True
 
     def queue_links(self, links):
         """Download ``links`` one after another, without questions (several pasted at once)."""
@@ -1323,6 +1451,9 @@ class UniversalDownloaderApp(MDApp):
     def sign_in_reddit(self, url=None):
         self._sign_in(youtube_login.REDDIT, url)
 
+    def sign_in_instagram(self, url=None):
+        self._sign_in(youtube_login.INSTAGRAM, url)
+
     def _sign_in(self, site, url=None):
         if not android_env.on_android() or self._login is not None:
             return
@@ -1337,46 +1468,38 @@ class UniversalDownloaderApp(MDApp):
 
     def _on_youtube_login(self, header, site="YouTube"):
         self._login = None
-        reddit = site == youtube_login.REDDIT.name
-        ok = youtube_login.save(self.user_data_dir, header, youtube_login.REDDIT if reddit else youtube_login.YOUTUBE)
-        selftest(f"login closed signed_in={ok}")
+        site = youtube_login.site_named(site) or youtube_login.YOUTUBE
+        ok = youtube_login.save(self.user_data_dir, header, site)
+        selftest(f"login closed site={site.name} signed_in={ok}")
         self._set_platform_options()
         self._refresh("settings")
-        if reddit:
-            self.snack(self.t("reddit_login.ok" if ok else "youtube.failed"))
-            if ok and self._retry_after_sign_in:
-                self.analyze()  # the post that needed the sign-in
-            self._retry_after_sign_in = False
-        else:
-            self.snack(self.t("youtube.ok" if ok else "youtube.failed"))
+        self.snack(self.t("signin.ok", site=site.name) if ok else self.t("youtube.failed"))
+        if ok and self._retry_after_sign_in:
+            self.analyze()  # the post that needed the sign-in
+        self._retry_after_sign_in = False
 
     def sign_out_youtube(self):
-        def sign_out():
-            youtube_login.forget(self.user_data_dir)
-            try:
-                youtube_login.clear_webview_cookies()
-            except Exception as e:
-                _log.warning("Clear WebView cookies: %s", e)
-            self._set_platform_options()
-            self._refresh("settings")
-            self.snack(self.t("youtube.signed_out"))
-
-        self._dialog(self.t("youtube.signed_in"), buttons=[(self.t("common.cancel"), None),
-                                                          (self.t("youtube.sign_out"), sign_out)])
+        self._sign_out(youtube_login.YOUTUBE)
 
     def sign_out_reddit(self):
+        self._sign_out(youtube_login.REDDIT)
+
+    def sign_out_instagram(self):
+        self._sign_out(youtube_login.INSTAGRAM)
+
+    def _sign_out(self, site):
         def sign_out():
-            youtube_login.forget(self.user_data_dir, youtube_login.REDDIT)
+            youtube_login.forget(self.user_data_dir, site)
             try:
                 youtube_login.clear_webview_cookies()
             except Exception as e:
                 _log.warning("Clear WebView cookies: %s", e)
             self._set_platform_options()
             self._refresh("settings")
-            self.snack(self.t("reddit_login.signed_out"))
+            self.snack(self.t("signin.signed_out", site=site.name))
 
-        self._dialog(self.t("reddit_login.signed_in"), buttons=[(self.t("common.cancel"), None),
-                                                               (self.t("youtube.sign_out"), sign_out)])
+        self._dialog(self.t("signin.signed_in", site=site.name),
+                     buttons=[(self.t("common.cancel"), None), (self.t("youtube.sign_out"), sign_out)])
 
     # --- Settings -----------------------------------------------------------------
 
@@ -1476,6 +1599,8 @@ class UniversalDownloaderApp(MDApp):
                lambda v: self._save_settings(auto_analyze_shared=v), t("settings.auto_analyze_hint"))
         switch("cellphone-screenshot", t("settings.keep_screen"), s.keep_screen_on,
                lambda v: self._save_settings(keep_screen_on=v), t("settings.keep_screen_hint"))
+        switch("wifi", t("settings.wifi_only"), s.wifi_only,
+               lambda v: self._save_settings(wifi_only=v), t("settings.wifi_only_hint"))
         switch("history", t("settings.history"), s.save_history, self._change_save_history)
 
         # YouTube
@@ -1495,6 +1620,15 @@ class UniversalDownloaderApp(MDApp):
         else:
             info("account-outline", t("reddit_login.sign_in"), t("reddit_login.sign_in_hint"),
                  on_release=lambda *_: self.sign_in_reddit())
+
+        # Instagram (most posts need a signed-in account)
+        section("Instagram")
+        if youtube_login.saved(self.user_data_dir, youtube_login.INSTAGRAM):
+            info("account-check-outline", t("signin.signed_in", site="Instagram"), t("youtube.sign_out_hint"),
+                 on_release=self.sign_out_instagram)
+        else:
+            info("account-outline", t("signin.sign_in", site="Instagram"), t("instagram.sign_in_hint"),
+                 on_release=lambda *_: self.sign_in_instagram())
 
         # About
         section(t("settings.about"))
@@ -1527,12 +1661,23 @@ class UniversalDownloaderApp(MDApp):
                 found, error = self_update.check(APP_VERSION, url), None
             except self_update.UpdateError as e:
                 found, error = None, str(e)
-            self.events.post("update_checked", update=found, quiet=quiet, error=error)
+            ytdlp = None
+            if YTDLP_DIR and url == self_update.RELEASES_URL:
+                try:
+                    ytdlp = ytdlp_updates.update(YTDLP_DIR, lambda page: self_update._open(page, 30))
+                except Exception as e:  # the bundled yt-dlp still works
+                    _log.info("yt-dlp update failed: %s", e)
+            self.events.post("update_checked", update=found, quiet=quiet, error=error, ytdlp=ytdlp)
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _on_update_checked(self, update, quiet, error):
+    def _on_update_checked(self, update, quiet, error, ytdlp=None):
         self._update_checking = False
+        if ytdlp:
+            self.log(self.tr("update.ytdlp_ready", version=ytdlp))
+            if update is None:
+                self.snack(self.tr("update.ytdlp_ready", version=ytdlp))
+                quiet = True  # that note is enough
         if self._selftest == "update":
             selftest(f"update found version={update.version if update else None} error={error}")
             if update:

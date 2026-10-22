@@ -362,7 +362,7 @@ def test_subtitles_switch_is_off_for_audio_and_remembered(app):
 @needs_display
 def test_sponsorblock_switch_is_remembered_and_sent_with_downloads(app, monkeypatch):
     jobs = []
-    monkeypatch.setattr(app, "_start_job", lambda kind, func, *args: jobs.append(args) or False)
+    monkeypatch.setattr(app, "_start_job", lambda kind, func, *args, **kw: jobs.append(args) or False)
     app.download_queue = [{"url": "https://www.youtube.com/watch?v=aaaaaaaaaaa", "title": "A"}]
     app.start_download_queue()
     assert "sponsorblock" not in jobs[-1][1]
@@ -427,3 +427,17 @@ def test_a_page_cut_off_midway_is_read_again(monkeypatch):
     monkeypatch.setattr(logic.yt_dlp, "YoutubeDL", YDL)
     assert logic._read_page("https://open.spotify.com/embed/track/x", {}) == (Response.url, "<html>ok</html>")
     assert len(calls) == 2
+
+
+@needs_display
+def test_paste_takes_the_link_out_of_a_sentence(app):
+    from ui_helpers import pump
+    pump(app, timeout=0.5)  # past the paste at start
+    app.clipboard_clear()
+    app.clipboard_append("Watch this: https://example.com/clip !")
+    app.paste_url()
+    assert app.url_entry.get() == "https://example.com/clip"
+    app.clipboard_clear()
+    app.clipboard_append("example.com/plain")
+    app.paste_url()
+    assert app.url_entry.get() == "example.com/plain"  # no link words: pasted as it is

@@ -51,7 +51,7 @@ def test_invalid_link_is_rejected_without_starting_a_job(app, text):
 @needs_display
 def test_link_without_scheme_is_completed(app, monkeypatch):
     started = []
-    monkeypatch.setattr(app, "_start_job", lambda kind, target, *args: started.append(args) or False)
+    monkeypatch.setattr(app, "_start_job", lambda kind, target, *args, **kw: started.append(args) or False)
     app.url_entry.insert(0, "youtube.com/watch?v=abc")
     app.start_analysis_thread()
     assert app.url_entry.get() == "https://youtube.com/watch?v=abc"
@@ -459,6 +459,7 @@ def test_settings_page_fits_without_scrolling(monkeypatch, screen, dpi, text_siz
     # Windows display scaling (125%, 150%) is simulated for every window.
     monkeypatch.setattr(ctk.ScalingTracker, "get_window_dpi_scaling", classmethod(lambda cls, window: dpi))
     monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, screen[0], screen[1] - 40))  # taskbar
+    monkeypatch.setattr(ui.tray, "supported", lambda: True)  # its switch shows on Windows
     ui_helpers.isolate_settings(monkeypatch)
     folder = os.path.join(os.environ["LOCALAPPDATA"], "Orbida")
     os.makedirs(folder)
@@ -594,3 +595,16 @@ def test_progress_ring_follows_the_download(app):
     app._show_progress(0.42, "42%")
     assert app.progress_bar.get() == pytest.approx(0.42)
     assert app.progress_bar._label.cget("text") == "42%"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the monitor's work area is read from Windows")
+def test_work_area_is_the_windows_monitor():
+    root = tkinter.Tk()
+    try:
+        root.geometry("300x200+50+50")
+        root.update()
+        left, top, right, bottom = ui.work_area(root)
+        assert right - left >= 300 and bottom - top >= 200
+        assert left <= root.winfo_rootx() < right and top <= root.winfo_rooty() < bottom
+    finally:
+        root.destroy()

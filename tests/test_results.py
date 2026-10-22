@@ -29,6 +29,15 @@ def test_titles_reflect_outcome():
     assert JobSummary([r(ItemStatus.COMPLETED), r(ItemStatus.CANCELLED)]).title() == "Download cancelled"
 
 
+def test_skipped_items_are_not_failures():
+    # Private or deleted playlist entries are skipped, not failed.
+    assert JobSummary([r(ItemStatus.SKIPPED), r(ItemStatus.SKIPPED)]).title() == "Nothing downloaded"
+    s = JobSummary([r(ItemStatus.COMPLETED), r(ItemStatus.SKIPPED)])
+    assert s.no_problems and not s.all_ok
+    assert s.title() == "Download complete"
+    assert JobSummary([r(ItemStatus.SKIPPED), r(ItemStatus.FAILED)]).title() == "Download failed"
+
+
 def test_report_lists_problem_items_only():
     s = JobSummary([r(ItemStatus.COMPLETED, "good"), r(ItemStatus.FAILED, "bad", "HTTP 403")])
     assert s.report() == "1 completed, 1 failed\n- failed: bad: HTTP 403"

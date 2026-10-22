@@ -153,3 +153,19 @@ def test_release_workflow_builds_with_real_tools():
     assert 'gh release create "orbida-v$VERSION"' in workflow
     assert '"release/Orbida-Setup-$VERSION.exe" "release/Orbida-$VERSION.apk"' in workflow
     assert "/RELAUNCH=1" in workflow
+
+
+def test_pyproject_version_matches_the_app():
+    import tomllib
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "pyproject.toml"), "rb") as f:
+        project = tomllib.load(f)["project"]
+    assert project["version"] == version.__version__
+
+
+def test_preflight_needs_the_tray_packages():
+    assert build_app.check_tray(lambda name: object()) is None
+    problem = build_app.check_tray(lambda name: None if name == "pystray" else object())
+    assert problem.startswith("pystray not installed")
+    spec = open(os.path.join(build_app.ROOT, "Orbida.spec"), encoding="utf-8").read()
+    assert "pystray._win32" in spec  # its backend is imported by name at run time

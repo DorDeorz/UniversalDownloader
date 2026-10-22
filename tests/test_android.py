@@ -203,12 +203,12 @@ class FakeManager:
         self.calls = []
         self.infos = []
 
-    def fetch_info(self, url, log_callback=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None):
         log_callback("fetching")
         return self.info
 
     def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None,
-                       info=None):
+                       info=None, pause_event=None):
         self.calls.append((url, options))
         self.infos.append(info)
         progress_hook({"status": "downloading", "downloaded_bytes": 5, "total_bytes": 10})
@@ -246,6 +246,29 @@ def test_session_reports_analysis_errors():
     session.analyze("https://example.com/v")
     session.wait(5)
     assert _drain(queue)[-1] == (events.ANALYSIS_FAILED, {"message": "Private video"})
+
+
+def test_session_analysis_can_be_cancelled():
+    import threading
+    release = threading.Event()
+
+    class Slow(FakeManager):
+        def fetch_info(self, url, log_callback=None, cancel_event=None):
+            self.cancel_event = cancel_event
+            release.wait(5)
+            return self.info
+    queue = events.EventQueue()
+    manager = Slow()
+    session = worker.Session(manager, queue)
+    session.analyze("https://example.com/list")
+    session.cancel_analysis()
+    assert not session.busy  # a new job may start at once
+    assert session.analyze("https://example.com/next")
+    release.set()
+    session.wait(5)
+    assert manager.cancel_event is not None
+    done = [p for kind, p in _drain(queue) if kind == events.ANALYSIS_DONE]
+    assert [p["url"] for p in done] == ["https://example.com/next"]  # nothing from the cancelled one
 
 
 def test_session_rejects_bad_links_before_any_work():
@@ -286,7 +309,7 @@ def test_session_cancel_marks_remaining_items_cancelled():
 
     class SlowManager(FakeManager):
         def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
-                           cancel_event=None, info=None):
+                           cancel_event=None, info=None, pause_event=None):
             release.wait(5)
             status = ItemStatus.CANCELLED if cancel_event.is_set() else ItemStatus.COMPLETED
             return ItemResult(url, title, status)
@@ -342,7 +365,7 @@ def test_old_analysis_is_asked_again(monkeypatch):
 def test_failed_download_with_saved_info_is_retried_fresh():
     class ExpiredLinks(FakeManager):
         def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
-                           cancel_event=None, info=None):
+                           cancel_event=None, info=None, pause_event=None):
             self.infos.append(info)
             status = ItemStatus.FAILED if info is not None else ItemStatus.COMPLETED
             return ItemResult(url, title, status, error="HTTP Error 403")
@@ -447,6 +470,7 @@ def probe(*_):
     theme = next(r for r in rows if r.headline == app.t("settings.theme"))
     result["theme_before"] = theme.supporting
     result["reddit_row"] = any(r.headline == app.t("reddit_login.sign_in") for r in rows)
+    result["instagram_row"] = any(r.headline == app.t("signin.sign_in", site="Instagram") for r in rows)
     app._on_analysis_failed(main.logic.REDDIT_SIGN_IN_OFF)  # off Android: no sign-in dialog
     result["reddit_message"] = app.ids.media_title.text
     observers = len(Window.get_property_observers("mouse_pos"))
@@ -460,6 +484,37 @@ def probe(*_):
     result["saved"] = app.settings.theme
     result["same_row"] = theme in app.ids.settings_list.children  # updated in place, not rebuilt
     result["new_hover_observers"] = len(Window.get_property_observers("mouse_pos")) - observers
+    # Pause, and Wi-Fi only pausing on mobile data (a stand-in session and network).
+    class Paused:
+        paused = False
+        def pause(self): self.paused = True
+        def resume(self): self.paused = False
+        busy = False
+    real_session, app.session = app.session, Paused()
+    app.job = "download"
+    app.set_busy(True)
+    result["pause_shown"] = (app.ids.btn_pause.opacity, app.ids.btn_pause.disabled, app.ids.btn_pause.icon)
+    app.toggle_pause()
+    result["paused"] = (app.session.paused, app.ids.btn_pause.icon, app.ids.progress_detail.text)
+    app.toggle_pause()
+    metered = [True]
+    main.android_env.is_metered = lambda: metered[0]
+    app.settings.wifi_only = True
+    app._watch_network()
+    result["wifi_paused"] = (app.session.paused, app.ids.progress_detail.text)
+    metered[0] = False
+    app._watch_network()
+    result["wifi_resumed"] = app.session.paused
+    app.toggle_pause()  # the user's own pause is not undone by Wi-Fi
+    app._watch_network()
+    result["user_pause_kept"] = app.session.paused
+    app.job = None
+    app.set_busy(False)
+    result["pause_hidden"] = (app.ids.btn_pause.opacity, app.ids.btn_pause.disabled)
+    app.session = real_session
+    app.settings.wifi_only = False
+    result["wifi_row"] = any(getattr(r, "headline", None) == app.t("settings.wifi_only")
+                             for r in app.ids.settings_list.children)
     app.go_to("history")
     result["history_built"] = len(app.ids.history_list.children) > 0
     print("UIPROBE " + json.dumps(result), flush=True)
@@ -498,7 +553,12 @@ def test_settings_choice_updates_its_row_in_place(tmp_path):
     assert result["widgets_per_choice"] <= 4  # row, icon, text box, one line (MDListItem: 10+)
     assert result["new_hover_observers"] == 0
     assert result["history_built"]
-    assert result["reddit_row"]
+    assert result["reddit_row"] and result["instagram_row"] and result["wifi_row"]
+    assert result["pause_shown"] == [1, False, "pause"]
+    assert result["paused"] == [True, "play", i18n.tr("progress.paused")]
+    assert result["wifi_paused"] == [True, texts.t("wifi.paused")]
+    assert result["wifi_resumed"] is False and result["user_pause_kept"] is True
+    assert result["pause_hidden"] == [0, True]
     assert "Reddit" in result["reddit_message"] and "--cookies" not in result["reddit_message"]
 
 
@@ -508,7 +568,7 @@ def test_settings_choice_updates_its_row_in_place(tmp_path):
 def test_stage_copies_app_and_shared_modules(tmp_path):
     dest = stage.stage(str(tmp_path / "src"))
     names = set(os.listdir(dest))
-    assert {"main.py", "worker.py", "android_env.py", "layout.py", "whats_new.json",
+    assert {"main.py", "worker.py", "android_env.py", "layout.py", "whats_new.json", "texts_languages.json",
             "locales"} <= names
     assert set(stage.SHARED_MODULES) <= names
     assert "ui.py" not in names and "app_setup.py" not in names
@@ -644,11 +704,13 @@ def test_android_texts_exist_in_every_bundled_language():
         assert code in i18n.LANGUAGES
 
 
-def test_android_texts_fall_back_to_english_and_the_shared_catalog():
+def test_android_texts_fall_back_to_english_and_the_shared_catalog(monkeypatch):
     try:
         i18n.set_language("tr")
         assert texts.t("nav.settings") == "Ayarlar"
         i18n.set_language("de")
+        assert texts.t("nav.settings") == "Einstellungen"
+        monkeypatch.setattr(texts, "_more", {"de": {}})  # a text not translated yet
         assert texts.t("nav.settings") == "Settings"
         assert texts.t("link.analyze") == i18n.tr("link.analyze")  # shared key
         assert texts.t("settings.fragments_hint", count=3).startswith("3 ")
@@ -856,6 +918,89 @@ def test_reddit_refusal_points_to_the_sign_in_unless_signed_in():
         logic.set_reddit_sign_in(None)
 
 
+def test_instagram_is_signed_in_in_the_app_too(tmp_path):
+    import http.cookiejar
+    import youtube_login
+    folder = str(tmp_path)
+    assert youtube_login.site_named("Instagram") is youtube_login.INSTAGRAM
+    assert youtube_login.site_named("TikTok") is None
+    assert not youtube_login.save(folder, "csrftoken=x; mid=y", youtube_login.INSTAGRAM)
+    assert youtube_login.save(folder, "csrftoken=x; sessionid=s; ds_user_id=1", youtube_login.INSTAGRAM)
+    assert youtube_login.save(folder, REDDIT_SIGNED_IN, youtube_login.REDDIT)
+    jar = http.cookiejar.MozillaCookieJar(youtube_login.cookie_file(folder))
+    jar.load()
+    assert {c.domain for c in jar} == {".reddit.com", ".instagram.com"}
+
+
+def test_an_instagram_refusal_points_to_the_in_app_sign_in():
+    import browser_cookies
+    import texts
+    message = ("ERROR: [Instagram] DQ1abc: Requested content is not available, rate-limit reached or login "
+               "required. Use --cookies, --cookies-from-browser")
+    try:
+        explained = logic.explain_site_error(message)
+        assert logic.sign_in_offer(explained) == "Instagram"
+        logic.set_reddit_sign_in(browser_cookies.AppSignIn(["Reddit"]))  # signed in to Reddit only
+        assert logic.sign_in_offer(logic.explain_site_error(message)) == "Instagram"
+        logic.set_reddit_sign_in(browser_cookies.AppSignIn(["Reddit", "Instagram"]))
+        assert logic.explain_site_error(message) == message
+    finally:
+        logic.set_reddit_sign_in(None)
+    for key in ("signin.needed", "signin.not_here", "signin.ask_body", "signin.sign_in", "signin.signed_in",
+                "signin.ok", "signin.signed_out", "instagram.sign_in_hint"):
+        assert texts.TEXTS["en"].get(key) and texts.TEXTS["tr"].get(key), key
+
+
+def test_session_download_can_be_paused_and_resumed():
+    queue = events.EventQueue()
+    seen, started, go = [], threading.Event(), threading.Event()
+
+    class PausingManager(FakeManager):
+        def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
+                           cancel_event=None, info=None, pause_event=None):
+            seen.append(pause_event)
+            started.set()
+            go.wait(5)
+            logic.wait_while_paused(pause_event, cancel_event)  # as at each progress update
+            return ItemResult(url, title, ItemStatus.COMPLETED, path="/x")
+
+    session = worker.Session(PausingManager(), queue)
+    analysis = AnalysisResult(title="A", items=[QueueItem(url="u1", title="One")])
+    session.pause()  # from a job before: a new download starts unpaused
+    session.download(analysis, worker.build_options(worker.VIDEO_AUDIO, "/dl"))
+    assert not session.paused
+    assert started.wait(5)
+    session.pause()
+    go.set()
+    session.wait(0.5)
+    assert session.busy and session.paused
+    session.resume()
+    session.wait(5)
+    assert not session.busy and seen and seen[0] is session._pause
+
+
+def test_android_texts_exist_in_every_language():
+    import json
+    with open(texts.LANGUAGES_FILE, encoding="utf-8") as f:
+        more = json.load(f)
+    assert set(more) | {"en", "tr"} == set(i18n.LANGUAGES)
+    english = texts.TEXTS["en"]
+    assert set(texts.TEXTS["tr"]) == set(english)
+    for language, catalog in more.items():
+        assert list(catalog) == list(english), language  # same keys, same order
+        for key, text in catalog.items():
+            assert text.strip(), (language, key)
+            assert set(re.findall(r"\{\w+\}", text)) == set(re.findall(r"\{\w+\}", english[key])), (language, key)
+    try:
+        i18n.set_language("de")
+        assert texts.t("settings.wifi_only") == "Nur über WLAN herunterladen"
+        assert texts.t("signin.sign_in", site="Instagram") == "Bei Instagram anmelden"
+        i18n.set_language("ja")
+        assert texts.t("nav.settings") == i18n.tr("top.settings")
+    finally:
+        i18n.set_language("en")
+
+
 def test_reddit_sign_in_texts_exist_in_english_and_turkish():
     import texts
     for key in ("reddit_login.section", "reddit_login.sign_in", "reddit_login.sign_in_hint",
@@ -1060,6 +1205,19 @@ def test_update_versions_are_parsed_from_tags():
     assert updates.parse_version("v1.0.2") == (1, 0, 2)
     assert updates.parse_version("android-preview-57") is None
     assert updates.parse_version("") is None
+
+
+def test_update_requests_use_the_proxy_set_for_downloads(monkeypatch):
+    import logic
+    import self_update as updates
+    opened = []
+    monkeypatch.setattr(logic, "open_through_proxy", lambda url, headers, timeout: opened.append((url, headers)))
+    logic.set_network_options("socks5://127.0.0.1:1080")
+    try:
+        updates._open("https://api.github.com/x", 5, accept="application/json")
+    finally:
+        logic.set_network_options("")
+    assert opened == [("https://api.github.com/x", {"User-Agent": updates.USER_AGENT, "Accept": "application/json"})]
 
 
 def test_update_picks_the_newest_published_release_with_an_apk():
@@ -1432,3 +1590,142 @@ def test_playlist_picker_queue_and_background_service(tmp_path):
     assert r["analyzed"] == "https://example.com/next"
     assert r["calls"][-1] == ["stop", r["expected_done"]]
     assert ["update", 50] in r["calls"]
+
+
+_BACK_PROBE = """
+import json, os, sys
+sys.path[:0] = [{app!r}, {root!r}]
+from kivy.config import Config
+Config.set("graphics", "width", "412")
+Config.set("graphics", "height", "892")
+import md_patches
+md_patches.disable_hover()
+import filenames
+import main
+from kivy.clock import Clock
+from kivy.core.window import Window
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.textfield import MDTextFieldHintText
+from playlist import AnalysisResult, QueueItem
+
+app = main.UniversalDownloaderApp()
+result = {{}}
+
+def is_open():
+    return [w for w in Window.children if isinstance(w, MDDialog) and w._is_open]
+
+def probe(*_):
+    # Back: closes a dialog first, then returns to Download, then leaves.
+    app.go_to("settings")
+    app._dialog("Title", "Body")
+    result["dialog_closed"] = app._on_key(Window, 27) and not is_open()
+    result["still_settings"] = app.ids.screens.current == "settings"
+    result["to_home"] = app._on_key(Window, 27) and app.ids.screens.current == "home"
+    result["leaves_from_home"] = app._on_key(Window, 27)
+    # A link shared while a download runs waits in the queue.
+    app.job = "download"
+    app.set_busy(True)
+    app.ids.url.text = "https://example.com/typed"
+    app.tools_ready = True
+    app._on_shared_text("look https://example.com/shared")
+    result["queue"] = list(app.link_queue)
+    result["field_kept"] = app.ids.url.text
+    app.link_queue = []
+    app.job = None
+    app.set_busy(False)
+    # Low free space is told before a download starts.
+    started = []
+    class Session:
+        paused = False
+        def download(self, *args, **kwargs):
+            started.append(True)
+            return True
+        def cancel(self):
+            pass
+    real_session, app.session = app.session, Session()
+    app.analysis = AnalysisResult(title="Clip", items=[QueueItem(url="https://e.com/c", title="Clip")])
+    app.chosen = list(app.analysis.items)
+    app.download_dir = os.getcwd()
+    filenames.low_space_mb = lambda folder: 300
+    app._log_lines.clear()
+    app.download()
+    result["low_space_logged"] = app.tr("folder.low_space", mb=300) in app._log_lines
+    result["download_started"] = bool(started)
+    # Wi-Fi only: on mobile data a download asks first.
+    app.job = None
+    app.set_busy(False)
+    started.clear()
+    app.settings.wifi_only = True
+    main.android_env.is_metered = lambda: True
+    app.download()
+    result["wifi_asked"] = not started and bool(is_open())
+    for dialog in is_open():
+        dialog.dismiss()
+    app.download(mobile_data_ok=True)
+    result["wifi_anyway"] = bool(started) and app._mobile_data_ok
+    app.settings.wifi_only = False
+    app.session = real_session
+    app.job = None
+    app.set_busy(False)
+    # An analysis is cancelled with the Download button (it reads Cancel meanwhile).
+    class Reading:
+        dropped = False
+        def analyze(self, text, keep_mix=False):
+            return True
+        def cancel_analysis(self):
+            self.dropped = True
+    real_session, app.session = app.session, Reading()
+    app.ids.url.text = "https://www.youtube.com/playlist?list=PLlong"
+    app.analyze()
+    result["cancel_offered"] = (app.ids.download_text.text == app.tr("action.cancel")
+                                and not app.ids.btn_download.disabled)
+    app.download()
+    result["analysis_cancelled"] = app.session.dropped and app.job is None
+    result["cancel_shown"] = app.ids.media_title.text == app.tr("log.analysis_cancelled")
+    app._on_analysis_done(AnalysisResult(title="Late", items=[QueueItem(url="https://e.com/l", title="Late")]), "")
+    result["late_dropped"] = app.analysis is None
+    app.session = real_session
+    # The trim fields' hints in Vietnamese keep both words.
+    app._change_language("vi")
+    Clock.schedule_once(hints, 0.5)
+
+def hints(*_):
+    result["hints"] = [sorted({{w.text for w in app.ids[name].walk(restrict=True) if isinstance(w, MDTextFieldHintText)}})
+                       for name in ("trim_start", "trim_end")]
+    print("UIPROBE " + json.dumps(result), flush=True)
+    app.stop()
+
+orig = app.on_start
+def on_start():
+    orig()
+    Clock.schedule_once(probe, 2)
+app.on_start = on_start
+app.run()
+"""
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not os.environ.get("DISPLAY"), reason="needs a Linux display")
+def test_back_key_shared_link_low_space_and_trim_hints(tmp_path):
+    import importlib.util
+    import json
+    import subprocess
+    if importlib.util.find_spec("kivymd") is None:
+        pytest.skip("KivyMD (the Android UI toolkit) is not installed")
+    script = tmp_path / "probe.py"
+    script.write_text(_BACK_PROBE.format(app=os.path.join(ROOT, "android", "app"), root=ROOT), encoding="utf-8")
+    (tmp_path / "config").mkdir()
+    env = dict(os.environ, KIVY_HOME=str(tmp_path / "kivy"), XDG_CONFIG_HOME=str(tmp_path / "config"),
+               HOME=str(tmp_path), KIVY_NO_ARGS="1")
+    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env,
+                         cwd=tmp_path)
+    line = next((x for x in out.stdout.splitlines() if x.startswith("UIPROBE ")), None)
+    assert line, out.stdout[-3000:] + out.stderr[-3000:]
+    r = json.loads(line[len("UIPROBE "):])
+    assert r["dialog_closed"] and r["still_settings"] and r["to_home"]
+    assert r["leaves_from_home"] is False  # Android's default: the app closes
+    assert r["queue"] == ["https://example.com/shared"]
+    assert r["field_kept"] == "https://example.com/typed"
+    assert r["low_space_logged"] and r["download_started"]
+    assert r["wifi_asked"] and r["wifi_anyway"]
+    assert r["hints"] == [["Bắt đầu"], ["Kết thúc"]]
+    assert r["cancel_offered"] and r["analysis_cancelled"] and r["cancel_shown"] and r["late_dropped"]

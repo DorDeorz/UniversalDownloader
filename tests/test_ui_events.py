@@ -30,13 +30,13 @@ class FakeManager:
         self.downloaded = []
         self.threads = set()
 
-    def fetch_info(self, url):
+    def fetch_info(self, url, cancel_event=None):
         self.threads.add(threading.get_ident())
         if self.raise_on_fetch:
             raise self.raise_on_fetch
         return self.info
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None, pause_event=None):
         self.threads.add(threading.get_ident())
         progress_hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 2})
         if url in self.fail_urls:
@@ -180,7 +180,7 @@ class InfoManager(FakeManager):
         self.fail_first = fail_first
 
     def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,
-                       cancel_event=None, info=None):
+                       cancel_event=None, info=None, pause_event=None):
         self.infos.append(info)
         if self.fail_first and len(self.infos) == 1:
             return ItemResult(url, title, ItemStatus.FAILED, error="HTTP Error 403")
@@ -190,7 +190,7 @@ class InfoManager(FakeManager):
 def test_download_reuses_what_analysis_fetched():
     info = {"title": "clip", "webpage_url": "https://youtu.be/a", "formats": [{"format_id": "18"}]}
     manager = InfoManager()
-    manager.fetch_info = lambda url: dict(info)
+    manager.fetch_info = lambda url, cancel_event=None: dict(info)
     side = WorkerSide(manager)
     run_in_thread(side.run_analysis, "https://youtu.be/a")
     run_in_thread(side.run_queue, [{"url": "https://youtu.be/a", "title": "clip"}], {})
@@ -208,3 +208,28 @@ def test_stale_information_is_retried_fresh():
     assert side._analysed is None
     done = [e.payload["result"] for e in side.drain() if e.kind == events.ITEM_DONE]
     assert [r.status for r in done] == [ItemStatus.COMPLETED]
+
+
+def test_progress_updates_are_throttled():
+    worker = WorkerSide(FakeManager())
+    for done in range(1, 51):  # 50 hook calls in a moment
+        worker.progress_hook({"status": "downloading", "downloaded_bytes": done, "total_bytes": 100})
+    worker.progress_hook({"status": "finished", "downloaded_bytes": 100, "total_bytes": 100})
+    progress = [e for e in worker.drain() if e.kind == events.PROGRESS]
+    assert len(progress) == 2  # the first update and the finish
+    assert progress[-1].payload["fraction"] == 1
+
+
+def test_activity_log_is_read_only_and_capped(monkeypatch):
+    isolate_settings(monkeypatch)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    monkeypatch.setattr(ui.App, "LOG_LINES", 5)
+    app = new_app()
+    try:
+        for n in range(12):
+            app._append_log(f"line {n}")
+        assert app.console.cget("state") == "disabled"
+        lines = app.console.get("1.0", "end").strip().splitlines()
+        assert lines == [f"> line {n}" for n in range(7, 12)]
+    finally:
+        app.destroy()

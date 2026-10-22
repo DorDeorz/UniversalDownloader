@@ -1,11 +1,21 @@
 """Texts only the Android app shows (settings, history, about).
 
 The download texts shared with the Windows app come from ``locales/`` via
-:func:`i18n.tr`. These Android-only texts exist in English and Turkish;
-every other language shows the English ones.
+:func:`i18n.tr`. These Android-only texts are written here in English and
+Turkish; the other languages of :data:`i18n.LANGUAGES` are in
+``texts_languages.json`` (read the first time one is shown). A text missing
+there shows in English.
 """
 
+import json
+import logging
+import os
+
 import i18n
+
+_log = logging.getLogger(__name__)
+LANGUAGES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "texts_languages.json")
+_more = None  # language -> {key: text} from LANGUAGES_FILE
 
 TEXTS = {
     "en": {
@@ -137,6 +147,21 @@ TEXTS = {
         "reddit_login.ok": "Signed in to Reddit",
         "reddit_login.signed_out": "Signed out of Reddit",
         "reddit_login.ask_title": "Reddit sign-in",
+        "signin.needed": "{site} shows this only to signed-in accounts. Sign in under Settings \u203a {site}, then try again",
+        "signin.not_here": "{site} shows this only to signed-in accounts; the app cannot sign in to {site} yet",
+        "signin.ask_body": "{site} shows this only to signed-in accounts. Sign in to {site} in the app? The sign-in stays on this phone; you can sign out under Settings \u203a {site}.",
+        "signin.sign_in": "Sign in to {site}",
+        "signin.signed_in": "Signed in to {site}",
+        "signin.ok": "Signed in to {site}",
+        "signin.signed_out": "Signed out of {site}",
+        "instagram.sign_in_hint": "Optional. Instagram shows most posts only to signed-in accounts. The sign-in stays on this phone.",
+        "settings.wifi_only": "Download on Wi-Fi only",
+        "settings.wifi_only_hint": "On mobile data, ask before a download and pause a running one until Wi-Fi is back",
+        "wifi.ask_title": "Mobile data",
+        "wifi.ask_body": "The phone is on mobile data, and downloads are set to Wi-Fi only. Download anyway?",
+        "wifi.anyway": "Download anyway",
+        "wifi.paused": "Paused: waiting for Wi-Fi",
+        "wifi.resumed": "Back on Wi-Fi; the download goes on",
         "reddit_login.ask_body": "Reddit shows this post only to signed-in accounts (often NSFW). Sign in to Reddit in the app? The sign-in stays on this phone; you can sign out under Settings \u203a Reddit.",
     },
     "tr": {
@@ -268,14 +293,44 @@ TEXTS = {
         "reddit_login.ok": "Reddit'e giriş yapıldı",
         "reddit_login.signed_out": "Reddit'ten çıkış yapıldı",
         "reddit_login.ask_title": "Reddit oturumu",
+        "signin.needed": "{site} bunu yalnızca giriş yapmış hesaplara gösteriyor. Ayarlar \u203a {site} bölümünden giriş yapıp yeniden deneyin",
+        "signin.not_here": "{site} bunu yalnızca giriş yapmış hesaplara gösteriyor; uygulama henüz {site} hesabına giriş yapamıyor",
+        "signin.ask_body": "{site} bunu yalnızca giriş yapmış hesaplara gösteriyor. Uygulama içinde {site} hesabına giriş yapılsın mı? Giriş yalnızca bu telefonda kalır; Ayarlar \u203a {site} bölümünden çıkış yapabilirsiniz.",
+        "signin.sign_in": "{site} hesabına giriş yap",
+        "signin.signed_in": "{site} hesabına giriş yapıldı",
+        "signin.ok": "{site} hesabına giriş yapıldı",
+        "signin.signed_out": "{site} hesabından çıkış yapıldı",
+        "instagram.sign_in_hint": "İsteğe bağlı. Instagram gönderilerin çoğunu yalnızca giriş yapmış hesaplara gösteriyor. Giriş yalnızca bu telefonda kalır.",
+        "settings.wifi_only": "Yalnızca Wi-Fi ile indir",
+        "settings.wifi_only_hint": "Mobil veride indirmeden önce sorar, süren indirmeyi Wi-Fi gelene kadar duraklatır",
+        "wifi.ask_title": "Mobil veri",
+        "wifi.ask_body": "Telefon mobil veride ve indirmeler yalnızca Wi-Fi ile yapılacak şekilde ayarlı. Yine de indirilsin mi?",
+        "wifi.anyway": "Yine de indir",
+        "wifi.paused": "Duraklatıldı: Wi-Fi bekleniyor",
+        "wifi.resumed": "Wi-Fi geri geldi; indirme devam ediyor",
         "reddit_login.ask_body": "Reddit bu gönderiyi yalnızca giriş yapmış hesaplara gösteriyor (çoğunlukla NSFW). Uygulama içinde Reddit'e giriş yapılsın mı? Giriş yalnızca bu telefonda kalır; Ayarlar \u203a Reddit'ten çıkış yapabilirsiniz.",
     },
 }
 
 
+def texts_for(language):
+    """The Android-only texts of ``language`` ({} when there are none)."""
+    global _more
+    if language in TEXTS:
+        return TEXTS[language]
+    if _more is None:
+        try:
+            with open(LANGUAGES_FILE, encoding="utf-8") as f:
+                _more = json.load(f)
+        except (OSError, ValueError) as e:
+            _log.warning("Cannot read %s: %s", LANGUAGES_FILE, e)
+            _more = {}
+    return _more.get(language, {})
+
+
 def t(key, **values):
     """Android-only text in the current language, else English, else the shared catalog."""
-    text = TEXTS.get(i18n.current(), {}).get(key) or TEXTS["en"].get(key)
+    text = texts_for(i18n.current()).get(key) or TEXTS["en"].get(key)
     if text is None:
         return i18n.tr(key, **values)
     return text.format(**values) if values else text

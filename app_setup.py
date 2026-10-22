@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 
 from version import APP_NAME, APP_USER_MODEL_ID, LEGACY_APP_NAME, __version__
 
@@ -54,12 +55,61 @@ def migrate_legacy_data(base=None):
     return copied
 
 
+def ytdlp_dir():
+    """Folder of the yt-dlp downloaded for use instead of the bundled one (ytdlp_updates)."""
+    return os.path.join(data_dir(), "yt-dlp")
+
+
+def use_downloaded_ytdlp():
+    """Import the downloaded yt-dlp, when there is a newer one; call before anything imports yt_dlp.
+
+    One that cannot be imported is deleted, and the bundled one is used.
+    """
+    import ytdlp_updates
+    folder = ytdlp_dir()
+    try:
+        if ytdlp_updates.activate(folder):
+            import yt_dlp  # noqa: F401  (proves the download works)
+    except Exception:
+        _log.exception("The downloaded yt-dlp does not work; using the bundled one")
+        ytdlp_updates.deactivate(folder)
+    return ytdlp_updates.active_version()
+
+
+def log_dir():
+    """Folder of the log files (Settings > Open log folder)."""
+    return os.path.join(data_dir(), "logs")
+
+
+def log_uncaught_errors():
+    """Write errors nothing caught to the log, on any thread.
+
+    The installed app has no console, so Python's default printout of
+    them would be lost.
+    """
+    previous_hook = sys.excepthook
+
+    def on_error(kind, value, tb):
+        _log.critical("Uncaught error", exc_info=(kind, value, tb))
+        if sys.stderr is not None:
+            previous_hook(kind, value, tb)
+
+    def on_thread_error(args):
+        if args.exc_type is SystemExit:
+            return
+        name = args.thread.name if args.thread else "?"
+        _log.critical("Uncaught error in thread %s", name, exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
+    sys.excepthook = on_error
+    threading.excepthook = on_thread_error
+
+
 def configure_logging(folder=None):
     """Rotating log file (1 MB x 3) so problems can be diagnosed after the fact (ISSUES.md #81).
 
     Returns the log file path, or None if the folder is not writable.
     """
-    folder = folder or os.path.join(data_dir(), "logs")
+    folder = folder or log_dir()
     try:
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, "app.log")
@@ -174,13 +224,18 @@ class SingleInstance:
     ERROR_ALREADY_EXISTS = 183
 
     def __init__(self, name=APP_USER_MODEL_ID):
+        self.name = name
         self.handle = None
         self.already_running = False
-        if sys.platform != "win32":
+        self.acquire()
+
+    def acquire(self):
+        """Take the lock (again, after :meth:`release`)."""
+        if sys.platform != "win32" or self.handle:
             return
         import ctypes
         kernel32 = ctypes.windll.kernel32
-        self.handle = kernel32.CreateMutexW(None, False, f"Local\\{name}")
+        self.handle = kernel32.CreateMutexW(None, False, f"Local\\{self.name}")
         self.already_running = kernel32.GetLastError() == self.ERROR_ALREADY_EXISTS
 
     def release(self):

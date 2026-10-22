@@ -18,6 +18,7 @@ firefox\Orbida.xpi, the Mozilla-signed Firefox add-on, is bundled when present
 import argparse
 
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -78,6 +79,14 @@ def check_impersonation(available=None):
     return None
 
 
+def check_tray(find_spec=importlib.util.find_spec):
+    """Error text when the tray icon's packages (pystray, Pillow) are missing."""
+    missing = [name for name in ("pystray", "PIL") if find_spec(name) is None]
+    if missing:
+        return f"{', '.join(missing)} not installed; the tray icon would be missing (pip install -r requirements.txt)"
+    return None
+
+
 def preflight(root=ROOT, run=subprocess.run, require_windows=True, require_deno=False, require_firefox=False,
               impersonation=None):
     """All problems that must be fixed before building."""
@@ -101,6 +110,9 @@ def preflight(root=ROOT, run=subprocess.run, require_windows=True, require_deno=
     impersonate = check_impersonation(impersonation)
     if impersonate:
         problems.append(impersonate)
+    tray = check_tray()
+    if tray:
+        problems.append(tray)
     if require_deno:
         deno = check_deno(os.path.join(bin_dir, "deno.exe"), run)
         if deno:

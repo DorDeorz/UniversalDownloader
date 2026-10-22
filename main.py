@@ -7,13 +7,15 @@ from version import DISPLAY_NAME
 
 def main():
     app_setup.configure_logging()
+    app_setup.log_uncaught_errors()
+    app_setup.use_downloaded_ytdlp()  # before ui imports yt_dlp
     app_setup.set_app_user_model_id()
     instance = app_setup.SingleInstance()
     # A link from the browser extension (orbida://download?url=...) or a command line.
     link = app_setup.link_from_args(sys.argv[1:])
     if instance.already_running:
-        if link and app_setup.send_link(link):
-            return 0  # the running app takes it
+        if app_setup.send_link(link or ""):
+            return 0  # the running app takes the link, or just comes to the front
         from tkinter import Tk, messagebox
         root = Tk()
         root.withdraw()

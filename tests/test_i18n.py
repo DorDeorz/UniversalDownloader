@@ -121,3 +121,16 @@ def test_summary_uses_translated_words():
 def test_translations_are_packaged():
     with open(os.path.join(ROOT, "Orbida.spec"), encoding="utf-8") as f:
         assert "('locales', 'locales')" in f.read()
+
+
+@pytest.mark.parametrize("lang", sorted(i18n.LANGUAGES))
+def test_trim_labels_drop_only_the_example_time(lang):
+    # Android shows "Start" and "End" over its trim fields; Vietnamese
+    # "Bắt đầu" has two words, so splitting at the first space cut it.
+    i18n.set_language(lang)
+    for key in ("trim.start", "trim.end"):
+        label = i18n.tr_label(key)
+        assert label and not any(ch.isdigit() for ch in label)
+        assert i18n.tr(key).startswith(label)
+    if lang == "vi":
+        assert (i18n.tr_label("trim.start"), i18n.tr_label("trim.end")) == ("Bắt đầu", "Kết thúc")

@@ -77,12 +77,14 @@ def unique_base(prepared_path, final_ext=None):
     Any extension counts, not only the final one: yt-dlp first downloads to
     the source extension (and converts afterwards), and it would reuse an
     existing ``Title.mp4`` as "already downloaded" when making ``Title.mp3``.
+    Case is ignored, as Windows does.
     """
     folder, name = os.path.split(os.path.splitext(prepared_path)[0])
-    existing = _existing_names(folder)
+    # Windows file names ignore case: "title.mp4" is taken for "Title".
+    existing = {n.casefold() for n in _existing_names(folder)}
 
     def taken(stem):
-        prefix = stem + "."
+        prefix = stem.casefold() + "."
         return any(n.startswith(prefix) for n in existing)
 
     stem, n = name, 2
@@ -104,10 +106,16 @@ def check_folder(folder):
             pass
     except OSError as e:
         return f"Cannot write to {folder}: {e.strerror or e}", None
+    free = low_space_mb(folder)
+    if free is not None:
+        return None, f"Only {free} MB free in {folder}"
+    return None, None
+
+
+def low_space_mb(folder):
+    """Free megabytes in ``folder`` when below LOW_DISK_BYTES, else None."""
     try:
         free = shutil.disk_usage(folder).free
     except OSError:
-        return None, None
-    if free < LOW_DISK_BYTES:
-        return None, f"Only {free / 1024 ** 2:.0f} MB free in {folder}"
-    return None, None
+        return None
+    return round(free / 1024 ** 2) if free < LOW_DISK_BYTES else None

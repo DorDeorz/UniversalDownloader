@@ -30,7 +30,7 @@ class QueueManager:
     def ensure_tools(self):
         return self.tools
 
-    def fetch_info(self, url, log_callback=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None):
         return {"title": url.rsplit("/", 1)[-1], "webpage_url": url}
 
     def download_video(self, url, options, progress_hook=None, log_callback=None, title=None,

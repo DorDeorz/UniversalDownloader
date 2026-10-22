@@ -30,7 +30,7 @@ class BlockingManager:
         self.release = threading.Event()
         self.calls = 0
 
-    def fetch_info(self, url, log_callback=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None):
         self.calls += 1
         self.release.wait(5)
         return self.info
@@ -140,3 +140,30 @@ def test_missing_ffmpeg_disables_download(monkeypatch):
         assert "FFmpeg problem: bin/ffmpeg.exe is a Git LFS pointer" in app.console.get("1.0", "end")
     finally:
         app.destroy()
+
+
+@needs_display
+def test_analysis_can_be_cancelled_and_its_late_result_is_dropped(app):
+    manager = BlockingManager({"title": "Late", "entries": [{"url": "https://e.com/1", "title": "One"}]})
+    app.manager = manager
+    type_url(app, "https://example.com/list")
+    app.start_analysis_thread()
+    assert pump(app, lambda: manager.calls == 1)
+    assert app.btn_cancel.cget("state") == "normal"
+
+    app.cancel_job()
+    assert not app.is_busy()  # at once, without waiting for the site
+    assert app.btn_analyze.cget("state") == "normal"
+    assert "> Analysis cancelled" in app.console.get("1.0", "end")
+
+    manager.release.set()  # the site answers after all
+    pump(app, lambda: False, timeout=0.5)
+    assert app.download_queue == [] and app.analyzed_url is None
+
+    manager.release.clear()
+    manager.info = {"title": "Clip"}
+    app.start_analysis_thread()  # a new analysis starts normally
+    assert pump(app, lambda: manager.calls == 2)
+    manager.release.set()
+    assert pump(app, lambda: app.download_queue)
+    assert app.analyzed_url == "https://example.com/list"

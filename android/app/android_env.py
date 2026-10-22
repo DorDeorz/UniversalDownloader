@@ -11,8 +11,11 @@ The functions that talk to Android through pyjnius only run on a device;
 the rest is plain Python and is unit tested on the desktop.
 """
 
+import logging
 import os
 import re
+
+_log = logging.getLogger(__name__)
 
 # Name yt-dlp expects -> file name in the APK's native library folder.
 TOOLS = {
@@ -261,6 +264,18 @@ def bind_new_intent(callback):
             callback(text)
 
     activity.bind(on_new_intent=on_new_intent)
+
+
+def is_metered():
+    """True on a metered network (usually mobile data); False off Android or when unknown."""
+    if not on_android():
+        return False
+    try:
+        manager = _activity().getSystemService("connectivity")
+        return bool(manager.isActiveNetworkMetered())
+    except Exception as e:  # no permission, no service: do not block downloads
+        _log.warning("Network check: %s", e)
+        return False
 
 
 def set_keep_screen_on(on):

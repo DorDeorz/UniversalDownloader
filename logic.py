@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import yt_dlp
 from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
 from yt_dlp.postprocessor.sponsorblock import SponsorBlockPP
@@ -27,9 +28,15 @@ class YtDlpLogger:
     logger; debug/info chatter only goes to the module logger.
     """
 
-    def __init__(self, log_callback=None):
+    def __init__(self, log_callback=None, cancel_event=None):
         self.log_callback = log_callback
+        self.cancel_event = cancel_event
         self.errors = []
+
+    def _check_cancel(self):
+        # yt-dlp reports every page it reads; a cancelled analysis stops at the next one.
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
 
     def _emit(self, level, prefix, msg):
         msg = strip_ansi(msg)
@@ -40,9 +47,11 @@ class YtDlpLogger:
     def debug(self, msg):
         # yt-dlp routes its normal screen output through debug() as well.
         _log.debug(msg)
+        self._check_cancel()
 
     def info(self, msg):
         _log.info(msg)
+        self._check_cancel()
 
     def warning(self, msg):
         self._emit(logging.WARNING, "Warning: ", msg)
@@ -82,12 +91,78 @@ def set_network_options(proxy=''):
     _network_options = {'proxy': proxy} if proxy else {}
 
 
-# The browser's Reddit sign-in (browser_cookies.RedditSignIn) when the user
-# turned it on; see set_reddit_sign_in.
+def network_proxy():
+    """The proxy address set with set_network_options ('' for none)."""
+    return _network_options.get('proxy', '')
+
+
+class ProxyRequestError(OSError):
+    """A request through the proxy failed; ``code`` is the HTTP status, if any."""
+
+    def __init__(self, message, code=None):
+        super().__init__(message)
+        self.code = code
+
+
+class _ProxiedResponse:
+    """A yt-dlp response that closes its YoutubeDL with it; network errors are OSError."""
+
+    def __init__(self, ydl, response):
+        self._ydl, self._response = ydl, response
+        self.headers = response.headers
+        self.url = response.url
+
+    def read(self, size=-1):
+        from yt_dlp.networking.exceptions import RequestError
+        try:
+            return self._response.read(None if size is None or size < 0 else size)
+        except RequestError as e:
+            raise ProxyRequestError(str(e)) from e
+
+    def close(self):
+        try:
+            self._response.close()
+        finally:
+            self._ydl.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def open_through_proxy(url, headers=None, timeout=None):
+    """Open ``url`` through the proxy set with set_network_options.
+
+    For the app's own requests (update checks), which plain urllib would
+    send past an HTTP or SOCKS proxy the user set for downloads. The
+    certificate is checked as for downloads.
+    """
+    from yt_dlp.networking import Request
+    from yt_dlp.networking.exceptions import HTTPError, RequestError
+    ydl = yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'color': 'no_color',
+                            'socket_timeout': timeout or SOCKET_TIMEOUT, **_network_options})
+    try:
+        response = ydl.urlopen(Request(url, headers=headers or {}))
+    except HTTPError as e:
+        ydl.close()
+        raise ProxyRequestError(str(e), code=e.status) from e
+    except RequestError as e:
+        ydl.close()
+        raise ProxyRequestError(str(e)) from e
+    except BaseException:
+        ydl.close()
+        raise
+    return _ProxiedResponse(ydl, response)
+
+
+# The browser's sign-in (browser_cookies.BrowserSignIn; on Android the app's
+# own, AppSignIn) when the user turned it on; see set_reddit_sign_in.
 _reddit_sign_in = None
 
 def set_reddit_sign_in(sign_in):
-    """Send the browser's Reddit cookies with every request (None: never)."""
+    """Send the browser's cookies of browser_cookies.SITES with every request (None: never)."""
     global _reddit_sign_in
     _reddit_sign_in = sign_in
 
@@ -103,7 +178,7 @@ def base_ydl_options(log_callback=None):
         # A copy, because yt-dlp may normalise nested option dicts in place.
         **copy.deepcopy(_platform_options),
         **_network_options,
-        # Only reddit.com cookies, so other sites see no sign-in.
+        # Only the cookies of browser_cookies.SITES, so other sites see no sign-in.
         **(_reddit_sign_in.ydl_options() if _reddit_sign_in else {}),
         'logger': YtDlpLogger(log_callback),
         'noprogress': True,
@@ -175,7 +250,7 @@ def reusable_info(info):
 
 
 class PartialFiles:
-    """Remembers the files a download touched so a cancel can remove them.
+    """Remembers the files a download touched so a cancel or failure can remove them.
 
     yt-dlp reports its working names through progress hooks; it also leaves
     ``.part``, ``.ytdl`` and ``.part-FragN`` files next to them.
@@ -380,17 +455,34 @@ class DownloadManager:
                 _log.warning("curl_cffi is missing; TikTok and some other sites may refuse downloads")
         return self.tools
 
-    def fetch_info(self, url, log_callback=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None):
         """ 
         Playlist veya video bilgisini çeker.
         Hata olursa None döndürmez, 'error' ve 'error_type' anahtarları olan bir sözlük döndürür.
+
+        Setting ``cancel_event`` stops the analysis at the next page yt-dlp
+        (or the Spotify reader) asks for; the result is then
+        ``{'error': 'Cancelled by user', 'cancelled': True}``.
         """
+        cancelled = {'error': 'Cancelled by user', 'error_type': 'DownloadCancelled', 'cancelled': True}
+
+        def is_cancelled():
+            return cancel_event is not None and cancel_event.is_set()
+
+        def read_page(page, headers=None, data=None):
+            if is_cancelled():
+                raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
+            return _read_page(page, ydl_opts, headers, data)
+
         ydl_opts = base_ydl_options(log_callback)
         try:
-            info = spotify.fetch_info(
-                url, lambda page, headers=None, data=None: _read_page(page, ydl_opts, headers, data))
+            info = spotify.fetch_info(url, read_page)
         except Exception as e:
+            if is_cancelled():
+                return cancelled
             return {'error': describe_error(e), 'error_type': type(e).__name__}
+        if is_cancelled():
+            return cancelled
         if info is not None:  # a Spotify song or list: songs to search for on YouTube
             if info.get('partial'):
                 message = f"Spotify: only the first {spotify.EMBED_LIMIT} songs could be read ({info['partial']})"
@@ -405,16 +497,20 @@ class DownloadManager:
 
         attempts = self._client_attempts()
         for clients in attempts:
-            logger = YtDlpLogger(log_callback)
+            logger = YtDlpLogger(log_callback, cancel_event)
             ydl_opts['logger'] = logger
             try:
                 with yt_dlp.YoutubeDL(with_player_clients(ydl_opts, clients)) as ydl:
                     info = ydl.extract_info(url, download=False)
             except Exception as e:
+                if is_cancelled():
+                    return cancelled
                 if self._retry_bot_check(describe_error(e), clients, attempts, log_callback):
                     continue
                 return {'error': explain_site_error(describe_error(e)), 'error_type': type(e).__name__}
 
+            if is_cancelled():
+                return cancelled
             if info is None:
                 # ignoreerrors turned the failure into None; keep yt-dlp's reason.
                 reason = logger.errors[-1] if logger.errors else 'Content is private or unavailable'
@@ -425,7 +521,7 @@ class DownloadManager:
             return info
 
     def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None,
-                       info=None):
+                       info=None, pause_event=None):
         """Download one item and return its :class:`results.ItemResult`.
 
         Never raises for download problems: yt-dlp, trim and postprocessor
@@ -439,7 +535,11 @@ class DownloadManager:
         container can be reached by remuxing or needs re-encoding.
 
         Setting ``cancel_event`` stops the download at the next progress
-        update; the item is then ``cancelled`` and its partial files removed.
+        update; the item is then ``cancelled``. Partial files are removed
+        for cancelled and failed items alike.
+
+        While ``pause_event`` is set the download waits at its next progress
+        update (see :func:`wait_while_paused`); Cancel still works.
 
         ``info`` is what :meth:`fetch_info` returned for this very video. The
         metadata pass then selects formats from it instead of asking the site
@@ -449,13 +549,20 @@ class DownloadManager:
         title = title or url
         partial = PartialFiles()
 
-        def failed(error):
-            return ItemResult(url, title, ItemStatus.FAILED, error=error)
-
-        def cancelled():
+        def remove_partial_files():
             removed = partial.cleanup()
             if removed and log_callback:
                 log_callback(f"Removed {len(removed)} partial file(s)")
+
+        def failed(error):
+            # A failed item leaves nothing behind either: half-downloaded
+            # parts would only fill the disk, and a retry picks a free name
+            # anyway (filenames.unique_base).
+            remove_partial_files()
+            return ItemResult(url, title, ItemStatus.FAILED, error=error)
+
+        def cancelled():
+            remove_partial_files()
             return ItemResult(url, title, ItemStatus.CANCELLED, error='Cancelled by user')
 
         def is_cancelled():
@@ -464,6 +571,7 @@ class DownloadManager:
         def check_cancel(d=None):
             if d is not None:
                 partial.track(d)
+            wait_while_paused(pause_event, cancel_event)
             if is_cancelled():
                 raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
 
@@ -477,6 +585,7 @@ class DownloadManager:
             if progress_hook:
                 progress_hook(d)
 
+        wait_while_paused(pause_event, cancel_event)
         if is_cancelled():
             return ItemResult(url, title, ItemStatus.CANCELLED, error='Cancelled by user')
 
@@ -662,6 +771,21 @@ class DownloadManager:
 
 
 PAGE_ATTEMPTS = 3
+PAUSE_POLL_SECONDS = 0.2
+
+
+def wait_while_paused(pause_event, cancel_event=None):
+    """Block while ``pause_event`` is set, until it is cleared or ``cancel_event`` is set.
+
+    Called from yt-dlp's progress hooks, so a paused download stops reading
+    from the site. If the site drops the idle connection meanwhile, yt-dlp
+    reconnects on resume and asks for the rest of the file (its ``.part``
+    is kept), or goes on with the next fragment of a stream.
+    """
+    while pause_event is not None and pause_event.is_set():
+        if cancel_event is not None and cancel_event.is_set():
+            return
+        time.sleep(PAUSE_POLL_SECONDS)
 
 
 def _read_page(url, ydl_opts, headers=None, data=None):
@@ -761,21 +885,57 @@ def _missing_folders(folder):
 # Shown instead of yt-dlp's "Account authentication is required ... --cookies"
 # for Reddit, which only shows NSFW posts to signed-in accounts.
 REDDIT_SIGN_IN_OFF = ('Reddit shows this post only to signed-in accounts (often NSFW). Turn on the '
-                      'Reddit sign-in in Settings, then try again')
+                      'browser sign-in in Settings, then try again')
 REDDIT_SIGN_IN_MISSING = ('Reddit shows this post only to signed-in accounts. Sign in to Reddit in '
                           'Firefox or Zen, allow mature content in your Reddit settings, then try again')
 
 
+# The same for the other sites of browser_cookies.SITES ("{site}" is filled in).
+SIGN_IN_OFF = ('{site} shows this only to signed-in accounts. Turn on the browser sign-in in Settings, '
+               'then try again')
+SIGN_IN_MISSING = '{site} shows this only to signed-in accounts. Sign in to {site} in Firefox or Zen, then try again'
+
+# yt-dlp's extractor tags and the words of a sign-in refusal on each site.
+_SIGN_IN_REFUSALS = (
+    ('Reddit', ('[reddit]',), ('account authentication is required',)),
+    ('Instagram', ('[instagram',), ('login required', 'log in', '--cookies')),
+    ('YouTube', ('[youtube]',), ('sign in to confirm your age', 'inappropriate for some users')),
+    ('Facebook', ('[facebook',), ('login', '--cookies')),
+    ('X', ('[twitter',), ('login', 'log in', '--cookies', 'nsfw')),
+    ('TikTok', ('[tiktok',), ('log in', 'login', '--cookies')),
+)
+
+
+def sign_in_site(message):
+    """The site (of browser_cookies.SITES) that refused ``message`` for want of a sign-in, or None."""
+    text = str(message or '').lower()
+    for site, tags, words in _SIGN_IN_REFUSALS:
+        if any(tag in text for tag in tags) and any(word in text for word in words):
+            return site
+    return None
+
+
+def sign_in_offer(message):
+    """The site a sign-in would help with for ``message`` (an explain_site_error text), or None."""
+    if message in (REDDIT_SIGN_IN_OFF, REDDIT_SIGN_IN_MISSING):
+        return 'Reddit'
+    for site in browser_cookies.SITES:
+        if message in (SIGN_IN_OFF.format(site=site), SIGN_IN_MISSING.format(site=site)):
+            return site
+    return None
+
+
 def explain_site_error(message):
     """Replace yt-dlp's command-line advice for a sign-in refusal with what to do in the app."""
-    if '[Reddit]' not in message or 'Account authentication is required' not in message:
+    site = sign_in_site(message)
+    if site is None:
         return message
-    _log.warning("Reddit refused without sign-in: %s", message)
-    if _reddit_sign_in is None:
-        return REDDIT_SIGN_IN_OFF
-    if _reddit_sign_in.status == browser_cookies.SIGNED_IN:
-        return message  # the browser is signed in and Reddit still refuses: keep yt-dlp's reason
-    return REDDIT_SIGN_IN_MISSING
+    _log.warning("%s refused without sign-in: %s", site, message)
+    if _reddit_sign_in is not None and _reddit_sign_in.signed_in(site):
+        return message  # signed in and still refused: keep yt-dlp's reason
+    if site == 'Reddit':
+        return REDDIT_SIGN_IN_OFF if _reddit_sign_in is None else REDDIT_SIGN_IN_MISSING
+    return (SIGN_IN_OFF if _reddit_sign_in is None else SIGN_IN_MISSING).format(site=site)
 
 
 def explain_format_error(message, mode, quality):

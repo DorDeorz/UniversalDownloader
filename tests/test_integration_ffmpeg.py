@@ -32,6 +32,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
     """
 
     throttle = 0.0
+    drop_after = None  # bytes after which the next response is cut off once (a dropped connection)
 
     def log_message(self, *args):
         pass
@@ -67,7 +68,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     def copyfile(self, source, outputfile):
         remaining = self._range
+        drop_after, sent = _Handler.drop_after, 0
         while chunk := source.read(64 * 1024 if remaining is None else min(64 * 1024, remaining)):
+            if drop_after is not None and sent >= drop_after:
+                _Handler.drop_after = None
+                self.close_connection = True
+                return
+            sent += len(chunk)
             if remaining is not None:
                 remaining -= len(chunk)
             try:
@@ -220,6 +227,49 @@ def test_cancel_stops_and_cleans_up(manager, server, tmp_path, monkeypatch):
                                     progress_hook=hook, cancel_event=cancel)
 
     assert result.status is ItemStatus.CANCELLED
+    assert [f for _, _, files in os.walk(tmp_path) for f in files] == []
+
+
+@pytest.mark.parametrize("dropped", [False, True])
+def test_pause_holds_the_download_and_resume_finishes_it(manager, server, media, tmp_path, monkeypatch, dropped):
+    # While paused, the site may drop the idle connection; yt-dlp then asks for the rest.
+    monkeypatch.setattr(_Handler, "throttle", 0.02)
+    monkeypatch.setattr(_Handler, "drop_after", 32 * 1024 if dropped else None)
+    monkeypatch.setattr(logic, "PAUSE_POLL_SECONDS", 0.05)
+    pause = threading.Event()
+    times = []
+
+    def hook(d):
+        if d.get("status") != "downloading":
+            return
+        times.append(time.monotonic())
+        if len(times) == 2:
+            pause.set()
+            threading.Timer(1.0, pause.clear).start()
+
+    result = manager.download_video(f"{server}/clip.mp4", {"save_path": str(tmp_path), "format": "mp4"},
+                                    progress_hook=hook, pause_event=pause)
+
+    assert result.status is ItemStatus.COMPLETED, result.error
+    assert max(b - a for a, b in zip(times, times[1:])) >= 0.9  # nothing moved while paused
+    assert probe(result.path)[1] == pytest.approx(6, abs=0.5)
+    assert _Handler.drop_after is None  # the connection was dropped (when asked to)
+
+
+def test_cancel_works_while_paused(manager, server, tmp_path, monkeypatch):
+    monkeypatch.setattr(_Handler, "throttle", 0.02)
+    monkeypatch.setattr(logic, "PAUSE_POLL_SECONDS", 0.05)
+    pause, cancel = threading.Event(), threading.Event()
+
+    def hook(d):
+        if d.get("status") == "downloading" and not pause.is_set():
+            pause.set()
+            threading.Timer(0.3, cancel.set).start()
+
+    started = time.monotonic()
+    result = manager.download_video(f"{server}/clip.mp4", {"save_path": str(tmp_path), "format": "mp4"},
+                                    progress_hook=hook, cancel_event=cancel, pause_event=pause)
+    assert result.status is ItemStatus.CANCELLED and time.monotonic() - started < 10
     assert [f for _, _, files in os.walk(tmp_path) for f in files] == []
 
 

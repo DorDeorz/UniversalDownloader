@@ -3,7 +3,7 @@
 customtkinter==6.0.0
 darkdetect==0.8.0
 packaging==26.3
-yt-dlp==2026.8.19
+yt-dlp==2026.10.21
 # yt-dlp's recommended extras ("yt-dlp[default]"), at the versions yt-dlp
 # itself pins for this release (its "pin" extra). They add brotli/HTTP
 # features, certifi's CA bundle, websockets, cover-art support (mutagen)
@@ -25,3 +25,7 @@ yt-dlp-ejs==0.8.0
 curl-cffi==0.16.0
 cffi==2.1.1
 pycparser==3.0
+# The tray icon (tray.py): pystray draws it, Pillow loads app.ico for it.
+pystray==0.19.5
+pillow==13.0.0
+six==1.17.0

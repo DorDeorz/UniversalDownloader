@@ -39,6 +39,12 @@ def test_unique_base_avoids_any_extension(tmp_path):
     assert filenames.unique_base(str(tmp_path / "Clip.webm"), "mp3") == str(tmp_path / "Clip (2)")
 
 
+def test_unique_base_ignores_case(tmp_path):
+    # Windows treats title.mp4 and Title.mp4 as the same file.
+    (tmp_path / "clip.mp4").write_bytes(b"x")
+    assert filenames.unique_base(str(tmp_path / "Clip.webm"), "mp4") == str(tmp_path / "Clip (2)")
+
+
 def test_unique_base_ignores_similar_names(tmp_path):
     (tmp_path / "Clip extended.mp4").write_bytes(b"x")
     assert filenames.unique_base(str(tmp_path / "Clip.webm"), "mp4") == str(tmp_path / "Clip")
@@ -103,6 +109,13 @@ def test_check_folder_warns_on_low_space(tmp_path, monkeypatch):
     monkeypatch.setattr(filenames.shutil, "disk_usage", lambda p: type("U", (), {"free": 10 * 1024 ** 2})())
     error, warning = filenames.check_folder(str(tmp_path))
     assert error is None and "10 MB free" in warning
+    assert filenames.low_space_mb(str(tmp_path)) == 10
+
+
+def test_enough_space_gives_no_warning(tmp_path, monkeypatch):
+    monkeypatch.setattr(filenames.shutil, "disk_usage", lambda p: type("U", (), {"free": 50 * 1024 ** 3})())
+    assert filenames.check_folder(str(tmp_path)) == (None, None)
+    assert filenames.low_space_mb(str(tmp_path)) is None
 
 
 # --- through download_video ----------------------------------------------

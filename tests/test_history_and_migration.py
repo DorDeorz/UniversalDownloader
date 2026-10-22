@@ -91,3 +91,23 @@ def test_data_folder_is_named_after_the_app(monkeypatch, tmp_path):
 def test_keep_awake_is_harmless_off_windows(monkeypatch):
     monkeypatch.setattr(app_setup.sys, "platform", "linux")
     assert app_setup.keep_awake(True) is False
+
+
+def test_uncaught_errors_are_logged(monkeypatch, caplog):
+    import sys
+    import threading
+    monkeypatch.setattr(sys, "excepthook", sys.excepthook)
+    monkeypatch.setattr(threading, "excepthook", threading.excepthook)
+    app_setup.log_uncaught_errors()
+
+    def fail():
+        raise RuntimeError("worker broke")
+    worker = threading.Thread(target=fail, name="analysis")
+    worker.start()
+    worker.join()
+    assert "Uncaught error in thread analysis" in caplog.text and "worker broke" in caplog.text
+
+
+def test_log_folder_is_inside_the_data_folder(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_setup, "data_dir", lambda: str(tmp_path))
+    assert app_setup.log_dir() == str(tmp_path / "logs")

@@ -148,4 +148,9 @@ def english_ui(monkeypatch):
 def no_update_check(monkeypatch):
     """The app looks for updates at start; tests never reach GitHub."""
     import updates
+    import ytdlp_updates
     monkeypatch.setattr(updates, "check", lambda *args, **kwargs: None)
+
+    def no_ytdlp_check(opener):
+        raise ytdlp_updates.UpdateError("tests never reach GitHub")
+    monkeypatch.setattr(ytdlp_updates, "latest_version", no_ytdlp_check)

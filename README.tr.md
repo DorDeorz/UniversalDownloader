@@ -98,6 +98,10 @@ Windows tarafının ayrıntıları için:
   basın: her biri sırayla iner.
 - **Kuyruk.** İndirme sürerken eklenen bağlantılar kuyrukta bekler ve
   sırayla başlar.
+- Süren bir indirme **duraklatılıp sürdürülebilir**; analiz iptal edilebilir.
+- **yt-dlp kendini güncel tutar.** Her güncelleme denetimi en yeni yt-dlp'yi
+  de indirir (sağlama toplamı doğrulanır) ve sonraki açılışta kullanır;
+  değişen bir site yeni bir Orbida beklemeden yeniden çalışır.
 - **Çalma listeleri hatırlar:** Daha önce indirilenler işaretsiz ve
   "daha önce indirildi" notuyla gelir, **Sadece yeniler** gerisini seçer.
 - **Her öğenin bir sonucu olur.** Her öğe tamamlandı, başarısız, atlandı ya
@@ -123,12 +127,16 @@ Windows tarafının ayrıntıları için:
 ### Windows
 
 - **Tarayıcı eklentisi:** Chrome, Edge, Brave ve Opera için (aşağıda).
-- **NSFW Reddit gönderileri:** Reddit bunları yalnızca giriş yapmış
-  hesaplara gösterir. **Tarayıcımdaki Reddit oturumunu kullan** seçeneğini
-  açın (Ayarlar › İndirmeler ya da Orbida sorduğunda Evet). Orbida,
-  Firefox ya da Zen'in (LibreWolf, Floorp, Waterfox da olur) reddit.com
-  çerezlerini Reddit'e gönderir. Varsayılan olarak kapalıdır; çerezler
+- **Hesap isteyen gönderiler** (NSFW Reddit gönderileri, Instagram'ın
+  çoğu, yaş kısıtlı YouTube videoları). **Tarayıcımdaki oturumu kullan**
+  seçeneğini açın (Ayarlar › İndirmeler ya da Orbida sorduğunda Evet).
+  Orbida, Firefox ya da Zen'deki (LibreWolf, Floorp, Waterfox da olur)
+  çerezleri yalnızca kendi sitelerine, yani Reddit, Instagram, YouTube,
+  Facebook, X ve TikTok'a gönderir. Varsayılan olarak kapalıdır; çerezler
   başka hiçbir siteye gitmez, Orbida şifrenizi hiç görmez.
+- **Simge durumu:** Ayarlar › İndirmeler › Kapatınca simge durumunda
+  çalışmaya devam et açıksa, pencereyi kapatınca Orbida (ve indirmeleri)
+  bildirim alanında çalışmaya devam eder.
 - **Pano takibi:** Ayarlar › Kopyalanan bağlantılar › Takip et açıksa,
   Orbida çalışırken kopyaladığınız her bağlantı bir İndir düğmesiyle
   önerilir.
@@ -195,15 +203,17 @@ tıkladığınızda sekmenin adresini okur.
 - **Hesapsız YouTube.** YouTube "bot olmadığınızı doğrulayın" derse Orbida
   telefonun kendi tarayıcı motoru üzerinden yeniden dener. Oturum açmak
   mümkün ama gerekmez.
-- **NSFW Reddit gönderileri** giriş yapmış hesap ister: Ayarlar › Reddit ›
-  Reddit'e giriş yap (isteğe bağlı; Reddit bir gönderiyi reddettiğinde
-  Orbida da önerir). Giriş yalnızca telefonda kalır.
+- **NSFW Reddit gönderileri ve Instagram** giriş yapmış hesap ister:
+  Ayarlar › Reddit ya da Instagram (isteğe bağlı; bir gönderi
+  reddedildiğinde Orbida da önerir). Giriş yalnızca telefonda kalır.
+- **Yalnızca Wi-Fi** (Ayarlar › Davranış): mobil veride indirmeden önce
+  sorar, süren indirmeyi Wi-Fi gelene kadar duraklatır.
 - Dosyalar `Download/Orbida` klasörüne kaydedilir ve galeri ile müzik
   uygulamalarında görünür. Geçmiş sekmesinde Aç, Paylaş ve Kaldır var.
 - Çalma listesinden indirilecek öğeleri seçebilirsiniz.
 - İndirmeler arka planda sürer, ilerleme bildirimde görünür.
 - İndirme sürerken ekran açık kalır.
-- İngilizce ve Türkçe.
+- 25 dil.
 
 Ayrıntılar: [android/README.md](android/README.md) (İngilizce).
 

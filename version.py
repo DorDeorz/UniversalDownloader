@@ -6,7 +6,7 @@ installer and the updater all read these values.
 
 APP_NAME = "Orbida"
 DISPLAY_NAME = "Orbida"
-__version__ = "1.2.3"
+__version__ = "1.2.4"
 # The app was called UniversalDownloader before 1.0.0. Its per-user data
 # folder is migrated from this name (see app_setup.data_dir).
 LEGACY_APP_NAME = "UniversalDownloader"

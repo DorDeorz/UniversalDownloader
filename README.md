@@ -77,11 +77,11 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
   Of the first three results, the one closest in length to the song wins.
   The file is named "Artist - Song" and tagged with Spotify's title,
   artist, album and album cover. SoundCloud and Bandcamp download directly.
-- **Subtitles** can be saved next to videos as .srt files, in the app's
-  language and English.
-- **Skip sponsors.** With SponsorBlock on, the sponsor, "subscribe" and
-  intro parts the SponsorBlock community marked are cut out of YouTube
-  videos (also the talking in music videos). Not used for trimmed downloads.
+- **Subtitles** in the languages you choose, as srt, ass or vtt files next
+  to the video or embedded into it.
+- **Skip sponsors.** With SponsorBlock on, the parts the SponsorBlock
+  community marked (you choose which: sponsor, "subscribe", intro, outro...)
+  are cut out of YouTube videos, also inside a trimmed part.
 - **YouTube Mix links.** A song opened inside a Mix downloads alone; a
   **Download the Mix** button offers the whole list.
 - **A notification** tells you when downloads finish while you work in
@@ -101,7 +101,11 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
   partial files behind.
 - **Files never overwrite each other.** A second "Title.mp4" becomes
   "Title (2).mp4".
-- **History** of finished downloads, with Open and Remove.
+- **History** of finished downloads, with search, Open, Download again and
+  Remove (with Undo; the file is never deleted).
+- **After a download:** Open the file, retry the failed items, download
+  again. Waiting links can be reordered or taken out of the queue.
+- **Update channel:** stable or beta, and a version can be skipped.
 - **Settings.** Theme and accent colour, language, parallel connections,
   a speed limit, a proxy (HTTP or SOCKS), pasting a copied link when the
   app opens, and keeping the device awake while downloading. Your choices
@@ -119,6 +123,10 @@ On Windows, see [docs/updates.md](docs/updates.md) for the details.
   Reddit, Instagram, YouTube, Facebook, X and TikTok their own cookies from
   your Firefox or Zen (also LibreWolf, Floorp, Waterfox). Off by default;
   no other site gets them, and Orbida never sees a password.
+- **A failed download continues** from its partial files on the next try
+  (only the same video, formats and file type; partial files older than 7
+  days are deleted), and every finished file is checked with ffprobe.
+- **Live streams** can be downloaded from their start.
 - **Tray:** with Settings › Downloads › Keep running in the tray when
   closed, closing the window keeps Orbida (and its downloads) running in the
   notification area.
@@ -186,7 +194,10 @@ address of the tab when you click it.
 - **Wi-Fi only** (Settings › Behaviour): asks before downloading on mobile
   data and pauses a running download until Wi-Fi is back.
 - Files are saved to `Download/Orbida` and show up in gallery and music
-  apps. History has Open, Share and Remove.
+  apps. History has search, Open, Share, Download again and Remove (with
+  Undo).
+- The notification has Pause/Resume and Cancel buttons, and Open when the
+  download is finished.
 - Pick which playlist entries to download.
 - Downloads keep going in the background, with progress in a
   notification.

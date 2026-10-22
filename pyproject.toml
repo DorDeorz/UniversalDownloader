@@ -1,6 +1,6 @@
 [project]
 name = "orbida"
-version = "1.2.3"  # keep equal to version.py (tests/test_build.py checks)
+version = "1.2.4"  # keep equal to version.py (tests/test_build.py checks)
 description = "Orbida: a video and audio downloader for Windows and Android built on yt-dlp and FFmpeg"
 requires-python = ">=3.11"
 # Exact pins live in requirements.txt / requirements-dev.txt.

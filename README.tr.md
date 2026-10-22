@@ -84,12 +84,12 @@ Windows tarafının ayrıntıları için:
   kaydedilir. İlk üç sonuçtan süresi şarkıya en yakın olan seçilir. Dosya
   "Sanatçı - Şarkı" adıyla, Spotify'daki ad, sanatçı, albüm ve albüm
   kapağıyla kaydedilir. SoundCloud ve Bandcamp doğrudan iner.
-- **Altyazı** videoların yanına .srt dosyası olarak, uygulamanın dilinde ve
-  İngilizce kaydedilebilir.
+- **Altyazı** seçtiğin dillerde, srt, ass ya da vtt olarak videonun yanına
+  kaydedilir ya da videoya gömülür.
 - **Sponsorları atla.** SponsorBlock açıkken, SponsorBlock topluluğunun
-  işaretlediği sponsor, "abone ol" ve intro kısımları YouTube videolarından
-  kesilir (müzik videolarındaki konuşmalar da). Kırpılan indirmelerde
-  kullanılmaz.
+  işaretlediği kısımlar (hangileri olacağını sen seçersin: sponsor, "abone
+  ol", intro, outro...) YouTube videolarından kesilir; kırpılan parçanın
+  içinde de.
 - **YouTube Mix linkleri.** Mix içinde açılmış bir şarkı tek başına iner;
   **Mix'i indir** düğmesi listenin tamamını sunar.
 - **Bildirim:** Başka bir pencerede çalışırken indirmeler bitince haber
@@ -109,7 +109,11 @@ Windows tarafının ayrıntıları için:
   edilen indirme yarım dosya bırakmaz.
 - **Dosyalar birbirinin üzerine yazılmaz.** İkinci bir "Başlık.mp4",
   "Başlık (2).mp4" olur.
-- **Geçmiş:** Biten indirmeler Aç ve Kaldır düğmeleriyle listelenir.
+- **Geçmiş:** Biten indirmeler arama, Aç, Yeniden indir ve Kaldır (Geri al
+  ile; dosya hiçbir zaman silinmez) düğmeleriyle listelenir.
+- **İndirme bitince:** dosyayı aç, başarısızları yeniden dene, yeniden
+  indir. Bekleyen linkler sıralanabilir ya da kuyruktan çıkarılabilir.
+- **Güncelleme kanalı:** kararlı ya da beta; bir sürüm atlanabilir.
 - **Ayarlar:**
   - tema ve vurgu rengi;
   - dil;
@@ -134,6 +138,10 @@ Windows tarafının ayrıntıları için:
   çerezleri yalnızca kendi sitelerine, yani Reddit, Instagram, YouTube,
   Facebook, X ve TikTok'a gönderir. Varsayılan olarak kapalıdır; çerezler
   başka hiçbir siteye gitmez, Orbida şifrenizi hiç görmez.
+- **Yarım kalan indirme** bir sonraki denemede kaldığı yerden devam eder
+  (yalnızca aynı video, format ve dosya türü; 7 günden eski yarım
+  dosyalar silinir). Biten her dosya ffprobe ile kontrol edilir.
+- **Canlı yayınlar** baştan indirilebilir.
 - **Simge durumu:** Ayarlar › İndirmeler › Kapatınca simge durumunda
   çalışmaya devam et açıksa, pencereyi kapatınca Orbida (ve indirmeleri)
   bildirim alanında çalışmaya devam eder.
@@ -209,7 +217,10 @@ tıkladığınızda sekmenin adresini okur.
 - **Yalnızca Wi-Fi** (Ayarlar › Davranış): mobil veride indirmeden önce
   sorar, süren indirmeyi Wi-Fi gelene kadar duraklatır.
 - Dosyalar `Download/Orbida` klasörüne kaydedilir ve galeri ile müzik
-  uygulamalarında görünür. Geçmiş sekmesinde Aç, Paylaş ve Kaldır var.
+  uygulamalarında görünür. Geçmiş sekmesinde arama, Aç, Paylaş, Yeniden
+  indir ve Kaldır (Geri al ile) var.
+- Bildirimde Duraklat/Devam ve İptal düğmeleri, indirme bitince de Aç
+  düğmesi var.
 - Çalma listesinden indirilecek öğeleri seçebilirsiniz.
 - İndirmeler arka planda sürer, ilerleme bildirimde görünür.
 - İndirme sürerken ekran açık kalır.

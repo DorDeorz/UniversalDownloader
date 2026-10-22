@@ -19,6 +19,7 @@ STAGE = "stage"                  # payload: text (what the current item is doing
 ITEM_STARTED = "item_started"    # payload: position, total, title
 ANALYSIS_DONE = "analysis_done"  # payload: analysis (playlist.AnalysisResult), url
 ANALYSIS_FAILED = "analysis_failed"  # payload: message
+ANALYSIS_PROGRESS = "analysis_progress"  # payload: count, total (playlist entries read; total may be None)
 ITEM_DONE = "item_done"          # payload: result (results.ItemResult)
 TOOLS_CHECKED = "tools_checked"  # payload: status (media_tools.ToolStatus)
 JOB_DONE = "job_done"            # payload: summary (results.JobSummary)
@@ -43,7 +44,7 @@ class EventQueue:
     """FIFO of :class:`UIEvent` objects, safe to post to from any thread."""
 
     def __init__(self):
-        self._queue = queue.Queue()
+        self._queue: queue.Queue = queue.Queue()
         self._handlers = {}
 
     def post(self, kind, **payload):

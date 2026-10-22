@@ -288,5 +288,9 @@
  "error.unavailable": "Toto médium není dostupné: bylo odstraněno, skryto nebo zablokováno.",
  "error.unsupported": "Tento odkaz není podporován. Zkopírujte adresu samotné stránky s videem.",
  "error.network": "Web nebyl dostupný. Zkontrolujte připojení k internetu (a proxy v nastavení) a zkuste to znovu.",
- "log.mode_back": "Zpět na váš režim: {mode}"
+ "log.mode_back": "Zpět na váš režim: {mode}",
+ "update.skip": "Přeskočit tuto verzi",
+ "log.update_skipped": "Verze {version} už nebude nabízena",
+ "link.read_count": "Čtení seznamu… načteno {count}",
+ "link.read_count_of": "Čtení seznamu… načteno {count} / {total}"
 }

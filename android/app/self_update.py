@@ -178,7 +178,7 @@ def remove_old(folder, keep=None):
         return
     for name in names:
         path = os.path.join(folder, name)
-        if path != keep and (name.endswith(".apk") or name.endswith(".part")):
+        if path != keep and name.endswith((".apk", ".part")):
             try:
                 os.remove(path)
             except OSError:

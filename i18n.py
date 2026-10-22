@@ -53,7 +53,7 @@ LANGUAGES = {
     "zh": "简体中文",
 }
 
-_catalogs = {}
+_catalogs: dict = {}
 _current = FALLBACK
 
 

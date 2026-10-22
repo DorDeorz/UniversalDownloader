@@ -288,5 +288,9 @@
  "error.unavailable": "Questo contenuto non è disponibile: è stato rimosso, reso privato o bloccato.",
  "error.unsupported": "Questo link non è supportato. Copia l'indirizzo della pagina del video stesso.",
  "error.network": "Impossibile raggiungere il sito. Controlla la connessione a internet (e il proxy nelle impostazioni), poi riprova.",
- "log.mode_back": "Ritorno alla tua modalità: {mode}"
+ "log.mode_back": "Ritorno alla tua modalità: {mode}",
+ "update.skip": "Salta questa versione",
+ "log.update_skipped": "La versione {version} non verrà più proposta",
+ "link.read_count": "Lettura dell'elenco… {count} letti",
+ "link.read_count_of": "Lettura dell'elenco… {count} / {total} letti"
 }

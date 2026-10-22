@@ -288,5 +288,9 @@
  "error.unavailable": "Media ini tidak tersedia: telah dihapus, dijadikan pribadi, atau diblokir.",
  "error.unsupported": "Tautan ini tidak didukung. Salin alamat halaman videonya sendiri.",
  "error.network": "Tidak dapat menjangkau situs. Periksa koneksi internet (dan proxy di Pengaturan), lalu coba lagi.",
- "log.mode_back": "Kembali ke mode Anda: {mode}"
+ "log.mode_back": "Kembali ke mode Anda: {mode}",
+ "update.skip": "Lewati versi ini",
+ "log.update_skipped": "Versi {version} tidak akan ditawarkan lagi",
+ "link.read_count": "Membaca daftar… {count} terbaca",
+ "link.read_count_of": "Membaca daftar… {count} / {total} terbaca"
 }

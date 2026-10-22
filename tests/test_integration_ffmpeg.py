@@ -116,7 +116,8 @@ def media(tmp_path_factory):
          "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac")
     (folder / "big.bin").write_bytes(os.urandom(4 * 1024 * 1024))
     # HLS whose segments are byte ranges of one file, as Reddit serves video.
-    subprocess.run([ff, "-loglevel", "error", "-y", "-i", str(folder / "clip.mp4"), "-c:a", "copy", "-c:v", "libx264", "-g", "25", "-f", "hls",
+    subprocess.run([ff, "-loglevel", "error", "-y", "-i", str(folder / "clip.mp4"), "-c:a", "copy",
+                    "-c:v", "libx264", "-g", "25", "-f", "hls",
                     "-hls_time", "1", "-hls_playlist_type", "vod", "-hls_flags", "single_file",
                     str(folder / "ranges.m3u8")], check=True)
     return folder

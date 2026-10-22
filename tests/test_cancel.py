@@ -152,7 +152,8 @@ class SlowManager:
         self.block = block
         self.started = []
 
-    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None, pause_event=None):
+    def download_video(self, url, options, progress_hook=None, log_callback=None, title=None, cancel_event=None,
+                       pause_event=None):
         self.started.append(url)
         if url in self.fail:
             return ItemResult(url, title, ItemStatus.FAILED, error="HTTP 403")

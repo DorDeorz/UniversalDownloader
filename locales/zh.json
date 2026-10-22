@@ -288,5 +288,9 @@
  "error.unavailable": "此媒体不可用：已被删除、设为私密或被屏蔽。",
  "error.unsupported": "不支持此链接。请复制视频页面本身的地址。",
  "error.network": "无法连接到网站。请检查网络连接（以及设置中的代理）后重试。",
- "log.mode_back": "已恢复为你的模式：{mode}"
+ "log.mode_back": "已恢复为你的模式：{mode}",
+ "update.skip": "跳过此版本",
+ "log.update_skipped": "将不再提示版本 {version}",
+ "link.read_count": "正在读取列表… 已读取 {count} 个",
+ "link.read_count_of": "正在读取列表… 已读取 {count} / {total} 个"
 }

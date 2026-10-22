@@ -135,6 +135,16 @@ def manager():
 
 
 @pytest.fixture(autouse=True)
+def empty_caches():
+    """Spotify lists and song searches are kept for a while; each test starts without them."""
+    logic.SPOTIFY_CACHE.clear()
+    logic.SEARCH_CACHE.clear()
+    yield
+    logic.SPOTIFY_CACHE.clear()
+    logic.SEARCH_CACHE.clear()
+
+
+@pytest.fixture(autouse=True)
 def english_ui(monkeypatch):
     """Tests check English texts, so 'System language' means English here."""
     import i18n

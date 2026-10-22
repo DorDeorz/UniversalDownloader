@@ -60,7 +60,8 @@ def test_the_token_is_what_amo_expects():
     assert json.loads(b64decode(header)) == {"alg": "HS256", "typ": "JWT"}
     claims = json.loads(b64decode(payload))
     assert claims["iss"] == "user:1:2" and claims["iat"] == 1000 and claims["exp"] == 1060
-    assert claims["jti"] != json.loads(b64decode(firefox_addon.jwt_token("user:1:2", "secret", 1000).split(".")[1]))["jti"]
+    other = firefox_addon.jwt_token("user:1:2", "secret", 1000).split(".")[1]
+    assert claims["jti"] != json.loads(b64decode(other))["jti"]
     expected = hmac.new(b"secret", f"{header}.{payload}".encode(), hashlib.sha256).digest()
     assert b64decode(signature) == expected
 

@@ -22,6 +22,7 @@ song's (logic.DownloadManager).
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 
 from playlist import SEARCH_PREFIX
@@ -29,6 +30,7 @@ from playlist import SEARCH_PREFIX
 KINDS = ("track", "album", "playlist")
 EMBED_LIMIT = 100          # songs the embed page lists at most
 PAGE_SIZE = 100            # songs per pathfinder request
+PARALLEL_PAGES = 4         # pathfinder requests at a time
 MAX_SONGS = 10000          # Spotify's own playlist limit
 PATHFINDER = "https://api-partner.spotify.com/pathfinder/v2/query"
 # The web player's query id when this was written; it is looked up again in
@@ -102,7 +104,7 @@ def _find_entity(data):
 
 
 def _artists(item):
-    names = [a.get("name") for a in item.get("artists") or [] if isinstance(a, dict) and a.get("name")]
+    names = [str(a["name"]) for a in item.get("artists") or [] if isinstance(a, dict) and a.get("name")]
     if names:
         return ", ".join(names)
     return (item.get("subtitle") or "").replace(" ", " ").strip()
@@ -214,13 +216,18 @@ def songs_from_pathfinder(data):
     return items, content.get("totalCount")
 
 
-def rest_of_playlist(playlist_id, token, open_url, start):
-    """The songs of a playlist from position ``start`` on."""
+def rest_of_playlist(playlist_id, token, open_url, start, workers=PARALLEL_PAGES):
+    """The songs of a playlist from position ``start`` on.
+
+    The first page names the playlist's length; the pages after it are asked
+    for ``workers`` at a time, so a list of thousands of songs is read in a
+    few seconds without flooding Spotify with requests.
+    """
     query = query_hash(open_url, playlist_id)
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json;charset=UTF-8",
                "App-Platform": "WebPlayer"}
-    songs, offset = [], start
-    while offset < MAX_SONGS:
+
+    def page_at(offset):
         body = json.dumps({
             "operationName": "fetchPlaylist",
             "variables": {"uri": f"spotify:playlist:{playlist_id}", "offset": offset, "limit": PAGE_SIZE,
@@ -228,11 +235,16 @@ def rest_of_playlist(playlist_id, token, open_url, start):
             "extensions": {"persistedQuery": {"version": 1, "sha256Hash": query}},
         }).encode()
         _final, text = open_url(PATHFINDER, headers=headers, data=body)
-        page, total = songs_from_pathfinder(json.loads(text))
-        songs.extend(page)
-        offset += PAGE_SIZE
-        if not total or offset >= total:
-            break
+        return songs_from_pathfinder(json.loads(text))
+
+    songs, total = page_at(start)
+    if not total:
+        return songs
+    offsets = range(start + PAGE_SIZE, min(total, MAX_SONGS), PAGE_SIZE)
+    if offsets:
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            for page, _total in pool.map(page_at, offsets):  # in order; the first error is raised
+                songs.extend(page)
     return songs
 
 

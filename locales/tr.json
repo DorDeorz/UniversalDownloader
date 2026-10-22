@@ -288,5 +288,9 @@
  "error.unavailable": "Bu medyaya ulaşılamıyor: kaldırılmış, gizlenmiş ya da engellenmiş.",
  "error.unsupported": "Bu bağlantı desteklenmiyor. Videonun kendi sayfasının adresini kopyalayın.",
  "error.network": "Siteye ulaşılamadı. İnternet bağlantısını (ve Ayarlar'daki proxy'yi) kontrol edip tekrar deneyin.",
- "log.mode_back": "Kendi moduna dönüldü: {mode}"
+ "log.mode_back": "Kendi moduna dönüldü: {mode}",
+ "update.skip": "Bu sürümü atla",
+ "log.update_skipped": "{version} sürümü bir daha önerilmeyecek",
+ "link.read_count": "Liste okunuyor… {count} okundu",
+ "link.read_count_of": "Liste okunuyor… {count} / {total} okundu"
 }

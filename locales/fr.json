@@ -288,5 +288,9 @@
  "error.unavailable": "Ce média est indisponible : il a été supprimé, rendu privé ou bloqué.",
  "error.unsupported": "Ce lien n'est pas pris en charge. Copiez l'adresse de la page de la vidéo elle-même.",
  "error.network": "Impossible de joindre le site. Vérifiez la connexion Internet (et le proxy dans les paramètres), puis réessayez.",
- "log.mode_back": "Retour à votre mode : {mode}"
+ "log.mode_back": "Retour à votre mode : {mode}",
+ "update.skip": "Ignorer cette version",
+ "log.update_skipped": "La version {version} ne sera plus proposée",
+ "link.read_count": "Lecture de la liste… {count} lus",
+ "link.read_count_of": "Lecture de la liste… {count} / {total} lus"
 }

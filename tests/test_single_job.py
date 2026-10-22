@@ -30,7 +30,7 @@ class BlockingManager:
         self.release = threading.Event()
         self.calls = 0
 
-    def fetch_info(self, url, log_callback=None, cancel_event=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None, progress=None):
         self.calls += 1
         self.release.wait(5)
         return self.info

@@ -288,5 +288,9 @@
  "error.unavailable": "Mediet är inte tillgängligt: det har tagits bort, gjorts privat eller blockerats.",
  "error.unsupported": "Länken stöds inte. Kopiera adressen till själva videosidan.",
  "error.network": "Det gick inte att nå webbplatsen. Kontrollera internetanslutningen (och proxyn i Inställningar) och försök igen.",
- "log.mode_back": "Tillbaka till ditt läge: {mode}"
+ "log.mode_back": "Tillbaka till ditt läge: {mode}",
+ "update.skip": "Hoppa över den här versionen",
+ "log.update_skipped": "Version {version} erbjuds inte igen",
+ "link.read_count": "Läser listan… {count} lästa",
+ "link.read_count_of": "Läser listan… {count} / {total} lästa"
 }

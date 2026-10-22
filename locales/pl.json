@@ -288,5 +288,9 @@
  "error.unavailable": "Ten materiał jest niedostępny: został usunięty, ukryty lub zablokowany.",
  "error.unsupported": "Ten link nie jest obsługiwany. Skopiuj adres samej strony z filmem.",
  "error.network": "Nie udało się połączyć ze stroną. Sprawdź połączenie z internetem (i proxy w ustawieniach), a potem spróbuj ponownie.",
- "log.mode_back": "Powrót do Twojego trybu: {mode}"
+ "log.mode_back": "Powrót do Twojego trybu: {mode}",
+ "update.skip": "Pomiń tę wersję",
+ "log.update_skipped": "Wersja {version} nie będzie już proponowana",
+ "link.read_count": "Czytanie listy… odczytano {count}",
+ "link.read_count_of": "Czytanie listy… odczytano {count} / {total}"
 }

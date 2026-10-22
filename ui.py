@@ -14,6 +14,7 @@ import customtkinter as ctk
 
 import app_setup
 import browser_cookies
+import download_archive
 import download_history
 import events
 import filenames
@@ -448,7 +449,7 @@ def _hex(colour):
 def mix(colour, other, amount):
     """``colour`` laid over ``other`` at ``amount`` (0-1) opacity, as "#rrggbb"."""
     a, b = _hex(colour), _hex(other)
-    return "#%02x%02x%02x" % tuple(round(x * amount + y * (1 - amount)) for x, y in zip(a, b))
+    return "#{:02x}{:02x}{:02x}".format(*(round(x * amount + y * (1 - amount)) for x, y in zip(a, b)))
 
 
 def tonal(accent):
@@ -689,10 +690,12 @@ class PlaylistSelector(ctk.CTkToplevel):
                           text=tr("playlist.add", count=count) if count else tr("playlist.none"))
 
     def select_all(self):
-        for var in self.vars: var.set(1)
+        for var in self.vars:
+            var.set(1)
         self._update_count()
     def select_none(self):
-        for var in self.vars: var.set(0)
+        for var in self.vars:
+            var.set(0)
         self._update_count()
     def select_new(self):
         for item, var in zip(self.items, self.vars):
@@ -1276,6 +1279,8 @@ class UpdateDialog(ctk.CTkToplevel):
         self.progress.set(0)
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.grid(row=3, column=0, sticky="e", padx=20, pady=(12, 18))
+        self.btn_skip = secondary_button(buttons, tr("update.skip"), self.skip)
+        self.btn_skip.pack(side="left", padx=(0, 8))
         self.btn_page = secondary_button(buttons, tr("update.page"), lambda: webbrowser.open(release.page))
         if can_install:  # otherwise the main button opens the page
             self.btn_page.pack(side="left", padx=(0, 8))
@@ -1321,6 +1326,11 @@ class UpdateDialog(ctk.CTkToplevel):
         self.app.update_dialog = None
         self.destroy()
 
+    def skip(self):
+        """Do not offer this version again (a later one is offered as usual)."""
+        self.app.skip_update(self.release.version)
+        self.later()
+
 
 def open_path(folder):
     """Show ``folder`` in Explorer (or the platform's file manager)."""
@@ -1360,6 +1370,9 @@ class App(ctk.CTk):
         apply_accent(self.settings.accent)
         apply_pure_black(self.settings.theme == "Black")
         self.history = download_history.History(os.path.join(app_setup.data_dir(), "history.json"))
+        # Every link downloaded, for "only new" in playlists; starts from the History.
+        self.archive = download_archive.Archive(os.path.join(app_setup.data_dir(), "archive.txt"),
+                                                seed=[e.url for e in self.history.entries])
         self._job_mode = None
         # (mode, format, quality) the user had chosen before a Spotify link
         # switched to Audio Only; saved instead and brought back afterwards.
@@ -1391,6 +1404,7 @@ class App(ctk.CTk):
         self.events.register(events.STAGE, self._show_stage)
         self.events.register(events.ITEM_STARTED, self._on_item_started)
         self.events.register(events.ANALYSIS_DONE, self._on_analysis_done)
+        self.events.register(events.ANALYSIS_PROGRESS, self._on_analysis_progress)
         self.events.register(events.ANALYSIS_FAILED, self._on_analysis_failed)
         self.events.register(events.ITEM_DONE, self._on_item_done)
         self.events.register(events.JOB_DONE, self._on_job_done)
@@ -1472,6 +1486,8 @@ class App(ctk.CTk):
             super().report_callback_exception(kind, value, tb)
 
     def destroy(self):
+        if getattr(self, "history", None) is not None:
+            self.history.flush()
         for call in getattr(self, "_startup_calls", ()):
             try:
                 self.after_cancel(call)
@@ -1668,8 +1684,8 @@ class App(ctk.CTk):
         self.lbl_trim_hint.grid(row=0, column=4)
         self.toggle_trim()
 
-        ctk.CTkFrame(opt_card, height=1, corner_radius=0, fg_color=CARD_BORDER).grid(row=3, column=0, columnspan=4, sticky="ew",
-                                                                    padx=16)
+        ctk.CTkFrame(opt_card, height=1, corner_radius=0, fg_color=CARD_BORDER).grid(
+            row=3, column=0, columnspan=4, sticky="ew", padx=16)
         self._section_label(opt_card, "options.save_to").grid(row=4, column=0, sticky="w", padx=(16, 12), pady=12)
         folder_row = ctk.CTkFrame(opt_card, fg_color="transparent")
         folder_row.grid(row=4, column=1, columnspan=3, sticky="ew", padx=(0, 16), pady=12)
@@ -2239,11 +2255,15 @@ class App(ctk.CTk):
             self.tray = None
             self.show_window()
 
+    def _notifier(self, title, text):
+        """A notification from the tray icon, or from a short-lived one of its own (no PowerShell)."""
+        return tray.show_notification(title, text, self.tray)
+
     def hide_to_tray(self):
         self.withdraw()
         if not self._told_tray:
             self._told_tray = True
-            app_setup.notify(tr("tray.hidden_title"), tr("tray.hidden_body"))
+            app_setup.notify(tr("tray.hidden_title"), tr("tray.hidden_body"), notifier=self._notifier)
 
     def show_window(self):
         if self._closing:
@@ -2364,7 +2384,9 @@ class App(ctk.CTk):
                 self.events.post(kind, job=cancel, **payload)
         try:
             self.log(tr("log.fetching"))
-            info = self.manager.fetch_info(url, cancel_event=cancel)
+            info = self.manager.fetch_info(
+                url, cancel_event=cancel,
+                progress=lambda count, total: post(events.ANALYSIS_PROGRESS, count=count, total=total))
             if cancel is not None and cancel.is_set():
                 return
             if info is None:
@@ -2375,7 +2397,7 @@ class App(ctk.CTk):
                 post(events.ANALYSIS_FAILED, message=f"FAILED: {i18n.tr_message(info['error'])}",
                      **({'sign_in': site} if site else {}))
             else:
-                analysis = playlist.analyze(info, url)
+                analysis = playlist.analyze(info, url, allow_live=self.settings.live_from_start)
                 if cancel is not None and cancel.is_set():
                     return
                 if not analysis.is_playlist and analysis.items and info.get('formats'):
@@ -2387,6 +2409,15 @@ class App(ctk.CTk):
     def _stale(self, job):
         """True for an event of an analysis that was cancelled (or replaced)."""
         return job is not None and (job.is_set() or job is not self._cancel_event)
+
+    def _on_analysis_progress(self, count, total=None, job=None):
+        """A long playlist is being read: "120 / 850 read" (Cancel stops it)."""
+        if self._stale(job) or self._job_kind != "analysis":
+            return
+        if total:
+            self._show_media(lambda: tr("link.read_count_of", count=count, total=total), MUTED)
+        else:
+            self._show_media(lambda: tr("link.read_count", count=count), MUTED)
 
     def _on_analysis_failed(self, message, sign_in=False, job=None):
         if self._stale(job):
@@ -2456,7 +2487,8 @@ class App(ctk.CTk):
             # the entries not downloaded before.
             items = analysis.items
             if analysis.is_playlist:
-                before = {id(i) for i in playlist.downloaded_before(items, [e.url for e in self.history.entries])}
+                before = {id(i) for i in playlist.downloaded_before(
+                    items, [e.url for e in self.history.entries], self.archive.keys)}
                 items = [i for i in items if id(i) not in before]
                 if not items:
                     self._append_log(tr("log.queue_nothing_new", title=analysis.title))
@@ -2471,7 +2503,8 @@ class App(ctk.CTk):
             self._append_log(tr("log.playlist", title=analysis.title, count=len(analysis.items),
                                 skipped=len(analysis.skipped)))
             self._pending_skipped = [item.as_dict() for item in analysis.skipped]
-            before = playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries])
+            before = playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries],
+                                                self.archive.keys)
             self.playlist_dialog = PlaylistSelector(
                 self, analysis, lambda items: self._on_playlist_selected(url, items), downloaded=before)
         else:
@@ -2680,7 +2713,8 @@ class App(ctk.CTk):
         if self._job_kind == "download":
             self.toggle_pause()  # the button pauses and resumes while a download runs
             return
-        if not self.download_queue or self.is_busy(): return
+        if not self.download_queue or self.is_busy():
+            return
         if self.chk_trim.get():
             # Kötü trim değerleriyle kuyruğu hiç başlatma
             try:
@@ -2709,9 +2743,13 @@ class App(ctk.CTk):
             **settings_store.download_speed_options(self.settings),
         }
         if self.settings.subtitles and opts['mode'] != formats.AUDIO_ONLY:
-            opts.update(subtitles=True, subtitle_langs=logic.subtitle_languages(i18n.current()))
+            opts.update(subtitles=True,
+                        subtitle_langs=logic.subtitle_languages(i18n.current(), self.settings.subtitle_langs),
+                        subtitle_format=self.settings.subtitle_format, subtitle_embed=self.settings.subtitle_embed)
         if self.settings.sponsorblock:
-            opts['sponsorblock'] = True
+            opts.update(sponsorblock=True, sponsorblock_categories=self.settings.sponsorblock_categories)
+        if self.settings.live_from_start:
+            opts['live_from_start'] = True
         self._job_mode = opts['mode']
         if self._start_job("download", self._run_queue_with_cancel, items, opts):
             # The field is free for the next link, which joins the queue.
@@ -2780,9 +2818,15 @@ class App(ctk.CTk):
         self.run_queue(items, opts, self._cancel_event, self._pause_event)
     def _on_item_done(self, result):
         self._append_log(describe_result(result))
-        if result.status is ItemStatus.COMPLETED and result.path and self.settings.save_history:
-            self.history.add(result.title, result.path, result.url, self._job_mode or "")
+        if result.status is ItemStatus.COMPLETED and self.settings.save_history:
+            # History off also means no record of the link ("only new" in playlists).
+            if result.path:
+                self.history.add(result.title, result.path, result.url, self._job_mode or "", save=False)
+            if result.url:
+                self.archive.add(result.url)
+
     def _on_job_done(self, summary):
+        self.history.flush()
         self._append_log(tr("log.result", summary=summary.headline(
             label=lambda status: tr("status." + status.value), nothing=tr("summary.nothing"))))
         self.last_summary = summary
@@ -2809,7 +2853,7 @@ class App(ctk.CTk):
             return
         if not self._in_front():
             # The user is in another window: say that the downloads finished.
-            app_setup.notify(tr(summary.title_key()), headline(), window=self)
+            app_setup.notify(tr(summary.title_key()), headline(), window=self, notifier=self._notifier)
         if done and self.settings.open_folder_when_done:
             self.open_folder()
         if self.settings.show_summary:
@@ -2837,7 +2881,8 @@ class App(ctk.CTk):
         if progress is not None:
             self._last_progress = now
             fraction, text = progress
-            self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=events.detail_from_hook(d, left=tr("progress.left", time="{time}")))
+            detail = events.detail_from_hook(d, left=tr("progress.left", time="{time}"))
+            self.events.post(events.PROGRESS, fraction=fraction, text=text, detail=detail)
 
 
     # --- updates ------------------------------------------------------------
@@ -2859,8 +2904,13 @@ class App(ctk.CTk):
             self._set_update_status(lambda: tr("update.checking"))
 
         def work():
+            channel, skipped = self.settings.update_channel, self.settings.skipped_version
             try:
-                release, error = updates.check(), None
+                # A check at start asks GitHub at most once a day; "Check now" always asks.
+                release, error = updates.check(
+                    channel=channel, skipped="" if manual else skipped,
+                    cache_path=os.path.join(app_setup.data_dir(), "update-check.json"),
+                    max_age=0 if manual else updates.CHECK_EVERY), None
             except updates.UpdateError as e:
                 release, error = None, str(e)
             except Exception as e:  # never let a check break the app
@@ -2913,6 +2963,14 @@ class App(ctk.CTk):
         self._append_log(tr("log.update_available", version=version))
         if manual:
             self.show_update_dialog()
+
+    def skip_update(self, version):
+        self.settings.skipped_version = version
+        self._save_settings()
+        self.available_update = None
+        self.btn_update.pack_forget()
+        self._append_log(tr("log.update_skipped", version=version))
+        self._set_update_status(lambda: tr("update.latest", version=__version__))
 
     def _show_update_button(self):
         version = self.available_update.version

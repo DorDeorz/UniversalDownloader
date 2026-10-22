@@ -203,7 +203,7 @@ class FakeManager:
         self.calls = []
         self.infos = []
 
-    def fetch_info(self, url, log_callback=None, cancel_event=None):
+    def fetch_info(self, url, log_callback=None, cancel_event=None, progress=None):
         log_callback("fetching")
         return self.info
 
@@ -253,7 +253,7 @@ def test_session_analysis_can_be_cancelled():
     release = threading.Event()
 
     class Slow(FakeManager):
-        def fetch_info(self, url, log_callback=None, cancel_event=None):
+        def fetch_info(self, url, log_callback=None, cancel_event=None, progress=None):
             self.cancel_event = cancel_event
             release.wait(5)
             return self.info
@@ -1690,7 +1690,8 @@ def probe(*_):
     Clock.schedule_once(hints, 0.5)
 
 def hints(*_):
-    result["hints"] = [sorted({{w.text for w in app.ids[name].walk(restrict=True) if isinstance(w, MDTextFieldHintText)}})
+    result["hints"] = [sorted({{w.text for w in app.ids[name].walk(restrict=True)
+                                if isinstance(w, MDTextFieldHintText)}})
                        for name in ("trim_start", "trim_end")]
     print("UIPROBE " + json.dumps(result), flush=True)
     app.stop()

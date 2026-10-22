@@ -149,7 +149,8 @@ def build_format_plan(mode, fmt, quality):
 
 # Codecs each container holds without re-encoding (prefix match).
 _CONTAINER_CODECS = {
-    "mp4": (("avc", "h264", "hev", "hvc", "h265", "av01", "vp09", "vp9"), ("mp4a", "aac", "mp3", "opus", "flac", "ac-3", "ec-3")),
+    "mp4": (("avc", "h264", "hev", "hvc", "h265", "av01", "vp09", "vp9"),
+            ("mp4a", "aac", "mp3", "opus", "flac", "ac-3", "ec-3")),
     "webm": (("vp8", "vp09", "vp9", "av01"), ("opus", "vorbis")),
 }
 

@@ -33,6 +33,9 @@ jobs:
       - name: Lint
         run: python -m ruff check .
 
+      - name: Type check (shared code)
+        run: python -m mypy
+
       - name: Test (Windows)
         if: runner.os == 'Windows'
         run: python -m pytest

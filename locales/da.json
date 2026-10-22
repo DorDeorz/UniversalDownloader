@@ -288,5 +288,9 @@
  "error.unavailable": "Mediet er ikke tilgængeligt: det er fjernet, gjort privat eller blokeret.",
  "error.unsupported": "Linket understøttes ikke. Kopiér adressen på selve videosiden.",
  "error.network": "Webstedet kunne ikke nås. Kontrollér internetforbindelsen (og proxyen i Indstillinger), og prøv igen.",
- "log.mode_back": "Tilbage til din tilstand: {mode}"
+ "log.mode_back": "Tilbage til din tilstand: {mode}",
+ "update.skip": "Spring denne version over",
+ "log.update_skipped": "Version {version} bliver ikke tilbudt igen",
+ "link.read_count": "Læser listen… {count} læst",
+ "link.read_count_of": "Læser listen… {count} / {total} læst"
 }

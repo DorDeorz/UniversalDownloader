@@ -288,5 +288,9 @@
  "error.unavailable": "Acest conținut nu este disponibil: a fost șters, făcut privat sau blocat.",
  "error.unsupported": "Acest link nu este acceptat. Copiați adresa paginii videoclipului.",
  "error.network": "Site-ul nu a putut fi accesat. Verificați conexiunea la internet (și proxy-ul din Setări), apoi încercați din nou.",
- "log.mode_back": "Înapoi la modul tău: {mode}"
+ "log.mode_back": "Înapoi la modul tău: {mode}",
+ "update.skip": "Omite această versiune",
+ "log.update_skipped": "Versiunea {version} nu va mai fi oferită",
+ "link.read_count": "Se citește lista… {count} citite",
+ "link.read_count_of": "Se citește lista… {count} / {total} citite"
 }

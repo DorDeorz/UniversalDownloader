@@ -288,5 +288,9 @@
  "error.unavailable": "Tämä media ei ole saatavilla: se on poistettu, muutettu yksityiseksi tai estetty.",
  "error.unsupported": "Tätä linkkiä ei tueta. Kopioi itse videosivun osoite.",
  "error.network": "Sivustoon ei saatu yhteyttä. Tarkista internetyhteys (ja asetusten välityspalvelin) ja yritä uudelleen.",
- "log.mode_back": "Palattiin omaan tilaasi: {mode}"
+ "log.mode_back": "Palattiin omaan tilaasi: {mode}",
+ "update.skip": "Ohita tämä versio",
+ "log.update_skipped": "Versiota {version} ei tarjota enää",
+ "link.read_count": "Luetaan listaa… {count} luettu",
+ "link.read_count_of": "Luetaan listaa… {count} / {total} luettu"
 }

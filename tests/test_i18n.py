@@ -41,7 +41,7 @@ def test_language_has_every_message_with_the_same_placeholders(code):
     for key, english in ENGLISH.items():
         assert isinstance(catalog[key], str) and catalog[key].strip(), key
         assert _fields(catalog[key]) == _fields(english), key
-        catalog[key].format(**{name: "x" for name in _fields(english)})  # formats cleanly
+        catalog[key].format(**dict.fromkeys(_fields(english), "x"))  # formats cleanly
 
 
 def test_missing_key_falls_back_to_english(monkeypatch):

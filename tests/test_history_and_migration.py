@@ -135,3 +135,27 @@ def test_a_damaged_archive_line_is_harmless(tmp_path):
     path = tmp_path / "downloaded.txt"
     path.write_bytes(b"youtube:abc\n\n   \n")
     assert download_archive.Archive(str(path)).keys == {"youtube:abc"}
+
+
+def test_a_playlist_writes_the_history_once(tmp_path, monkeypatch):
+    path = str(tmp_path / "history.json")
+    history = download_history.History(path)
+    writes = []
+    real_save = history.save
+    monkeypatch.setattr(history, "save", lambda: (writes.append(1), real_save()))
+    for i in range(10):
+        history.add(str(i), f"/v/{i}", save=False)
+    assert writes == [] and history.unsaved == 10
+    history.flush()
+    assert writes == [1] and len(download_history.History(path).entries) == 10
+    history.flush()  # nothing new: no write
+    assert writes == [1]
+
+
+def test_a_long_job_still_writes_every_few_entries(tmp_path, monkeypatch):
+    monkeypatch.setattr(download_history, "SAVE_EVERY", 3)
+    path = str(tmp_path / "history.json")
+    history = download_history.History(path)
+    for i in range(7):
+        history.add(str(i), f"/v/{i}", save=False)
+    assert len(download_history.History(path).entries) == 6 and history.unsaved == 1

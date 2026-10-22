@@ -1,8 +1,10 @@
 import copy
+import difflib
 import logging
 import os
 import re
 import shutil
+import threading
 import time
 import yt_dlp
 from yt_dlp.postprocessor.common import PostProcessor
@@ -66,7 +68,7 @@ class YtDlpLogger:
 # Options a platform adds to every YoutubeDL instance (see
 # set_platform_options). The Windows app adds none; the Android app points
 # yt-dlp at its bundled QuickJS because Deno is not available there.
-_platform_options = {}
+_platform_options: dict = {}
 
 
 def set_platform_options(options):
@@ -85,7 +87,7 @@ def set_platform_options(options):
 
 # Options the user's settings add to every YoutubeDL instance (the proxy);
 # see set_network_options.
-_network_options = {}
+_network_options: dict = {}
 
 def set_network_options(proxy=''):
     """Send every request through ``proxy`` (a urls.proxy_url address; '' for none)."""
@@ -323,7 +325,7 @@ class PartialFiles:
             if os.path.isdir(folder):
                 candidates.update(
                     os.path.join(folder, f) for f in os.listdir(folder)
-                    if f.startswith(name + '.part-Frag') or f.startswith(name + '-Frag'))
+                    if f.startswith((name + '.part-Frag', name + '-Frag')))
             for candidate in candidates:
                 try:
                     os.remove(candidate)
@@ -492,7 +494,7 @@ class DownloadManager:
         return self.tools
 
     def fetch_info(self, url, log_callback=None, cancel_event=None, progress=None):
-        """ 
+        """
         Playlist veya video bilgisini çeker.
         Hata olursa None döndürmez, 'error' ve 'error_type' anahtarları olan bir sözlük döndürür.
 
@@ -516,7 +518,13 @@ class DownloadManager:
 
         ydl_opts = base_ydl_options(log_callback)
         try:
-            info = spotify.fetch_info(url, read_page)
+            info = SPOTIFY_CACHE.get(url)
+            if info is None:
+                info = spotify.fetch_info(url, read_page)
+                if info is not None and not info.get('partial'):
+                    SPOTIFY_CACHE.put(url, copy.deepcopy(info))
+            else:
+                info = copy.deepcopy(info)
         except Exception as e:
             if is_cancelled():
                 return cancelled
@@ -596,8 +604,8 @@ class DownloadManager:
         """
         title = title or url
         partial = PartialFiles()
-        resumable = []  # the base name whose partial files a later try can continue (resume.py)
-        postprocessing = []  # set once the download is in (or past) its postprocessing
+        resumable: list = []  # the base name whose partial files a later try can continue (resume.py)
+        postprocessing: list = []  # set once the download is in (or past) its postprocessing
 
         def remove_partial_files():
             removed = partial.cleanup()
@@ -692,7 +700,8 @@ class DownloadManager:
             else:
                 target = url
                 if url.startswith(playlist.SEARCH_PREFIX) and meta.get('duration'):
-                    target = self._closest_result(url, meta['duration'], log_callback) or url
+                    wanted = ' - '.join(n for n in (meta.get('artist'), meta.get('track')) if n)
+                    target = self._closest_result(url, meta['duration'], log_callback, wanted) or url
                 check_cancel()
                 info, _clients = self._extract(target, dict(ydl_opts), log_callback)
             if info is not None and info.get('_type') == 'playlist':
@@ -801,23 +810,31 @@ class DownloadManager:
                 embed_subtitles(path, [sub['filepath'] for sub in saved], tools.ffmpeg, log_callback)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)
 
-    def _closest_result(self, url, duration, log_callback=None):
-        """The link of the search result whose length is closest to ``duration``.
+    def _closest_result(self, url, duration, log_callback=None, title=None):
+        """The link of the search result that best matches the song, by length and name.
 
         ``url`` is a "ytsearch1:" search for a song (spotify.py). The first
-        few results are compared, so a music video with a long intro or a
-        live version loses to the plain song. None when the search fails.
+        few results are compared, so a music video with a long intro, a live
+        version or a cover loses to the plain song. None when the search fails.
+        Results are kept for a while (SEARCH_CACHE), so a list downloaded
+        again does not search for every song again.
         """
         query = SEARCH_CANDIDATES_PREFIX + url[len(playlist.SEARCH_PREFIX):]
-        ydl_opts = base_ydl_options(log_callback)
-        ydl_opts['extract_flat'] = 'in_playlist'
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                found = ydl.extract_info(query, download=False) or {}
-        except Exception as e:
-            _log.warning("Search for %s failed: %s", url, describe_error(e))
-            return None
-        entry = closest_by_duration(list(found.get('entries') or []), duration)
+        entries = SEARCH_CACHE.get(query)
+        if entries is None:
+            ydl_opts = base_ydl_options(log_callback)
+            ydl_opts['extract_flat'] = 'in_playlist'
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    found = ydl.extract_info(query, download=False) or {}
+            except Exception as e:
+                _log.warning("Search for %s failed: %s", url, describe_error(e))
+                return None
+            entries = [{k: e.get(k) for k in ('id', 'url', 'webpage_url', 'title', 'duration', 'ie_key')}
+                       for e in (found.get('entries') or []) if e]
+            if entries:
+                SEARCH_CACHE.put(query, entries)
+        entry = closest_by_duration(list(entries), duration, title)
         return playlist.entry_url(entry) if entry else None
 
     def _download_subtitles(self, info, base, langs, tools, log_callback=None, fmt='srt'):
@@ -937,6 +954,41 @@ SEARCH_CANDIDATES_PREFIX = 'ytsearch3:'
 CLOSE_ENOUGH_SECONDS = 15
 
 
+class TimedCache:
+    """A small in-memory cache whose entries are forgotten after ``seconds``."""
+
+    def __init__(self, seconds, size=500):
+        self.seconds, self.size = seconds, size
+        self._items = {}
+        self._lock = threading.Lock()
+
+    def get(self, key):
+        with self._lock:
+            found = self._items.get(key)
+            if found is None:
+                return None
+            if time.monotonic() - found[0] > self.seconds:
+                del self._items[key]
+                return None
+            return found[1]
+
+    def put(self, key, value):
+        with self._lock:
+            if len(self._items) >= self.size:
+                del self._items[min(self._items, key=lambda k: self._items[k][0])]
+            self._items[key] = (time.monotonic(), value)
+
+    def clear(self):
+        with self._lock:
+            self._items.clear()
+
+
+# Spotify lists read in the last half hour, and YouTube searches for songs in
+# the last six hours: a list analysed or downloaded again asks for nothing twice.
+SPOTIFY_CACHE = TimedCache(30 * 60, size=50)
+SEARCH_CACHE = TimedCache(6 * 3600, size=5000)
+
+
 # Subtitle file types offered in Settings (FFmpeg converts to each).
 SUBTITLE_FORMATS = ('srt', 'ass', 'vtt')
 _SUBTITLE_LANGUAGE = re.compile(r'^[a-z]{2,3}(-[a-z0-9]{2,8})*$', re.I)
@@ -1018,22 +1070,65 @@ def embed_subtitles(video, subtitles, ffmpeg, log_callback=None, run=None):
     return True
 
 
-def closest_by_duration(entries, duration):
+# Words that mark another version of a song; a result with one loses unless
+# the song's own name has it too.
+OTHER_VERSION_WORDS = ('live', 'cover', 'karaoke', 'instrumental', 'remix', 'sped up', 'slowed',
+                       'nightcore', 'reverb', '8d', 'acoustic', 'reaction', 'lyrics video')
+OTHER_VERSION_PENALTY = 60     # seconds a result with such a word counts as off
+NAME_WEIGHT = 60               # seconds a result with an unrelated name counts as off
+
+
+def _words(text):
+    return ' '.join(re.findall(r'\w+', (text or '').casefold()))
+
+
+def title_similarity(wanted, found):
+    """0 to 1: how much of the song's name a result's title has."""
+    wanted, found = _words(wanted), _words(found)
+    if not wanted or not found:
+        return 0.0
+    words = wanted.split()
+    shared = sum(1 for w in words if re.search(rf'\b{re.escape(w)}\b', found))
+    return max(shared / len(words), difflib.SequenceMatcher(None, wanted, found).ratio())
+
+
+def _other_version(wanted, found):
+    wanted, found = f' {_words(wanted)} ', f' {_words(found)} '
+    return any(f' {w} ' in found and f' {w} ' not in wanted for w in OTHER_VERSION_WORDS)
+
+
+def closest_by_duration(entries, duration, title=None):
     """The entry to download for a song ``duration`` seconds long, or None.
 
-    The first result is kept when its length is close; otherwise the result
-    whose length is closest wins (results without a length never do).
+    Without ``title`` the first result is kept when its length is close;
+    otherwise the result whose length is closest wins (results without a
+    length never do). With ``title`` ("Artist - Song") a result also counts
+    as further off when its name shares little with the song's, or when it
+    is another version (live, cover, remix...); the first result, the one
+    YouTube ranks best, starts CLOSE_ENOUGH_SECONDS ahead.
     """
     entries = [e for e in entries if e and playlist.entry_url(e)]
     if not entries:
         return None
     timed = [e for e in entries if isinstance(e.get('duration'), (int, float))]
     first = entries[0]
-    if first in timed and abs(first['duration'] - duration) <= CLOSE_ENOUGH_SECONDS:
-        return first
     if not timed:
         return first
-    return min(timed, key=lambda e: abs(e['duration'] - duration))
+    if not title:
+        if first in timed and abs(first['duration'] - duration) <= CLOSE_ENOUGH_SECONDS:
+            return first
+        return min(timed, key=lambda e: abs(e['duration'] - duration))
+
+    def off(e):
+        seconds = abs(e['duration'] - duration)
+        seconds += (1 - title_similarity(title, e.get('title'))) * NAME_WEIGHT
+        if _other_version(title, e.get('title')):
+            seconds += OTHER_VERSION_PENALTY
+        if e is first:
+            seconds -= CLOSE_ENOUGH_SECONDS
+        return seconds
+
+    return min(timed, key=off)
 
 
 def apply_song_meta(info, meta):

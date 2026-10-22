@@ -288,5 +288,9 @@
  "error.unavailable": "Este contenido no está disponible: se eliminó, se hizo privado o se bloqueó.",
  "error.unsupported": "Este enlace no es compatible. Copia la dirección de la propia página del vídeo.",
  "error.network": "No se pudo acceder al sitio. Comprueba la conexión a internet (y el proxy en Ajustes) y vuelve a intentarlo.",
- "log.mode_back": "Vuelta a tu modo: {mode}"
+ "log.mode_back": "Vuelta a tu modo: {mode}",
+ "update.skip": "Omitir esta versión",
+ "log.update_skipped": "La versión {version} no se volverá a ofrecer",
+ "link.read_count": "Leyendo la lista… {count} leídos",
+ "link.read_count_of": "Leyendo la lista… {count} / {total} leídos"
 }

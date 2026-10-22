@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 
 _log = logging.getLogger(__name__)
 LIMIT = 300
+SAVE_EVERY = 25   # entries added with save=False before the file is written anyway
 
 
 @dataclass
@@ -31,8 +32,9 @@ class Entry:
         title, path = item.get("title"), item.get("path")
         if not isinstance(title, str) or not isinstance(path, str) or not path:
             return None
-        url = item.get("url") if isinstance(item.get("url"), str) else ""
-        mode = item.get("mode") if isinstance(item.get("mode"), str) else ""
+        url, mode = item.get("url"), item.get("mode")
+        url = url if isinstance(url, str) else ""
+        mode = mode if isinstance(mode, str) else ""
         stamp = item.get("time")
         stamp = float(stamp) if isinstance(stamp, (int, float)) and not isinstance(stamp, bool) else 0.0
         return cls(title, path, url, mode, stamp)
@@ -42,6 +44,7 @@ class History:
     def __init__(self, path):
         self.path = path
         self.entries = self._load()
+        self.unsaved = 0  # entries added since the last save (add(save=False))
 
     def _load(self):
         try:
@@ -62,15 +65,28 @@ class History:
             with open(temp, "w", encoding="utf-8") as f:
                 json.dump([asdict(e) for e in self.entries], f, ensure_ascii=False, indent=1)
             os.replace(temp, self.path)
+            self.unsaved = 0
         except OSError as e:
             _log.warning("Could not save history to %s: %s", self.path, e)
 
-    def add(self, title, path, url="", mode="", now=None):
-        """Newest first; a file downloaded again moves to the top."""
+    def add(self, title, path, url="", mode="", now=None, save=True):
+        """Newest first; a file downloaded again moves to the top.
+
+        ``save=False`` (a playlist's songs, one after another) leaves the
+        writing to flush() at the end of the job; the file is still written
+        every SAVE_EVERY entries, so a crash loses little.
+        """
         self.entries = [e for e in self.entries if e.path != path]
         self.entries.insert(0, Entry(title, path, url, mode, time.time() if now is None else now))
         del self.entries[LIMIT:]
-        self.save()
+        self.unsaved += 1
+        if save or self.unsaved >= SAVE_EVERY:
+            self.save()
+
+    def flush(self):
+        """Write entries added with save=False."""
+        if self.unsaved:
+            self.save()
 
     def remove(self, path):
         self.entries = [e for e in self.entries if e.path != path]

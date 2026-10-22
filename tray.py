@@ -84,6 +84,18 @@ class Tray:
             except Exception as e:
                 _log.warning("Tray title: %s", e)
 
+    def notify(self, title, text):
+        """A Windows notification from the tray icon (no PowerShell); False when it cannot be shown."""
+        icon = self.icon
+        if icon is None:
+            return False
+        try:
+            icon.notify(text, title)
+            return True
+        except Exception as e:
+            _log.warning("Tray notification: %s", e)
+            return False
+
     def stop(self):
         icon, self.icon = self.icon, None
         if icon is not None:
@@ -91,3 +103,42 @@ class Tray:
                 icon.stop()
             except Exception as e:
                 _log.warning("Tray icon stop: %s", e)
+
+
+# How long a notification's own icon stays (the notification goes with it).
+NOTIFY_SECONDS = 10
+
+
+def show_notification(title, text, tray=None, backend=None, keep=NOTIFY_SECONDS):
+    """Show a Windows notification without starting PowerShell.
+
+    The tray icon shows it when Orbida has one running; otherwise a hidden
+    icon of Orbida's is added for ``keep`` seconds to carry it. False when
+    neither works (then app_setup.notify falls back to PowerShell).
+    """
+    if tray is not None and tray.notify(title, text):
+        return True
+    try:
+        pystray = backend
+        if pystray is None:
+            if not supported():
+                return False
+            import pystray
+        from PIL import Image
+        icon = pystray.Icon("Orbida-notification", Image.open(resource_path("app.ico")), "Orbida")
+
+        def setup(icon):  # on a thread of pystray's while the icon's loop runs
+            try:
+                icon.visible = True
+                icon.notify(text, title)
+                threading.Event().wait(keep)
+            except Exception as e:
+                _log.warning("Notification failed: %s", e)
+            finally:
+                icon.stop()
+        threading.Thread(target=lambda: icon.run(setup), name="orbida-notification", daemon=True).start()
+        return True
+    except Exception as e:
+        _log.warning("Notification icon unavailable: %s", e)
+        return False
+

@@ -24,7 +24,8 @@ def test_fetch_info_returns_info_without_downloading(manager, fake_ydl):
 def test_fetch_info_reports_unavailable_content_as_error(manager, fake_ydl):
     fake_ydl.info = None
 
-    assert manager.fetch_info("https://youtu.be/abc") == {"error": "Content is private or unavailable", "error_type": "DownloadError"}
+    assert manager.fetch_info("https://youtu.be/abc") == {"error": "Content is private or unavailable",
+                                                          "error_type": "DownloadError"}
 
 
 def test_fetch_info_turns_exceptions_into_error_dict(manager, fake_ydl):
@@ -432,7 +433,8 @@ def test_analysis_reports_how_many_playlist_entries_were_read(manager, fake_ydl)
     fake_ydl.info = {"_type": "playlist", "title": "Big", "playlist_count": 60,
                      "entries": ({"id": str(i), "title": f"V{i}", "url": f"https://youtu.be/{i}"} for i in range(60))}
     seen = []
-    info = manager.fetch_info("https://www.youtube.com/playlist?list=x", progress=lambda n, total: seen.append((n, total)))
+    info = manager.fetch_info("https://www.youtube.com/playlist?list=x",
+                              progress=lambda n, total: seen.append((n, total)))
     import playlist
     analysis = playlist.analyze(info, "https://www.youtube.com/playlist?list=x")
     assert len(analysis.items) == 60

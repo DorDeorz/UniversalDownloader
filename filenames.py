@@ -104,7 +104,7 @@ def output_template(folder, playlist_index=None):
 # playlist does not list the same folder again for every item. Some drives
 # (FAT32 sticks) keep the time in 2-second steps, so a folder changed in the
 # last few seconds is always listed again.
-_listings = {}
+_listings: dict = {}
 FRESH_SECONDS = 3
 
 

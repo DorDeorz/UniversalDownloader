@@ -24,7 +24,7 @@ import os
 import platform
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib import metadata
 
 import firefox_addon
@@ -167,7 +167,7 @@ def write_manifest(exe_path, dist=DIST, root=ROOT):
         "app": APP_NAME,
         "version": __version__,
         "git_commit": git_commit(root),
-        "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "built_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "python": platform.python_version(),
         "platform": platform.platform(),
         "packages": packages,

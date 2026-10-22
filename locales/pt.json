@@ -288,5 +288,9 @@
  "error.unavailable": "Esta mídia não está disponível: foi removida, tornada privada ou bloqueada.",
  "error.unsupported": "Este link não é suportado. Copie o endereço da própria página do vídeo.",
  "error.network": "Não foi possível acessar o site. Verifique a conexão com a internet (e o proxy nas configurações) e tente de novo.",
- "log.mode_back": "De volta ao seu modo: {mode}"
+ "log.mode_back": "De volta ao seu modo: {mode}",
+ "update.skip": "Ignorar esta versão",
+ "log.update_skipped": "A versão {version} não será oferecida novamente",
+ "link.read_count": "Lendo a lista… {count} lidos",
+ "link.read_count_of": "Lendo a lista… {count} / {total} lidos"
 }

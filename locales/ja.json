@@ -288,5 +288,9 @@
  "error.unavailable": "このメディアは利用できません。削除されたか、非公開にされたか、ブロックされています。",
  "error.unsupported": "このリンクには対応していません。動画ページ自体のアドレスをコピーしてください。",
  "error.network": "サイトに接続できませんでした。インターネット接続 (と設定のプロキシ) を確認してから、もう一度お試しください。",
- "log.mode_back": "元のモードに戻しました: {mode}"
+ "log.mode_back": "元のモードに戻しました: {mode}",
+ "update.skip": "このバージョンをスキップ",
+ "log.update_skipped": "バージョン {version} は今後表示されません",
+ "link.read_count": "リストを読み込み中… {count} 件",
+ "link.read_count_of": "リストを読み込み中… {count} / {total} 件"
 }

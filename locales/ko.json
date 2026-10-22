@@ -288,5 +288,9 @@
  "error.unavailable": "이 미디어를 이용할 수 없습니다. 삭제되었거나 비공개로 바뀌었거나 차단되었습니다.",
  "error.unsupported": "지원하지 않는 링크입니다. 동영상 페이지 자체의 주소를 복사하세요.",
  "error.network": "사이트에 연결하지 못했습니다. 인터넷 연결(및 설정의 프록시)을 확인한 후 다시 시도하세요.",
- "log.mode_back": "원래 모드로 돌아감: {mode}"
+ "log.mode_back": "원래 모드로 돌아감: {mode}",
+ "update.skip": "이 버전 건너뛰기",
+ "log.update_skipped": "{version} 버전은 다시 표시되지 않습니다",
+ "link.read_count": "목록 읽는 중… {count}개 읽음",
+ "link.read_count_of": "목록 읽는 중… {count} / {total}개 읽음"
 }

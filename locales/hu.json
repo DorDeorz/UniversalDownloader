@@ -288,5 +288,9 @@
  "error.unavailable": "Ez a média nem érhető el: eltávolították, priváttá tették vagy letiltották.",
  "error.unsupported": "Ez a hivatkozás nem támogatott. Másolja ki magának a videó oldalának a címét.",
  "error.network": "Az oldal nem érhető el. Ellenőrizze az internetkapcsolatot (és a beállításokban a proxyt), majd próbálja újra.",
- "log.mode_back": "Vissza a saját módodhoz: {mode}"
+ "log.mode_back": "Vissza a saját módodhoz: {mode}",
+ "update.skip": "Verzió kihagyása",
+ "log.update_skipped": "A(z) {version} verziót többé nem ajánljuk fel",
+ "link.read_count": "Lista olvasása… {count} beolvasva",
+ "link.read_count_of": "Lista olvasása… {count} / {total} beolvasva"
 }

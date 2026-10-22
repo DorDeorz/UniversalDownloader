@@ -288,5 +288,9 @@
  "error.unavailable": "This media is unavailable: it was removed, made private or blocked.",
  "error.unsupported": "This link is not supported. Copy the address of the video page itself.",
  "error.network": "Could not reach the site. Check the internet connection (and the proxy in Settings), then try again.",
- "log.mode_back": "Back to your mode: {mode}"
+ "log.mode_back": "Back to your mode: {mode}",
+ "update.skip": "Skip this version",
+ "log.update_skipped": "Version {version} will not be offered again",
+ "link.read_count": "Reading the list… {count} read",
+ "link.read_count_of": "Reading the list… {count} / {total} read"
 }

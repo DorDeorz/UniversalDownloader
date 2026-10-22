@@ -288,5 +288,9 @@
  "error.unavailable": "Dieses Medium ist nicht verfügbar: Es wurde entfernt, auf privat gestellt oder gesperrt.",
  "error.unsupported": "Dieser Link wird nicht unterstützt. Kopieren Sie die Adresse der Videoseite selbst.",
  "error.network": "Die Seite war nicht erreichbar. Prüfen Sie die Internetverbindung (und den Proxy in den Einstellungen) und versuchen Sie es erneut.",
- "log.mode_back": "Zurück zu Ihrem Modus: {mode}"
+ "log.mode_back": "Zurück zu Ihrem Modus: {mode}",
+ "update.skip": "Diese Version überspringen",
+ "log.update_skipped": "Version {version} wird nicht mehr angeboten",
+ "link.read_count": "Liste wird gelesen… {count} gelesen",
+ "link.read_count_of": "Liste wird gelesen… {count} / {total} gelesen"
 }

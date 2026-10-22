@@ -9,16 +9,33 @@ their playlist position, so the order is kept on disk.
 
 import os
 import shutil
+import sys
 import tempfile
+import time
 
 from yt_dlp.utils import sanitize_filename
 
 # Keep full paths under the classic Windows MAX_PATH (260) with room for
 # yt-dlp's temporary suffixes such as '.f137.mp4.part-Frag12'.
 MAX_PATH = 230
-MIN_TITLE_BYTES = 40
+MIN_TITLE_BYTES = 40      # what a title keeps when the folder leaves room for it
+SHORTEST_TITLE_BYTES = 16  # the least a title is cut to in a long folder
 MAX_TITLE_BYTES = 150
+# Room the platform folder ("X_Twitter"), the shortest playlist folder, the
+# playlist number, the shortest title and yt-dlp's suffixes need after the
+# chosen download folder. A longer download folder cannot stay under MAX_PATH.
+_AFTER_FOLDER = len("\\X_Twitter\\") + 20 + len("\\001 - ") + SHORTEST_TITLE_BYTES + len(" (99).webm") + 16
+LONGEST_FOLDER = MAX_PATH - _AFTER_FOLDER
 LOW_DISK_BYTES = 1024 ** 3
+# The message check_folder gives for a download folder too long for Windows
+# (i18n.MESSAGE_TEMPLATES translates it).
+FOLDER_TOO_LONG = ("The folder's path is {length} characters long; Windows allows at most {limit} here. "
+                   "Choose a shorter folder")
+
+# Names Windows reserves for devices: "CON.mp4" cannot be created or opened.
+RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+                  *(f"COM{n}" for n in "123456789\u00b9\u00b2\u00b3"),
+                  *(f"LPT{n}" for n in "123456789\u00b9\u00b2\u00b3")}
 
 _PLATFORMS = {
     "youtube": "YouTube",
@@ -41,7 +58,17 @@ def platform_folder(info):
 def safe_name(text, fallback="Untitled"):
     """A single path component that is valid on Windows."""
     name = sanitize_filename(str(text or ""), restricted=False).strip().rstrip(". ")
-    return name or fallback
+    return avoid_reserved(name) if name else fallback
+
+
+def is_reserved(name):
+    """True for a name Windows keeps for a device: "CON", "nul.txt", "Com1.mp4"."""
+    return name.split(".")[0].rstrip(" ").upper() in RESERVED_NAMES
+
+
+def avoid_reserved(name):
+    """``name``, with "_" in front when Windows reserves it (yt-dlp leaves "CON" as it is)."""
+    return "_" + name if is_reserved(name) else name
 
 
 def escape_template(text):
@@ -52,23 +79,52 @@ def escape_template(text):
 def output_folder(base, info, playlist_title=None):
     parts = [base, platform_folder(info)]
     if playlist_title:
-        parts.append(safe_name(playlist_title)[:80].rstrip(". "))
+        # Shorter in a long download folder, so the titles keep some room.
+        room = MAX_PATH - len(os.path.join(*parts)) - 1 - len("001 - ") - MIN_TITLE_BYTES - len(" (99).webm") - 16
+        limit = min(80, max(20, room))
+        parts.append(avoid_reserved(safe_name(playlist_title)[:limit].rstrip(". ")) or "Playlist")
     return os.path.join(*parts)
 
 
 def output_template(folder, playlist_index=None):
-    """yt-dlp template for one item; the title is length-limited in bytes."""
-    budget = MAX_PATH - len(folder) - len(" (99).webm") - 16
-    title_bytes = max(MIN_TITLE_BYTES, min(MAX_TITLE_BYTES, budget))
+    """yt-dlp template for one item; the title is length-limited in bytes.
+
+    The title gets what the folder leaves of MAX_PATH, between
+    SHORTEST_TITLE_BYTES and MAX_TITLE_BYTES. The byte limit also limits the
+    characters, as every character takes at least one byte.
+    """
     prefix = f"{int(playlist_index):03d} - " if playlist_index else ""
+    budget = MAX_PATH - len(folder) - 1 - len(prefix) - len(" (99).webm") - 16
+    title_bytes = max(SHORTEST_TITLE_BYTES, min(MAX_TITLE_BYTES, budget))
     return os.path.join(escape_template(folder), f"{prefix}%(title).{title_bytes}B.%(ext)s")
 
 
+# folder -> (its modification time, the case-folded names in it). A folder's
+# time changes whenever a file is added, renamed or removed in it, so a
+# playlist does not list the same folder again for every item. Some drives
+# (FAT32 sticks) keep the time in 2-second steps, so a folder changed in the
+# last few seconds is always listed again.
+_listings = {}
+FRESH_SECONDS = 3
+
+
 def _existing_names(folder):
+    """The case-folded names in ``folder`` (a set; empty when it cannot be read)."""
     try:
-        return set(os.listdir(folder))
+        stamp = os.stat(folder).st_mtime_ns
+        cached = _listings.get(folder)
+        settled = time.time() - stamp / 1e9 > FRESH_SECONDS
+        if cached is not None and cached[0] == stamp and settled:
+            return cached[1]
+        with os.scandir(folder) as found:
+            names = {entry.name.casefold() for entry in found}
     except OSError:
+        _listings.pop(folder, None)
         return set()
+    if len(_listings) > 64:
+        _listings.clear()
+    _listings[folder] = (stamp, names)
+    return names
 
 
 def unique_base(prepared_path, final_ext=None):
@@ -77,11 +133,13 @@ def unique_base(prepared_path, final_ext=None):
     Any extension counts, not only the final one: yt-dlp first downloads to
     the source extension (and converts afterwards), and it would reuse an
     existing ``Title.mp4`` as "already downloaded" when making ``Title.mp3``.
-    Case is ignored, as Windows does.
+    Case is ignored, as Windows does, and a name Windows reserves ("CON")
+    gets a "_" in front.
     """
     folder, name = os.path.split(os.path.splitext(prepared_path)[0])
+    name = avoid_reserved(name)
     # Windows file names ignore case: "title.mp4" is taken for "Title".
-    existing = {n.casefold() for n in _existing_names(folder)}
+    existing = _existing_names(folder)
 
     def taken(stem):
         prefix = stem.casefold() + "."
@@ -94,12 +152,17 @@ def unique_base(prepared_path, final_ext=None):
     return os.path.join(folder, stem)
 
 
-def check_folder(folder):
+def check_folder(folder, windows=None):
     """Create ``folder`` and prove it is writable.
 
     Returns ``(error, warning)``: an error text if files cannot be written
-    there, and a warning text when free space is low.
+    there (or, on Windows, its path leaves no room for file names under
+    MAX_PATH), and a warning text when free space is low.
     """
+    windows = sys.platform == "win32" if windows is None else windows
+    length = len(os.path.abspath(folder)) if windows else 0
+    if length > LONGEST_FOLDER:
+        return FOLDER_TOO_LONG.format(length=length, limit=LONGEST_FOLDER), None
     try:
         os.makedirs(folder, exist_ok=True)
         with tempfile.NamedTemporaryFile(dir=folder, prefix=".uvd-write-test-", delete=True):

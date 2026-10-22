@@ -1,5 +1,6 @@
 """Cancellation, retries and controlled shutdown (ISSUES.md #13, #14, #42, #45, #85, #88)."""
 
+import json
 import os
 import sys
 import threading
@@ -53,7 +54,7 @@ def test_cancel_during_download_removes_partial_files(manager, fake_ydl, tmp_pat
 
     assert result.status is ItemStatus.CANCELLED
     assert sorted(os.listdir(part.parent)) == ["other.mp4"]
-    assert "Removed 3 partial file(s)" in lines
+    assert "Removed 4 partial file(s)" in lines  # the three and the resume marker (resume.py)
 
 
 def test_failed_download_removes_partial_files(manager, fake_ydl, tmp_path, monkeypatch):
@@ -79,7 +80,28 @@ def test_failed_download_removes_partial_files(manager, fake_ydl, tmp_path, monk
 
     assert result.status is ItemStatus.FAILED
     assert sorted(os.listdir(part.parent)) == ["other.mp4"]
-    assert "Removed 4 partial file(s)" in lines
+    # The four files and the marker that would let a download be continued (resume.py).
+    assert "Removed 5 partial file(s)" in lines
+
+
+def test_a_download_cut_off_keeps_its_partial_files_to_continue(manager, fake_ydl, tmp_path, monkeypatch):
+    folder = tmp_path / "Other"
+
+    def process(self, info, download=True):
+        (folder / "clip.mp4.part").write_bytes(b"x" * 10)
+        for hook in self.params["progress_hooks"]:
+            hook({"status": "downloading", "filename": str(folder / "clip.mp4"),
+                  "tmpfilename": str(folder / "clip.mp4.part"), "downloaded_bytes": 10, "total_bytes": 100})
+        raise logic.yt_dlp.utils.DownloadError("ERROR: Got error: The read operation timed out")
+
+    monkeypatch.setattr(fake_ydl, "process_ie_result", process)
+    lines = []
+    result = manager.download_video("https://youtu.be/abc", {"save_path": str(tmp_path)},
+                                    log_callback=lines.append, cancel_event=threading.Event())
+    assert result.status is ItemStatus.FAILED
+    assert sorted(os.listdir(folder)) == ["clip.mp4.part", "clip.orbida-resume"]
+    assert json.loads((folder / "clip.orbida-resume").read_text())["video"].endswith(":abc")
+    assert "Kept the partial download; downloading this video again continues it" in lines
 
 
 def test_cancel_during_postprocessing(manager, fake_ydl, tmp_path, monkeypatch):

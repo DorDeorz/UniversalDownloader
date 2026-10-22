@@ -60,7 +60,90 @@ def test_output_template_limits_title_length(tmp_path):
     long_folder = "C:\\" + "x" * 200
     long = filenames.output_template(long_folder)
     assert "%(title).150B" in short
-    assert "%(title).40B" in long
+    # A long folder leaves less, but never less than SHORTEST_TITLE_BYTES.
+    assert "%(title).16B" in long
+    medium = filenames.output_template("C:\\" + "x" * 120)
+    assert len("C:\\" + "x" * 120) + 1 + int(medium.split("%(title).")[1].split("B")[0]) + 26 \
+        <= filenames.MAX_PATH
+
+
+def test_output_template_leaves_room_for_the_playlist_number():
+    folder = "C:\\" + "x" * 100
+    plain = filenames.output_template(folder)
+    numbered = filenames.output_template(folder, playlist_index=3)
+    size = lambda t: int(t.split("%(title).")[1].split("B")[0])  # noqa: E731
+    assert size(plain) - size(numbered) == len("003 - ")
+
+
+def test_playlist_folder_is_shorter_in_a_long_download_folder():
+    base = "C:\\" + "d" * 120
+    folder = filenames.output_folder(base, {"extractor_key": "Youtube"}, "P" * 200)
+    assert len(os.path.basename(folder)) < 80
+    assert len(os.path.basename(folder)) >= 20
+
+
+@pytest.mark.parametrize("length, ok", [(filenames.LONGEST_FOLDER, True), (filenames.LONGEST_FOLDER + 1, False)])
+def test_check_folder_refuses_a_folder_too_long_for_windows(tmp_path, length, ok):
+    base = str(tmp_path)
+    folder = base + os.sep + "f" * (length - len(base) - 1)
+    assert len(folder) == length
+    error, _warning = filenames.check_folder(folder, windows=True)
+    if ok:
+        assert error is None or "characters" not in error
+    else:
+        assert error == filenames.FOLDER_TOO_LONG.format(length=length, limit=filenames.LONGEST_FOLDER)
+    # Elsewhere the path length is not limited.
+    assert filenames.check_folder(str(tmp_path / "short"), windows=False)[0] is None
+
+
+@pytest.mark.parametrize("name", ["CON", "con", "Nul", "aux", "PRN", "COM1", "lpt9", "CON.part2", "nul "])
+def test_reserved_windows_names_get_a_prefix(name):
+    assert filenames.is_reserved(name)
+    assert filenames.avoid_reserved(name) == "_" + name
+    assert not filenames.is_reserved(filenames.safe_name(name))
+
+
+@pytest.mark.parametrize("name", ["Console", "CONTACT", "COM10", "LPT", "nullify", "001 - CON"])
+def test_ordinary_names_are_kept(name):
+    assert not filenames.is_reserved(name)
+    assert filenames.avoid_reserved(name) == name
+
+
+def test_unique_base_avoids_reserved_names(tmp_path):
+    assert filenames.unique_base(str(tmp_path / "CON.webm"), "mp4") == str(tmp_path / "_CON")
+    (tmp_path / "_CON.mp4").write_bytes(b"x")
+    assert filenames.unique_base(str(tmp_path / "CON.webm"), "mp4") == str(tmp_path / "_CON (2)")
+
+
+def test_folder_listing_is_reused_until_the_folder_changes(tmp_path, monkeypatch):
+    calls = []
+    real = os.scandir
+
+    def counting(path):
+        calls.append(path)
+        return real(path)
+    monkeypatch.setattr(filenames.os, "scandir", counting)
+    filenames._listings.clear()
+    old = os.stat(tmp_path).st_mtime_ns - 60 * 10**9  # changed a minute ago
+    os.utime(tmp_path, ns=(old, old))
+    prepared = str(tmp_path / "Clip.webm")
+    assert filenames.unique_base(prepared) == str(tmp_path / "Clip")
+    assert filenames.unique_base(prepared) == str(tmp_path / "Clip")
+    assert len(calls) == 1
+    (tmp_path / "Clip.mp4").write_bytes(b"x")
+    assert filenames.unique_base(prepared) == str(tmp_path / "Clip (2)")
+    assert len(calls) == 2
+
+
+def test_a_folder_changed_just_now_is_listed_again(tmp_path, monkeypatch):
+    # A drive that keeps times in 2-second steps may not show a change in the time.
+    filenames._listings.clear()
+    prepared = str(tmp_path / "Clip.webm")
+    assert filenames.unique_base(prepared) == str(tmp_path / "Clip")
+    stamp = os.stat(tmp_path).st_mtime_ns
+    (tmp_path / "Clip.mp4").write_bytes(b"x")
+    os.utime(tmp_path, ns=(stamp, stamp))  # the time did not move
+    assert filenames.unique_base(prepared) == str(tmp_path / "Clip (2)")
 
 
 def test_output_template_escapes_percent_in_folder():

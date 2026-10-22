@@ -63,7 +63,49 @@ def test_fixed_messages_from_other_modules_are_translated(monkeypatch):
     monkeypatch.setitem(i18n._catalogs, "tr", {"msg.private video": "özel video"})
     i18n.set_language("tr")
     assert i18n.tr_message("private video") == "özel video"
-    assert i18n.tr_message("HTTP Error 403: Forbidden") == "HTTP Error 403: Forbidden"
+    assert i18n.tr_message("Something nobody knows went wrong") == "Something nobody knows went wrong"
+
+
+@pytest.mark.parametrize("message, key", [
+    ("[youtube] abc: Sign in to confirm you\u2019re not a bot. Use --cookies-from-browser", "error.bot_check"),
+    ("unable to download video data: HTTP Error 403: Forbidden", "error.forbidden"),
+    ("HTTP Error 429: Too Many Requests", "error.rate_limited"),
+    ("HTTP Error 404: Not Found", "error.not_found"),
+    ("[youtube] abc: Video unavailable. This video has been removed by the uploader", "error.unavailable"),
+    ("[youtube] abc: Private video. Sign in if you've been granted access", "error.private"),
+    ("The uploader has not made this video available in your country", "error.geo"),
+    ("Join this channel to get access to members-only content", "error.members"),
+    ("This video is DRM protected", "error.drm"),
+    ("Premieres in 3 hours", "error.not_yet"),
+    ("Unsupported URL: https://example.com/page", "error.unsupported"),
+    ("[Errno 28] No space left on device", "error.disk_full"),
+    ("Unable to download webpage: <urlopen error [Errno 11001] getaddrinfo failed>", "error.network"),
+    ("The read operation timed out", "error.network"),
+])
+def test_known_yt_dlp_errors_are_explained(message, key):
+    assert i18n.error_key(message) == key
+    i18n.set_language("tr")
+    assert i18n.tr_message(message) == i18n.tr(key) != message
+    i18n.set_language("en")
+
+
+def test_app_messages_with_values_are_translated():
+    import filenames
+    import logic
+    i18n.set_language("de")
+    text = filenames.FOLDER_TOO_LONG.format(length=180, limit=150)
+    assert i18n.tr_message(text) == i18n.tr("folder.too_long", length="180", limit="150") != text
+    with pytest.raises(logic.TrimError) as e:
+        logic.parse_trim_range("1:75", "")
+    assert i18n.tr_message(str(e.value)) != str(e.value)
+    assert "1:75" in i18n.tr_message(str(e.value))
+    for start, end, duration in (("50", "", 30), ("0", "40", 30), ("20", "10", None)):
+        with pytest.raises(logic.TrimError) as e:
+            logic.parse_trim_range(start, end, duration)
+        assert i18n.tr_message(str(e.value)) != str(e.value)
+    message = logic.explain_format_error("Requested format is not available", "Video + Audio", "720p")
+    assert "720p" in i18n.tr_message(message) and i18n.tr_message(message) != message
+    i18n.set_language("en")
 
 
 @pytest.mark.parametrize("env, expected", [

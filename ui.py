@@ -2673,12 +2673,12 @@ class App(ctk.CTk):
                     raise TrimError(tr("trim.empty"))
             except TrimError as e:
                 self.log(f"Trim error: {e}")
-                messagebox.showerror(tr("trim.error_title"), str(e), parent=self)
+                messagebox.showerror(tr("trim.error_title"), i18n.tr_message(str(e)), parent=self)
                 return
         error, warning = filenames.check_folder(self.download_folder)
         if error:
-            self._append_log(error)
-            messagebox.showerror(tr("folder.error_title"), error, parent=self)
+            self._append_log(i18n.tr_message(error))
+            messagebox.showerror(tr("folder.error_title"), i18n.tr_message(error), parent=self)
             return
         if warning:
             _log.warning(warning)

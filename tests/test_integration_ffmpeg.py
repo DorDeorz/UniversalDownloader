@@ -33,6 +33,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     throttle = 0.0
     drop_after = None  # bytes after which the next response is cut off once (a dropped connection)
+    # "cut": the second response (the download; the first is yt-dlp's look
+    # at the link) stops after 64 KB and the server is then "down" (503)
+    # until the test sets it back to None.
+    outage = None
+    ranges = []  # the Range header of each request
 
     def log_message(self, *args):
         pass
@@ -41,6 +46,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         self._range = None
         header = self.headers.get("Range", "")
         path = self.translate_path(self.path)
+        _Handler.ranges.append(header)
+        if _Handler.outage == "down":
+            self.send_error(503)
+            return None
+        self._cut = _Handler.outage == "cut" and len(_Handler.ranges) == 2
         if not header.startswith("bytes=") or not os.path.isfile(path):
             return super().send_head()
         size = os.path.getsize(path)
@@ -72,6 +82,10 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         while chunk := source.read(64 * 1024 if remaining is None else min(64 * 1024, remaining)):
             if drop_after is not None and sent >= drop_after:
                 _Handler.drop_after = None
+                self.close_connection = True
+                return
+            if getattr(self, "_cut", False) and sent >= 64 * 1024:
+                _Handler.outage = "down"
                 self.close_connection = True
                 return
             sent += len(chunk)
@@ -329,3 +343,61 @@ def test_sponsorblock_is_skipped_for_a_trimmed_download(manager, server, tmp_pat
     assert result.status is ItemStatus.COMPLETED, result.error
     assert probe(result.path)[1] == pytest.approx(4, abs=0.3)
     assert "SponsorBlock: skipped for a trimmed download" in lines
+
+
+def test_a_failed_download_is_continued_from_its_part_file(manager, server, media, tmp_path, monkeypatch):
+    subprocess.run([TOOLS.ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=25",
+                    "-f", "lavfi", "-i", "sine=frequency=440", "-t", "20", "-c:v", "libx264", "-preset", "ultrafast",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", str(media / "long.mp4")], check=True)
+    assert (media / "long.mp4").stat().st_size > 300 * 1024
+    monkeypatch.setattr(_Handler, "ranges", [])
+    monkeypatch.setattr(_Handler, "outage", "cut")
+    lines = []
+    options = {"save_path": str(tmp_path), "mode": "Video + Audio", "format": "mp4", "quality": "Best"}
+
+    first = manager.download_video(f"{server}/long.mp4", dict(options), log_callback=lines.append)
+    assert first.status is ItemStatus.FAILED
+    kept = sorted(p.name for p in tmp_path.rglob("*") if p.is_file())
+    assert any(name.endswith(".part") for name in kept) and any(name.endswith(".orbida-resume") for name in kept)
+    assert any("Kept the partial download" in line for line in lines)
+
+    monkeypatch.setattr(_Handler, "outage", None)
+    _Handler.ranges.clear()
+    second = manager.download_video(f"{server}/long.mp4", dict(options), log_callback=lines.append)
+    assert second.status is ItemStatus.COMPLETED, second.error
+    assert os.path.basename(second.path) == "long.mp4"  # the same name, not "long (2).mp4"
+    assert any(r.startswith("bytes=") and int(r[6:].split("-")[0]) > 32 * 1024 for r in _Handler.ranges)
+    assert any("Continuing the unfinished download" in line for line in lines)
+    assert probe(second.path)[1] == pytest.approx(20, abs=0.5)
+    assert sorted(p.name for p in second_folder_files(second.path)) == ["long.mp4"]
+
+
+def second_folder_files(path):
+    return [p for p in __import__("pathlib").Path(path).parent.iterdir() if p.is_file()]
+
+
+def test_another_video_never_continues_a_part_file(manager, server, tmp_path, monkeypatch):
+    # A partial file of one video, under the name another video would get.
+    monkeypatch.setattr(_Handler, "ranges", [])
+    folder = tmp_path / "Other"
+    folder.mkdir()
+    (folder / "clip.mp4.part").write_bytes(b"x" * 100_000)
+    (folder / "clip.orbida-resume").write_text(json.dumps(
+        {"video": "Generic:something-else", "formats": "mp4", "ext": "mp4", "mode": "Video + Audio"}))
+    result = download(manager, server, tmp_path, mode="Video + Audio", format="mp4", quality="Best")
+    assert result.status is ItemStatus.COMPLETED, result.error
+    assert os.path.basename(result.path) == "clip (2).mp4"
+    assert probe(result.path)[1] == pytest.approx(6, abs=0.5)
+    assert not any(r.startswith("bytes=100000") for r in _Handler.ranges)
+
+
+def test_a_video_download_without_a_video_track_fails(manager, server, media, tmp_path):
+    # An audio file opened in Video + Audio mode used to be saved as a "video"
+    # that only holds sound; ffprobe now finds the missing video track.
+    subprocess.run([TOOLS.ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440", "-t", "3",
+                    "-c:a", "aac", str(media / "sound.m4a")], check=True)
+    result = manager.download_video(f"{server}/sound.m4a", {"save_path": str(tmp_path), "mode": "Video + Audio",
+                                                            "format": "mkv", "quality": "Best"})
+    assert result.status is ItemStatus.FAILED
+    assert result.error == "The downloaded file has no video track"
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []

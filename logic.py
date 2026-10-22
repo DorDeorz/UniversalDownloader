@@ -13,8 +13,9 @@ import filenames
 import formats
 import media_tools
 import playlist
+import resume
 import spotify
-from results import ItemResult, ItemStatus, verify_output
+from results import ItemResult, ItemStatus, probe_output, verify_output
 
 _log = logging.getLogger(__name__)
 _log.addHandler(logging.NullHandler())
@@ -39,7 +40,7 @@ class YtDlpLogger:
             raise yt_dlp.utils.DownloadCancelled('Cancelled by user')
 
     def _emit(self, level, prefix, msg):
-        msg = strip_ansi(msg)
+        msg = strip_ansi(msg).replace('\r', '')
         _log.log(level, msg)
         if self.log_callback is not None:
             self.log_callback(f"{prefix}{msg}")
@@ -548,6 +549,8 @@ class DownloadManager:
         """
         title = title or url
         partial = PartialFiles()
+        resumable = []  # the base name whose partial files a later try can continue (resume.py)
+        postprocessing = []  # set once the download is in (or past) its postprocessing
 
         def remove_partial_files():
             removed = partial.cleanup()
@@ -555,9 +558,16 @@ class DownloadManager:
                 log_callback(f"Removed {len(removed)} partial file(s)")
 
         def failed(error):
-            # A failed item leaves nothing behind either: half-downloaded
-            # parts would only fill the disk, and a retry picks a free name
-            # anyway (filenames.unique_base).
+            # A download that failed after data arrived keeps its partial
+            # files, so trying the same video again continues it
+            # (resume.py). Anything else leaves nothing behind: parts that
+            # cannot be continued would only fill the disk.
+            # A failed conversion or merge would only fail again.
+            in_download = not postprocessing and not str(error).startswith('Postprocessing')
+            if resumable and in_download and not is_cancelled() and resume.has_partial_data(resumable[0]):
+                if log_callback:
+                    log_callback("Kept the partial download; downloading this video again continues it")
+                return ItemResult(url, title, ItemStatus.FAILED, error=error)
             remove_partial_files()
             return ItemResult(url, title, ItemStatus.FAILED, error=error)
 
@@ -581,6 +591,7 @@ class DownloadManager:
                 progress_hook(d)
 
         def on_postprocess(d):
+            postprocessing.append(True)
             check_cancel()
             if progress_hook:
                 progress_hook(d)
@@ -664,10 +675,19 @@ class DownloadManager:
             ydl_opts['outtmpl'] = filenames.output_template(folder, options.get('playlist_index'))
             with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
                 prepared = ydl.prepare_filename(info)
-            base = filenames.unique_base(prepared, plan.ext)
+            # A cut (trim) or a live stream is downloaded by FFmpeg, which cannot continue a file.
+            ident = None if trim_requested or info.get('is_live') else resume.identity(info, plan.ext, mode)
+            base = resume.find(folder, ident)  # also clears partial downloads left too long
+            if base is not None:
+                if log_callback:
+                    log_callback(f"Continuing the unfinished download of {os.path.basename(base)}.{plan.ext}")
+            else:
+                base = filenames.unique_base(prepared, plan.ext)
+                if base != os.path.splitext(prepared)[0] and log_callback:
+                    log_callback(f"File exists; saving as {os.path.basename(base)}.{plan.ext}")
             partial.claim(base, new_folders)
-            if base != os.path.splitext(prepared)[0] and log_callback:
-                log_callback(f"File exists; saving as {os.path.basename(base)}.{plan.ext}")
+            if ident is not None and resume.save(base, ident):
+                resumable.append(base)
             ydl_opts['outtmpl'] = filenames.escape_template(base) + '.%(ext)s'
             ydl_opts['postprocessors'] = formats.postprocessors_for(plan, info)
             if ydl_opts.get('http_chunk_size') and not plain_http_download(info):
@@ -712,9 +732,15 @@ class DownloadManager:
                 return cancelled()
             return failed(explain_site_error(explain_format_error(describe_error(e), mode, quality)))
 
-        problem = verify_output(path)
+        # The file exists and is not empty; ffprobe proves it can be read
+        # and holds what the mode promises.
+        problem = verify_output(path) or probe_output(
+            path, tools.ffprobe, need_video=mode != formats.AUDIO_ONLY, need_audio=mode == formats.AUDIO_ONLY)
         if problem:
+            resumable.clear()  # a broken result is not worth continuing
             return failed(problem)
+        if resumable:
+            resume.forget(resumable[0])
         if selected is not None and not is_cancelled():
             self._download_subtitles(selected, base, options.get('subtitle_langs'), tools, log_callback)
         return ItemResult(url, title, ItemStatus.COMPLETED, path=path)

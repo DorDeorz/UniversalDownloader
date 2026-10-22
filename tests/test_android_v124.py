@@ -735,8 +735,13 @@ def next_language(*_):
     app._show_options(True)
     Clock.schedule_once(lambda *_: check(code), 0.4)
 
-def check(code):
+def check(code, tries=4):
+    # A button takes its new text's width a frame or two after the
+    # language changes; only an overflow that stays is a problem.
     bad = overflow()
+    if bad and tries > 1:
+        Clock.schedule_once(lambda *_: check(code, tries - 1), 0.4)
+        return
     if bad:
         problems[code] = bad
     next_language()

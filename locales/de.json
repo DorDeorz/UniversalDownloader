@@ -287,5 +287,6 @@
  "error.not_found": "Die Seite hat dieses Medium nicht gefunden (HTTP 404).",
  "error.unavailable": "Dieses Medium ist nicht verfügbar: Es wurde entfernt, auf privat gestellt oder gesperrt.",
  "error.unsupported": "Dieser Link wird nicht unterstützt. Kopieren Sie die Adresse der Videoseite selbst.",
- "error.network": "Die Seite war nicht erreichbar. Prüfen Sie die Internetverbindung (und den Proxy in den Einstellungen) und versuchen Sie es erneut."
+ "error.network": "Die Seite war nicht erreichbar. Prüfen Sie die Internetverbindung (und den Proxy in den Einstellungen) und versuchen Sie es erneut.",
+ "log.mode_back": "Zurück zu Ihrem Modus: {mode}"
 }

@@ -20,6 +20,7 @@ DEST = os.path.join(ANDROID, ".build", "src")
 # through each other). Nothing Tk- or Windows-specific.
 SHARED_MODULES = (
     "browser_cookies.py",
+    "download_archive.py",
     "events.py",
     "filenames.py",
     "formats.py",

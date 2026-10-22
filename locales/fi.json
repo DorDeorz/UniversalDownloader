@@ -287,5 +287,6 @@
  "error.not_found": "Sivusto ei löytänyt tätä mediaa (HTTP 404).",
  "error.unavailable": "Tämä media ei ole saatavilla: se on poistettu, muutettu yksityiseksi tai estetty.",
  "error.unsupported": "Tätä linkkiä ei tueta. Kopioi itse videosivun osoite.",
- "error.network": "Sivustoon ei saatu yhteyttä. Tarkista internetyhteys (ja asetusten välityspalvelin) ja yritä uudelleen."
+ "error.network": "Sivustoon ei saatu yhteyttä. Tarkista internetyhteys (ja asetusten välityspalvelin) ja yritä uudelleen.",
+ "log.mode_back": "Palattiin omaan tilaasi: {mode}"
 }

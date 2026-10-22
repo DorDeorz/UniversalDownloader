@@ -287,5 +287,6 @@
  "error.not_found": "Az oldal nem találta ezt a médiát (HTTP 404).",
  "error.unavailable": "Ez a média nem érhető el: eltávolították, priváttá tették vagy letiltották.",
  "error.unsupported": "Ez a hivatkozás nem támogatott. Másolja ki magának a videó oldalának a címét.",
- "error.network": "Az oldal nem érhető el. Ellenőrizze az internetkapcsolatot (és a beállításokban a proxyt), majd próbálja újra."
+ "error.network": "Az oldal nem érhető el. Ellenőrizze az internetkapcsolatot (és a beállításokban a proxyt), majd próbálja újra.",
+ "log.mode_back": "Vissza a saját módodhoz: {mode}"
 }

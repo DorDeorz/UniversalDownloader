@@ -218,8 +218,8 @@ def test_activity_lines_are_translated(monkeypatch):
     monkeypatch.setitem(i18n._catalogs, "tr", {"log.failed": "Başarısız: {title}",
                                                "msg.Cancelled by user": "Kullanıcı iptal etti"})
     i18n.set_language("tr")
-    assert ui.describe_result(ItemResult("u", "A", ItemStatus.FAILED, error="HTTP Error 403")) == \
-        "Başarısız: A (HTTP Error 403)"
+    assert ui.describe_result(ItemResult("u", "A", ItemStatus.FAILED, error="Some new problem")) == \
+        "Başarısız: A (Some new problem)"  # a message Orbida does not know stays as it is
     assert ui.describe_result(ItemResult("u", "B", ItemStatus.CANCELLED, error="Cancelled by user")) == \
         "Cancelled: B (Kullanıcı iptal etti)"  # English for a key the language lacks
 

@@ -192,13 +192,30 @@ def fits_container(fmt, info):
 SPONSORBLOCK_CATEGORIES = ("sponsor", "selfpromo", "interaction", "intro", "outro", "music_offtopic")
 
 
-def with_sponsor_cuts(postprocessors):
-    """``postprocessors`` with the SponsorBlock segments cut out first.
+def sponsorblock_categories(chosen=None):
+    """The SponsorBlock categories to cut: ``chosen`` (a list, or a comma
+    separated Settings text) without unknown names, in SPONSORBLOCK_CATEGORIES
+    order; all of them when ``chosen`` is None."""
+    if chosen is None:
+        return list(SPONSORBLOCK_CATEGORIES)
+    if isinstance(chosen, str):
+        chosen = [part.strip() for part in chosen.split(",")]
+    return [category for category in SPONSORBLOCK_CATEGORIES if category in set(chosen)]
+
+
+def with_sponsor_cuts(postprocessors, categories=None, exact=False):
+    """``postprocessors`` with the SponsorBlock segments of ``categories``
+    (all by default) cut out first.
 
     The cut runs before the metadata is written, so the file's chapters
-    match the shortened video (the order yt-dlp itself uses).
+    match the shortened video (the order yt-dlp itself uses). ``exact``
+    re-encodes around the cuts so they fall on the segments' times rather
+    than on the nearest keyframes (for trimmed downloads, which are
+    re-encoded anyway).
     """
-    cut = {"key": "ModifyChapters", "remove_sponsor_segments": list(SPONSORBLOCK_CATEGORIES)}
+    cut = {"key": "ModifyChapters", "remove_sponsor_segments": sponsorblock_categories(categories)}
+    if exact:
+        cut["force_keyframes"] = True
     keys = [pp["key"] for pp in postprocessors]
     at = keys.index("FFmpegMetadata") if "FFmpegMetadata" in keys else len(postprocessors)
     return postprocessors[:at] + [cut] + postprocessors[at:]

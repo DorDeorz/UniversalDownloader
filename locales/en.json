@@ -287,5 +287,6 @@
  "error.not_found": "The site could not find this media (HTTP 404).",
  "error.unavailable": "This media is unavailable: it was removed, made private or blocked.",
  "error.unsupported": "This link is not supported. Copy the address of the video page itself.",
- "error.network": "Could not reach the site. Check the internet connection (and the proxy in Settings), then try again."
+ "error.network": "Could not reach the site. Check the internet connection (and the proxy in Settings), then try again.",
+ "log.mode_back": "Back to your mode: {mode}"
 }

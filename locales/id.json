@@ -287,5 +287,6 @@
  "error.not_found": "Situs tidak menemukan media ini (HTTP 404).",
  "error.unavailable": "Media ini tidak tersedia: telah dihapus, dijadikan pribadi, atau diblokir.",
  "error.unsupported": "Tautan ini tidak didukung. Salin alamat halaman videonya sendiri.",
- "error.network": "Tidak dapat menjangkau situs. Periksa koneksi internet (dan proxy di Pengaturan), lalu coba lagi."
+ "error.network": "Tidak dapat menjangkau situs. Periksa koneksi internet (dan proxy di Pengaturan), lalu coba lagi.",
+ "log.mode_back": "Kembali ke mode Anda: {mode}"
 }

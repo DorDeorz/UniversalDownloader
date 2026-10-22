@@ -137,6 +137,16 @@ def test_subtitles_are_saved_in_a_separate_pass(manager, fake_ydl, tmp_path):
     assert "Subtitles: 2 saved" in logs
 
 
+def test_subtitles_in_the_format_chosen(manager, fake_ydl, tmp_path):
+    fake_ydl.subtitles = ("en",)
+    manager.download_video("https://youtu.be/abc", {
+        "mode": formats.VIDEO_AUDIO, "format": "mkv", "save_path": str(tmp_path), "subtitles": True,
+        "subtitle_langs": ["en"], "subtitle_format": "ass"})
+    subs = fake_ydl.instances[-1].opts
+    assert subs["subtitlesformat"].startswith("ass/")
+    assert {"key": "FFmpegSubtitlesConvertor", "format": "ass", "when": "before_dl"} in subs["postprocessors"]
+
+
 def test_no_subtitle_pass_for_audio_or_when_off(manager, fake_ydl, tmp_path):
     for options in ({"mode": formats.AUDIO_ONLY, "format": "mp3", "subtitles": True},
                     {"mode": formats.VIDEO_AUDIO, "format": "mp4"}):
@@ -146,6 +156,10 @@ def test_no_subtitle_pass_for_audio_or_when_off(manager, fake_ydl, tmp_path):
 
 
 def test_subtitle_languages_follow_the_app_language():
+    assert logic.subtitle_languages("de", "") == ["de", "en"]
+    # Languages chosen in Settings come instead; nonsense is left out.
+    assert logic.subtitle_languages("de", "tr, pt-BR;en  tr") == ["tr", "pt-BR", "en"]
+    assert logic.subtitle_languages("de", "??, x") == ["de", "en"]
     assert logic.subtitle_languages("de") == ["de", "en"]
     assert logic.subtitle_languages("en") == ["en"]
     assert logic.subtitle_languages("nb") == ["nb", "no", "en"]

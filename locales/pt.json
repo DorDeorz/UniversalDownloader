@@ -287,5 +287,6 @@
  "error.not_found": "O site não encontrou esta mídia (HTTP 404).",
  "error.unavailable": "Esta mídia não está disponível: foi removida, tornada privada ou bloqueada.",
  "error.unsupported": "Este link não é suportado. Copie o endereço da própria página do vídeo.",
- "error.network": "Não foi possível acessar o site. Verifique a conexão com a internet (e o proxy nas configurações) e tente de novo."
+ "error.network": "Não foi possível acessar o site. Verifique a conexão com a internet (e o proxy nas configurações) e tente de novo.",
+ "log.mode_back": "De volta ao seu modo: {mode}"
 }

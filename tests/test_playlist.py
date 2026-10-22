@@ -28,6 +28,17 @@ def test_live_single_video_is_skipped():
     assert result.skipped[0].skip_reason == "live stream"
 
 
+def test_live_streams_are_queued_when_recording_from_the_start_is_on():
+    result = playlist.analyze({"title": "Live", "is_live": True, "live_status": "is_live"}, "https://x/live",
+                              allow_live=True)
+    assert [item.title for item in result.items] == ["Live"] and not result.skipped
+    # Not yet started or still processing: nothing to record yet.
+    for status, reason in (("is_upcoming", "not yet available (upcoming)"),
+                           ("post_live", "live stream still processing")):
+        result = playlist.analyze({"title": "L", "live_status": status}, "https://x/l", allow_live=True)
+        assert result.skipped[0].skip_reason == reason
+
+
 @pytest.mark.parametrize("entries", [None, [], iter(())])
 def test_empty_or_missing_entries_do_not_crash(entries):
     result = playlist.analyze({"_type": "playlist", "title": "Empty", "entries": entries}, "u")

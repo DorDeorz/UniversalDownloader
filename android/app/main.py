@@ -288,6 +288,7 @@ class UniversalDownloaderApp(MDApp):
         self.download_dir = None
         self.job = None  # "analyze" or "download" while one runs
         self.mode = self.settings.default_mode
+        self._auto_mode = None  # the mode before a Spotify link switched to audio
         self.quality = {"video": self.settings.video_quality, "audio": self.settings.audio_quality}
         self.fmt = {"video": self.settings.video_container, "audio": self.settings.audio_format}
         self.components = {}
@@ -839,6 +840,7 @@ class UniversalDownloaderApp(MDApp):
     def set_mode(self, mode):
         if self.job is None:
             self.mode = mode
+            self._auto_mode = None  # chosen by the user
             self._show_mode()
 
     def _show_mode(self):
@@ -1105,10 +1107,15 @@ class UniversalDownloaderApp(MDApp):
                   } if analysis.is_playlist else set()
         self.chosen = [item for item in analysis.items if id(item) not in before]
         if playlist.found_by_search(analysis) and self.mode != "audio":
-            # Spotify links are songs: download them as audio (the user can switch back).
+            # Spotify links are songs: download them as audio (the user can
+            # switch back). Only for this link; the next one gets the mode back.
+            self._auto_mode = self.mode
             self.mode = "audio"
             self._show_mode()
             self.log(self.tr("log.spotify"))
+        elif not playlist.found_by_search(analysis) and self._auto_mode is not None:
+            self.mode, self._auto_mode = self._auto_mode, None
+            self._show_mode()
         _show(self.ids.btn_pick, analysis.is_playlist and bool(analysis.items))
         self._show_chosen()
         if analysis.is_playlist:

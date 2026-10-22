@@ -287,5 +287,6 @@
  "error.not_found": "Site-ul nu a găsit acest conținut (HTTP 404).",
  "error.unavailable": "Acest conținut nu este disponibil: a fost șters, făcut privat sau blocat.",
  "error.unsupported": "Acest link nu este acceptat. Copiați adresa paginii videoclipului.",
- "error.network": "Site-ul nu a putut fi accesat. Verificați conexiunea la internet (și proxy-ul din Setări), apoi încercați din nou."
+ "error.network": "Site-ul nu a putut fi accesat. Verificați conexiunea la internet (și proxy-ul din Setări), apoi încercați din nou.",
+ "log.mode_back": "Înapoi la modul tău: {mode}"
 }

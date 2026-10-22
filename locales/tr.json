@@ -287,5 +287,6 @@
  "error.not_found": "Site bu medyayı bulamadı (HTTP 404).",
  "error.unavailable": "Bu medyaya ulaşılamıyor: kaldırılmış, gizlenmiş ya da engellenmiş.",
  "error.unsupported": "Bu bağlantı desteklenmiyor. Videonun kendi sayfasının adresini kopyalayın.",
- "error.network": "Siteye ulaşılamadı. İnternet bağlantısını (ve Ayarlar'daki proxy'yi) kontrol edip tekrar deneyin."
+ "error.network": "Siteye ulaşılamadı. İnternet bağlantısını (ve Ayarlar'daki proxy'yi) kontrol edip tekrar deneyin.",
+ "log.mode_back": "Kendi moduna dönüldü: {mode}"
 }

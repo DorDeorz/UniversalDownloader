@@ -287,5 +287,6 @@
  "error.not_found": "De site kon dit medium niet vinden (HTTP 404).",
  "error.unavailable": "Dit medium is niet beschikbaar: het is verwijderd, privé gemaakt of geblokkeerd.",
  "error.unsupported": "Deze link wordt niet ondersteund. Kopieer het adres van de videopagina zelf.",
- "error.network": "De site is niet bereikbaar. Controleer de internetverbinding (en de proxy in Instellingen) en probeer het opnieuw."
+ "error.network": "De site is niet bereikbaar. Controleer de internetverbinding (en de proxy in Instellingen) en probeer het opnieuw.",
+ "log.mode_back": "Terug naar je modus: {mode}"
 }

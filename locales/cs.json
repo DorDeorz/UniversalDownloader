@@ -287,5 +287,6 @@
  "error.not_found": "Web toto médium nenašel (HTTP 404).",
  "error.unavailable": "Toto médium není dostupné: bylo odstraněno, skryto nebo zablokováno.",
  "error.unsupported": "Tento odkaz není podporován. Zkopírujte adresu samotné stránky s videem.",
- "error.network": "Web nebyl dostupný. Zkontrolujte připojení k internetu (a proxy v nastavení) a zkuste to znovu."
+ "error.network": "Web nebyl dostupný. Zkontrolujte připojení k internetu (a proxy v nastavení) a zkuste to znovu.",
+ "log.mode_back": "Zpět na váš režim: {mode}"
 }

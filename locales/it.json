@@ -287,5 +287,6 @@
  "error.not_found": "Il sito non ha trovato questo contenuto (HTTP 404).",
  "error.unavailable": "Questo contenuto non è disponibile: è stato rimosso, reso privato o bloccato.",
  "error.unsupported": "Questo link non è supportato. Copia l'indirizzo della pagina del video stesso.",
- "error.network": "Impossibile raggiungere il sito. Controlla la connessione a internet (e il proxy nelle impostazioni), poi riprova."
+ "error.network": "Impossibile raggiungere il sito. Controlla la connessione a internet (e il proxy nelle impostazioni), poi riprova.",
+ "log.mode_back": "Ritorno alla tua modalità: {mode}"
 }

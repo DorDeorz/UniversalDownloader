@@ -111,3 +111,27 @@ def test_uncaught_errors_are_logged(monkeypatch, caplog):
 def test_log_folder_is_inside_the_data_folder(monkeypatch, tmp_path):
     monkeypatch.setattr(app_setup, "data_dir", lambda: str(tmp_path))
     assert app_setup.log_dir() == str(tmp_path / "logs")
+
+
+# --- The download archive ("only new" outlives the History) -------------------------
+
+def test_archive_keeps_links_after_the_history_is_cleared(tmp_path):
+    import download_archive
+    import playlist
+    path = str(tmp_path / "downloaded.txt")
+    archive = download_archive.Archive(path, seed=["https://youtu.be/aaaaaaaaaaa"])
+    archive.add("https://www.youtube.com/watch?v=bbbbbbbbbbb&t=4")
+    archive.add("https://youtu.be/bbbbbbbbbbb")  # the same video
+    again = download_archive.Archive(path, seed=["https://youtu.be/zzzzzzzzzzz"])  # seeds only a new file
+    assert len(again) == 2 and "https://youtube.com/shorts/aaaaaaaaaaa" in again
+    items = [playlist.QueueItem(url=f"https://youtu.be/{c * 11}", title=c) for c in "abc"]
+    assert [i.title for i in playlist.downloaded_before(items, [], again.keys)] == ["a", "b"]
+    again.clear()
+    assert len(download_archive.Archive(path, seed=["https://youtu.be/aaaaaaaaaaa"])) == 0
+
+
+def test_a_damaged_archive_line_is_harmless(tmp_path):
+    import download_archive
+    path = tmp_path / "downloaded.txt"
+    path.write_bytes(b"youtube:abc\n\n   \n")
+    assert download_archive.Archive(str(path)).keys == {"youtube:abc"}

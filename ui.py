@@ -1361,6 +1361,9 @@ class App(ctk.CTk):
         apply_pure_black(self.settings.theme == "Black")
         self.history = download_history.History(os.path.join(app_setup.data_dir(), "history.json"))
         self._job_mode = None
+        # (mode, format, quality) the user had chosen before a Spotify link
+        # switched to Audio Only; saved instead and brought back afterwards.
+        self._auto_mode = None
         self._analysed = None  # (time, url, info) of the last single video analysed
         # Widgets whose text is translated: (widget, option) -> function giving
         # the text, re-run when the language changes (see _live).
@@ -1985,9 +1988,13 @@ class App(ctk.CTk):
         return "break"
     def _save_settings(self):
         self.settings.download_folder = self.download_folder
-        self.settings.mode = self.cmb_mode.get()
-        self.settings.format = self.cmb_format.get()
-        self.settings.quality = self.cmb_quality.get()
+        if self._auto_mode is not None:
+            # Audio Only chosen by the app for a Spotify link is not the user's choice.
+            self.settings.mode, self.settings.format, self.settings.quality = self._auto_mode
+        else:
+            self.settings.mode = self.cmb_mode.get()
+            self.settings.format = self.cmb_format.get()
+            self.settings.quality = self.cmb_quality.get()
         settings_store.save(self.settings_path, self.settings)
     def _apply_mode(self, mode, fmt=None, quality=None):
         self.cmb_mode.set(mode)
@@ -1998,6 +2005,8 @@ class App(ctk.CTk):
             self.cmb_quality.set(quality)
     def _on_mode_changed(self, mode, save=True):
         """Offer only the formats and qualities that are valid for ``mode``."""
+        if save:
+            self._auto_mode = None  # the user picked a mode: it is theirs now
         choices = formats.formats_for_mode(mode)
         self.cmb_format.set_choices(choices)
         if self.cmb_format.get() not in choices:
@@ -2423,9 +2432,15 @@ class App(ctk.CTk):
             self._append_log(tr("log.skipped_entry", title=item.title, reason=i18n.tr_message(item.skip_reason)))
         from_queue, self._from_queue = self._from_queue, False
         if playlist.found_by_search(analysis) and self.cmb_mode.get() != formats.AUDIO_ONLY:
-            # Spotify links are songs: download them as audio (the user can switch back).
+            # Spotify links are songs: download them as audio (the user can
+            # switch back). Only for this link: the saved mode stays the user's.
+            self._auto_mode = (self.cmb_mode.get(), self.cmb_format.get(), self.cmb_quality.get())
             self._apply_mode(formats.AUDIO_ONLY)
             self._append_log(tr("log.spotify"))
+        elif not playlist.found_by_search(analysis) and self._auto_mode is not None:
+            mode, self._auto_mode = self._auto_mode, None
+            self._apply_mode(*mode)
+            self._append_log(tr("log.mode_back", mode=tr(MODE_KEYS[mode[0]])))
         if not analysis.items:
             message = tr("link.nothing")
             if analysis.skipped:

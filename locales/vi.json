@@ -287,5 +287,6 @@
  "error.not_found": "Trang web không tìm thấy nội dung này (HTTP 404).",
  "error.unavailable": "Nội dung này không còn: đã bị xóa, chuyển sang riêng tư hoặc bị chặn.",
  "error.unsupported": "Liên kết này không được hỗ trợ. Hãy sao chép địa chỉ của chính trang video.",
- "error.network": "Không kết nối được tới trang web. Hãy kiểm tra kết nối Internet (và proxy trong Cài đặt) rồi thử lại."
+ "error.network": "Không kết nối được tới trang web. Hãy kiểm tra kết nối Internet (và proxy trong Cài đặt) rồi thử lại.",
+ "log.mode_back": "Trở lại chế độ của bạn: {mode}"
 }

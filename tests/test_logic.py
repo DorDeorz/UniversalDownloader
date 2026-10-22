@@ -3,6 +3,7 @@ import os
 import pytest
 import yt_dlp
 
+import formats
 import logic
 from logic import DownloadManager
 from results import ItemStatus
@@ -388,3 +389,64 @@ def test_chunk_size_only_for_plain_http(manager, fake_ydl, tmp_path, selected, k
     download_pass = fake_ydl.instances[-1].opts
     assert ('http_chunk_size' in download_pass) is keeps_chunks
     assert download_pass['concurrent_fragment_downloads'] == 8
+
+
+def test_chapters_of_a_trimmed_download_are_shifted_and_cut():
+    chapters = [{"start_time": 0, "end_time": 10, "title": "A"}, {"start_time": 10, "end_time": 20, "title": "B"},
+                {"start_time": 20, "end_time": 30, "title": "C"}]
+    assert logic.shift_chapters(chapters, 5, 15) == [
+        {"start_time": 0, "end_time": 5, "title": "A"}, {"start_time": 5, "end_time": 10, "title": "B"}]
+    assert logic.shift_chapters(chapters, 25, float("inf")) == [{"start_time": 0, "end_time": 5, "title": "C"}]
+    assert logic.shift_chapters([], 0, 5) == []
+
+
+def test_section_chapters_pp_sets_the_part_length():
+    pp = logic.SectionChaptersPP()
+    info = {"section_start": 5, "section_end": 15, "duration": 30,
+            "chapters": [{"start_time": 0, "end_time": 30, "title": "All"}],
+            "sponsorblock_chapters": [{"start_time": 12, "end_time": 20, "category": "sponsor"}]}
+    _files, info = pp.run(info)
+    assert info["duration"] == 10
+    assert info["chapters"] == [{"start_time": 0, "end_time": 10, "title": "All"}]
+    assert info["sponsorblock_chapters"] == [{"start_time": 7, "end_time": 10, "category": "sponsor"}]
+
+
+def test_sponsorblock_categories_from_settings():
+    assert formats.sponsorblock_categories() == list(formats.SPONSORBLOCK_CATEGORIES)
+    assert formats.sponsorblock_categories("intro, sponsor,bogus") == ["sponsor", "intro"]
+    assert formats.sponsorblock_categories("") == []
+    cut = formats.with_sponsor_cuts([{"key": "FFmpegMetadata"}], ["outro"], exact=True)
+    assert cut[0] == {"key": "ModifyChapters", "remove_sponsor_segments": ["outro"], "force_keyframes": True}
+
+
+def test_live_streams_are_recorded_from_the_start_when_asked(manager, fake_ydl, tmp_path):
+    fake_ydl.info = {"id": "live1", "title": "Live", "ext": "mp4", "is_live": True}
+    manager.download_video("https://youtu.be/live1", {"save_path": str(tmp_path), "live_from_start": True})
+    assert fake_ydl.instances[-1].opts.get("live_from_start") is True
+    fake_ydl.info = {"id": "vod", "title": "Video", "ext": "mp4"}
+    manager.download_video("https://youtu.be/vod", {"save_path": str(tmp_path), "live_from_start": True})
+    assert "live_from_start" not in fake_ydl.instances[-1].opts
+
+
+def test_analysis_reports_how_many_playlist_entries_were_read(manager, fake_ydl):
+    fake_ydl.info = {"_type": "playlist", "title": "Big", "playlist_count": 60,
+                     "entries": ({"id": str(i), "title": f"V{i}", "url": f"https://youtu.be/{i}"} for i in range(60))}
+    seen = []
+    info = manager.fetch_info("https://www.youtube.com/playlist?list=x", progress=lambda n, total: seen.append((n, total)))
+    import playlist
+    analysis = playlist.analyze(info, "https://www.youtube.com/playlist?list=x")
+    assert len(analysis.items) == 60
+    assert seen == [(25, 60), (50, 60), (60, 60)]
+
+
+def test_counting_leaves_lists_alone_and_stops_on_cancel():
+    info = {"_type": "playlist", "entries": [{"id": "a"}]}
+    assert logic.counting_entries(info, lambda *a: None) is info
+    stop = []
+    counted = logic.counting_entries({"_type": "playlist", "entries": iter([{"id": "a"}, {"id": "b"}])},
+                                     lambda *a: None, lambda: bool(stop))
+    entries = counted["entries"]
+    assert next(entries) == {"id": "a"}
+    stop.append(True)
+    with pytest.raises(yt_dlp.utils.DownloadCancelled):
+        next(entries)

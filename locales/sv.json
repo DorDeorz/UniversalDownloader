@@ -287,5 +287,6 @@
  "error.not_found": "Webbplatsen hittade inte mediet (HTTP 404).",
  "error.unavailable": "Mediet är inte tillgängligt: det har tagits bort, gjorts privat eller blockerats.",
  "error.unsupported": "Länken stöds inte. Kopiera adressen till själva videosidan.",
- "error.network": "Det gick inte att nå webbplatsen. Kontrollera internetanslutningen (och proxyn i Inställningar) och försök igen."
+ "error.network": "Det gick inte att nå webbplatsen. Kontrollera internetanslutningen (och proxyn i Inställningar) och försök igen.",
+ "log.mode_back": "Tillbaka till ditt läge: {mode}"
 }

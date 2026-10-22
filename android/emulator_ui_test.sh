@@ -49,12 +49,25 @@ where_of() {  # name -> "x y" from the app's latest report, or nothing
     | grep -a "^$1=" | head -n 1 | cut -d= -f2 | tr ',' ' '
 }
 
+scroll() {  # down|up: move the page's content by a third of the screen
+  if [ "$1" = down ]; then
+    adb shell input swipe $(( W / 2 )) $(( H * 6 / 10 )) $(( W / 2 )) $(( H * 3 / 10 )) 400
+  else
+    adb shell input swipe $(( W / 2 )) $(( H * 3 / 10 )) $(( W / 2 )) $(( H * 6 / 10 )) 400
+  fi
+}
+
 tap_id() {  # name: wait until the app reports the widget on screen, then tap it
-  local xy=""
-  for _ in $(seq 1 10); do
-    xy=$(where_of "$1")
-    [ -n "$xy" ] && break
-    sleep 1
+  # A small phone screen may have the widget scrolled out of view: look
+  # further down the page, then back up.
+  local xy="" way
+  for way in none none none down down up up up up; do
+    [ "$way" != none ] && scroll "$way"
+    for _ in 1 2 3; do
+      xy=$(where_of "$1")
+      [ -n "$xy" ] && break 2
+      sleep 1
+    done
   done
   if [ -z "$xy" ]; then
     echo "FAIL: no widget named $1 on the screen"

@@ -424,6 +424,7 @@ def test_larger_text_stays_above_the_taskbar(monkeypatch, larger_text, area_heig
     window = make_app(monkeypatch)
     try:
         window.geometry("+0+300")  # start low, as a restored window might
+        pump(window, timeout=0.2)
         window._fit_to_content()
         pump(window, timeout=0.5)
         assert _outer_bottom(window) <= area_height
@@ -438,6 +439,7 @@ def test_larger_text_stays_above_the_taskbar(monkeypatch, larger_text, area_heig
 
 @needs_display
 def test_activity_box_takes_spare_height(app):
+    pump(app, timeout=0.3)  # the window's own fit at start comes first
     app.geometry("1040x1000")
     pump(app, timeout=0.5)
     tall = app.console.cget("height")

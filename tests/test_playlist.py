@@ -169,11 +169,36 @@ def test_closing_selector_is_a_cancel(app):
 
 
 @needs_display
-def test_large_playlist_rows_are_built_in_batches(app):
-    dialog = ui.PlaylistSelector(app, make_analysis(180), lambda items: None)
-    assert len(dialog.vars) == ui.PlaylistSelector.BATCH
-    pump(app, 1.0)
-    assert len(dialog.vars) == 180
+def test_large_playlists_are_shown_a_page_at_a_time(app):
+    got = []
+    dialog = ui.PlaylistSelector(app, make_analysis(250), got.append)
+    pump(app)
+    assert len(dialog.vars) == 250 and len(dialog.rows) == ui.PlaylistSelector.PAGE  # rows for one page only
+    assert dialog.lbl_count.cget("text") == "250 selected"  # entries not drawn yet count too
+    assert dialog.pager.winfo_ismapped() and "1–100" in dialog.lbl_page.cget("text")
+    dialog.show_page(2)
+    pump(app, 0.1)
+    assert "201–250" in dialog.lbl_page.cget("text") and dialog.btn_next.cget("state") == "disabled"
+    assert len([r for r in dialog.rows if r.winfo_ismapped()]) == 50
+    assert len(dialog.rows) == ui.PlaylistSelector.PAGE  # the same widgets, reused
+    dialog.rows[0].toggle()  # entry 201
+    dialog.confirm_selection()
+    assert 201 not in [i.index for i in got[0]] and len(got[0]) == 249
+
+
+@needs_display
+def test_the_picker_search_narrows_the_list(app):
+    dialog = ui.PlaylistSelector(app, make_analysis(30), lambda items: None)
+    pump(app)
+    dialog.search("video 2")
+    assert [dialog.items[i].index for i in dialog.shown] == [2, 12, *range(20, 30)]
+    dialog.select_none()  # only the entries found
+    assert len(dialog.selected_items()) == 30 - 12
+    dialog.search("nothing like this")
+    pump(app, 0.1)
+    assert dialog.shown == [] and dialog.lbl_nothing.winfo_ismapped()
+    dialog.search("")
+    assert len(dialog.shown) == 30
     dialog.cancel()
 
 

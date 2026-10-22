@@ -254,3 +254,182 @@ def test_the_settings_tab_is_kept(app):
     app.open_settings()
     assert app.settings_view.tab == "about"
     app._on_setting_changed("language", "en")
+
+
+# --- Download page (UI-1 … UI-16, #21) ---------------------------------------------------
+
+@needs_display
+def test_the_download_buttons_stay_below_the_scrolling_page(app):
+    assert app.btn_download.master is app.action_bar and app.action_bar.master is app
+    app.open_settings()
+    assert not app.action_bar.winfo_manager()  # not under other pages
+    app.close_settings()
+    assert app.action_bar.winfo_manager()
+
+
+@needs_display
+def test_the_log_can_be_copied_and_cleared(app):
+    app._append_log("hello")
+    app.copy_log()
+    assert "> hello" in app.clipboard_get()
+    app.clear_log()
+    assert app.console.get("1.0", "end-1c") == ""
+
+
+@needs_display
+def test_an_error_shows_in_a_band_that_can_be_closed(app):
+    from ui_helpers import pump
+    app.hide_band()  # the first-run tips
+    app._job_kind = "analysis"
+    app._on_analysis_failed("FAILED: no such video")
+    pump(app, timeout=0.1)
+    assert app.band_kind == "error" and "no such video" in app.lbl_band.cget("text")
+    app.btn_band_close.invoke()
+    assert app.band_kind is None and not app.band.winfo_manager()
+
+
+@needs_display
+def test_first_run_tips_show_once(app):
+    assert app.band_kind == "info"
+    app.hide_band()
+    assert settings_store.load(app.settings_path, "").onboarded
+
+
+@needs_display
+def test_failed_downloads_offer_retry_and_a_finished_file_can_be_opened(app, tmp_path, monkeypatch):
+    from results import ItemResult, ItemStatus, JobSummary
+    import ui
+    opened = []
+    monkeypatch.setattr(ui, "open_file", opened.append)
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x")
+    ok = ItemResult("https://a", "A", ItemStatus.COMPLETED, path=str(video))
+    bad = ItemResult("https://b", "B", ItemStatus.FAILED, error="boom")
+    app._on_item_done(ok)
+    app._on_item_done(bad)
+    app._on_job_done(JobSummary([ok, bad]))
+    assert app.band_kind == "error" and app.btn_band.winfo_manager()
+    assert app.done_buttons.winfo_manager()
+    app.btn_open_file.invoke()
+    assert opened == [str(video)]
+
+
+@needs_display
+def test_the_whole_job_has_its_own_bar(app):
+    app._on_item_started(3, 10, "Song 3")
+    assert app.overall.winfo_manager() and app.lbl_overall.cget("text") == "3 / 10"
+    app._show_progress(0.5, "50%")
+    assert abs(app.overall_bar.get() - 0.25) < 0.01
+    app._on_item_started(1, 1, "One")
+    app._job_total = 0
+
+
+@needs_display
+def test_the_link_field_has_a_clear_button(app):
+    from ui_helpers import pump
+    app.url_entry.insert(0, "https://example.com/v")
+    pump(app, timeout=0.15)
+    assert app.btn_clear_url.winfo_manager()
+    app.btn_clear_url.invoke()
+    pump(app, timeout=0.15)
+    assert app.url_entry.get() == "" and not app.btn_clear_url.winfo_manager()
+
+
+@needs_display
+def test_waiting_links_can_be_reordered_and_removed(app):
+    app.link_queue = ["https://a", "https://b", "https://c"]
+    app._show_link_queue()
+    app.move_link(2, -1)
+    assert app.link_queue == ["https://a", "https://c", "https://b"]
+    app.move_link(0, -1)  # already first
+    app.remove_link(1)
+    assert app.link_queue == ["https://a", "https://b"]
+    app.link_queue = [f"https://x/{i}" for i in range(8)]
+    app._show_link_queue()
+    assert len(app.queue_rows) == app.QUEUE_ROWS + 1  # five rows and "…and 3 more"
+
+
+@needs_display
+def test_long_titles_wrap_instead_of_widening_the_window(app):
+    from ui_helpers import pump
+    width = app.winfo_width()
+    app._on_item_started(1, 1, "A very long title " * 20)
+    pump(app, timeout=0.3)
+    assert app.lbl_item.cget("wraplength") > 0 and app.winfo_width() == width
+
+
+@needs_display
+def test_buttons_explain_themselves(app):
+    import ui
+    tip = app.btn_analyze._tooltip
+    assert "Enter" in tip.current_text()
+    tip.show()
+    assert tip.tip is not None
+    tip.hide()
+    assert isinstance(app.btn_clear_url._tooltip, ui.Tooltip)
+
+
+@needs_display
+def test_the_window_comes_back_where_it_was(monkeypatch):
+    pytest.importorskip("customtkinter")
+    from ui_helpers import isolate_settings, new_app, pump, ToolsOnlyManager
+    import ui
+    isolate_settings(monkeypatch)
+    monkeypatch.setattr(ui, "DownloadManager", lambda: ToolsOnlyManager())
+    window = new_app()
+    pump(window, timeout=0.6)  # its own fit at start first
+    window.geometry("1100x820+40+30")
+    pump(window, lambda: window.winfo_height() == 820, timeout=3)
+    window.destroy()
+    window = new_app()
+    try:
+        pump(window, lambda: window.winfo_height() == 820, timeout=3)
+        assert window.settings.window_geometry.startswith("1100x820")
+        assert (window.winfo_width(), window.winfo_height()) == (1100, 820)
+    finally:
+        window.destroy()
+
+
+@needs_display
+def test_a_smaller_text_size_shrinks_the_window_again(app):
+    from ui_helpers import pump
+    import customtkinter as ctk
+    app.hide_band()
+    pump(app, timeout=1.0)
+    start = app.winfo_height()
+    try:
+        app._on_setting_changed("text_size", "Larger")
+        pump(app, lambda: app.winfo_height() > start, timeout=3)
+        grown = app.winfo_height()
+        assert grown > start
+        app._on_setting_changed("text_size", "Normal")
+        pump(app, lambda: app.winfo_height() < grown, timeout=3)
+        assert abs(app.winfo_height() - start) <= 2  # back to the size for normal text
+    finally:
+        ctk.set_widget_scaling(1.0)
+
+
+# --- History (UI-9, #17) -------------------------------------------------------------
+
+@needs_display
+def test_history_search_more_undo_and_download_again(app, tmp_path, monkeypatch):
+    for i in range(70):
+        title = f"Song {i}" + (" (Live)" if i >= 60 else "")
+        app.history.add(title, str(tmp_path / f"{i}.mp3"), f"https://youtu.be/{i}", save=False)
+    app.open_history()
+    view = app.history_view
+    assert len(view.rows) == view.STEP + 1  # 50 entries and "Show more"
+    view.show_more()
+    assert len(view.rows) == 70
+    view.search("LIVE song")
+    assert len(view.rows) == 10  # every word, any case
+    view.search("")
+    view.remove(str(tmp_path / "69.mp3"))
+    assert view.notice.winfo_manager() and "not deleted" in view.lbl_notice.cget("text")
+    assert len(app.history.entries) == 69
+    view.undo()
+    assert app.history.entries[0].title == "Song 69 (Live)"
+    started = []
+    monkeypatch.setattr(app, "start_analysis_thread", lambda: started.append(app.url_entry.get()))
+    view.download_again(app.history.entries[0])
+    assert started == ["https://youtu.be/69"] and app.history_view is None

@@ -92,6 +92,13 @@ class History:
         self.entries = [e for e in self.entries if e.path != path]
         self.save()
 
+    def restore(self, entry, index=0):
+        """Put a removed ``entry`` back at ``index`` (History › Undo)."""
+        self.entries = [e for e in self.entries if e.path != entry.path]
+        self.entries.insert(min(max(0, index), len(self.entries)), entry)
+        del self.entries[LIMIT:]
+        self.save()
+
     def clear(self):
         self.entries = []
         self.save()

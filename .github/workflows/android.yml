@@ -143,7 +143,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           python stage.py
-          version=$(sed -n 's/^version = //p' buildozer.spec)
+          version=$(cd .. && python -c "from version import __version__; print(__version__)")
           if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/orbida.p12"
             export P4A_RELEASE_KEYSTORE="$RUNNER_TEMP/orbida.p12" P4A_RELEASE_KEYALIAS=orbida \
@@ -168,10 +168,17 @@ jobs:
           if-no-files-found: error
 
   emulator:
-    name: Emulator test
+    name: Emulator test (Android API ${{ matrix.api-level }})
     needs: apk
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # 24: the oldest Android the app supports (7.0); 33: notification
+        # permission; 34: the full test (sign-in, browser route, crash report,
+        # update); 35: what the app is built for (edge to edge).
+        api-level: [24, 33, 34, 35]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -207,6 +214,7 @@ jobs:
           PY
           nohup python3 android/range_server.py served 8000 >/dev/null 2>&1 &
       - uses: reactivecircus/android-emulator-runner@v2
+        if: matrix.api-level == 34
         with:
           api-level: 34
           arch: x86_64
@@ -216,6 +224,18 @@ jobs:
           script: |
             UD_UPDATE_RELEASES=http://10.0.2.2:8000/releases.json bash android/emulator_ui_test.sh apk/*.apk
             bash android/emulator_ui_test.sh apk-arm64/*.apk || echo "::warning::The phone APK failed the UI test under ARM translation"
+            bash android/emulator_test.sh apk/*.apk http://10.0.2.2:8000/sample.mp4
+      # The other Android versions: the taps and the downloads.
+      - uses: reactivecircus/android-emulator-runner@v2
+        if: matrix.api-level != 34
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: |
+            UD_SMOKE=1 bash android/emulator_ui_test.sh apk/*.apk
             bash android/emulator_test.sh apk/*.apk http://10.0.2.2:8000/sample.mp4
 
   publish:

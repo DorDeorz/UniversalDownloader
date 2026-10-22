@@ -54,7 +54,9 @@ def app(monkeypatch, tmp_path):
 @needs_display
 def test_the_song_is_analyzed_alone_and_the_mix_is_offered(app):
     from ui_helpers import pump
-    pump(app, timeout=0.5)  # past the paste at start
+    # Past the FFmpeg check and the paste at start (slower while other tests run).
+    pump(app, lambda: app._job_kind != "setup", timeout=10)
+    pump(app, timeout=0.5)
     app._hide_copied()
     app.url_entry.delete(0, "end")
     app.url_entry.insert(0, SONG_IN_MIX)

@@ -56,6 +56,64 @@ def build_options(mode, save_path, fmt=None, quality="Best", trim_start=None, tr
     }
 
 
+def _format_size(fmt, duration):
+    """Bytes of one yt-dlp format: its size, the site's estimate, or bitrate × length."""
+    for key in ("filesize", "filesize_approx"):
+        value = fmt.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return int(value)
+    tbr = fmt.get("tbr")
+    if isinstance(tbr, (int, float)) and tbr > 0 and duration:
+        return int(tbr * 1000 / 8 * duration)
+    return 0
+
+
+def estimate_size(info, mode, quality="Best"):
+    """About how many bytes a download of ``info`` takes, or 0 when the site gives no sizes.
+
+    Video + Audio: the largest video stream up to the chosen height plus the
+    largest audio stream (or the largest single file that has both). Audio
+    Only: the chosen bitrate over the video's length, else the largest
+    audio stream.
+    """
+    formats_ = [f for f in (info or {}).get("formats") or () if isinstance(f, dict)]
+    duration = (info or {}).get("duration") or 0
+    if not isinstance(duration, (int, float)):
+        duration = 0
+    audio = [f for f in formats_ if f.get("vcodec") == "none" and f.get("acodec") not in (None, "none")]
+    best_audio = max((_format_size(f, duration) for f in audio), default=0)
+    if mode == AUDIO_ONLY:
+        kbps = int(formats.AUDIO_QUALITIES.get(quality, "0"))  # 0: best, size unknown before converting
+        if kbps and duration:
+            return int(kbps * 1000 / 8 * duration)
+        return best_audio
+    limit = formats.VIDEO_QUALITIES.get(quality)
+    video = [f for f in formats_ if f.get("vcodec") not in (None, "none")
+             and (not limit or (f.get("height") or 0) <= limit)]
+    if not video:
+        return 0
+    separate = [f for f in video if f.get("acodec") == "none"]
+    together = [f for f in video if f.get("acodec") not in (None, "none")]
+    best_separate = max((_format_size(f, duration) for f in separate), default=0)
+    best_together = max((_format_size(f, duration) for f in together), default=0)
+    if best_separate:
+        return best_separate + best_audio
+    return best_together
+
+
+def preview(info, analysis):
+    """What the Download tab shows about a single video before it downloads:
+    ``{"thumbnail": url or "", "duration": seconds or 0, "info": info}``; None for playlists."""
+    if analysis.is_playlist or not analysis.items or not isinstance(info, dict):
+        return None
+    thumbnail = info.get("thumbnail")
+    if not isinstance(thumbnail, str) or not thumbnail.startswith("https://"):
+        thumbnail = ""
+    duration = info.get("duration")
+    return {"thumbnail": thumbnail, "duration": duration if isinstance(duration, (int, float)) else 0,
+            "info": {"duration": info.get("duration"), "formats": info.get("formats") or []}}
+
+
 class Session:
     """Runs one analysis or download job at a time on a worker thread."""
 
@@ -122,7 +180,9 @@ class Session:
             if not cancel.is_set():  # a cancelled analysis posts nothing
                 self.events.post(kind, **payload)
         try:
-            info = self.manager.fetch_info(url, log_callback=self._log, cancel_event=cancel)
+            info = self.manager.fetch_info(
+                url, log_callback=self._log, cancel_event=cancel,
+                progress=lambda count, total: post(events.ANALYSIS_PROGRESS, count=count, total=total))
             if cancel.is_set():
                 return
             if info.get("error"):
@@ -133,7 +193,7 @@ class Session:
                 return
             if not analysis.is_playlist and analysis.items and info.get("formats"):
                 self._analysed = (time.monotonic(), analysis.items[0].url, info)
-            post(events.ANALYSIS_DONE, analysis=analysis, url=url)
+            post(events.ANALYSIS_DONE, analysis=analysis, url=url, preview=preview(info, analysis))
         except Exception as e:  # never let the worker die silently
             post(events.ANALYSIS_FAILED, message=describe_error(e))
 

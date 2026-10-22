@@ -3,7 +3,14 @@
 # its tabs and buttons with real touch events, send it to the background and
 # back, and fail if the process dies or Python reports an error on the way.
 #
+# Widgets are tapped by name, not by fixed coordinates: started with the
+# selftest_ui extra, the app logs where each named widget is on the screen
+# ("UDSELFTEST where screen=home btn_paste=384,32 ..."; main._report_where),
+# so the taps follow the layout on any screen size, Android version and
+# language.
+#
 #   android/emulator_ui_test.sh <apk>
+# UD_SMOKE=1 runs the taps only (the other Android versions of the CI matrix).
 set -uo pipefail
 
 APK=$1
@@ -14,10 +21,10 @@ adb uninstall "$PKG" >/dev/null 2>&1  # each CI job signs with its own debug key
 adb install -g "$APK" || exit 1
 adb shell am force-stop "$PKG"
 adb logcat -c
-adb shell am start -n "$ACTIVITY"
+adb shell am start -n "$ACTIVITY" --es selftest_ui 1
 # The first start unpacks the app and checks FFmpeg; wait for that to finish.
 for _ in $(seq 1 36); do
-  adb logcat -d 2>/dev/null | grep -a -q -E "UDSELFTEST tools|UDCRASH" && break
+  adb logcat -d 2>/dev/null | grep -a -q -E "UDSELFTEST where|UDCRASH" && break
   sleep 5
 done
 sleep 3
@@ -25,10 +32,7 @@ sleep 3
 size=$(adb shell wm size | tr -d '\r' | awk '{print $3}' | tail -n 1)
 W=${size%x*}
 H=${size#*x}
-density=$(adb shell wm density | tr -d '\r' | awk '{print $3}' | tail -n 1)
-dp() { echo $(( $1 * density / 160 )); }
-nav_y=$(( H - $(dp 48) - $(dp 40) ))  # middle of the app's navigation bar, above Android's own
-echo "Screen ${W}x${H}, density $density"
+echo "Screen ${W}x${H}, Android $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
 
 status=0
 alive() {
@@ -40,31 +44,63 @@ alive() {
   echo "ok: $1"
 }
 
-tap() {  # name x y
-  adb shell input tap "$2" "$3"
+where_of() {  # name -> "x y" from the app's latest report, or nothing
+  adb logcat -d 2>/dev/null | grep -a -o "UDSELFTEST where .*" | tail -n 1 | tr -d '\r' | tr ' ' '\n' \
+    | grep -a "^$1=" | head -n 1 | cut -d= -f2 | tr ',' ' '
+}
+
+tap_id() {  # name: wait until the app reports the widget on screen, then tap it
+  local xy=""
+  for _ in $(seq 1 10); do
+    xy=$(where_of "$1")
+    [ -n "$xy" ] && break
+    sleep 1
+  done
+  if [ -z "$xy" ]; then
+    echo "FAIL: no widget named $1 on the screen"
+    adb logcat -d 2>/dev/null | grep -a -o "UDSELFTEST where .*" | tail -n 1
+    status=1
+    return 1
+  fi
+  # shellcheck disable=SC2086
+  adb shell input tap $xy
   sleep 3
-  alive "tap $1 at $2,$3"
+  alive "tap $1 at $xy"
 }
 
 alive "start" &&
-  tap "Paste (top bar)" $(( W - $(dp 28) )) $(dp 64) &&
-  tap "Clear" $(dp 60) $(dp 200) &&
-  tap "History tab" $(( W / 6 )) "$nav_y" &&  # History | Download (round, middle) | Settings
-  tap "Settings tab" $(( W * 5 / 6 )) "$nav_y" &&
-  tap "Theme row" $(( W / 2 )) $(dp 165) &&  # below the status bar and the Appearance heading
+  tap_id btn_paste &&
+  tap_id btn_clear &&
+  tap_id btn_options &&                    # More options opens
+  tap_id btn_details &&                    # the activity log opens
+  tap_id nav.history &&
+  tap_id history_search &&
+  { adb shell input keyevent KEYCODE_BACK; sleep 2; alive "Back closes the keyboard"; } &&
+  tap_id nav.settings &&
+  tap_id settings.theme &&
   { adb shell input keyevent KEYCODE_BACK; sleep 2; alive "Back closes the choice dialog"; } &&
-  tap "Theme row again" $(( W / 2 )) $(dp 165) &&
-  tap "Light (the middle choice)" $(( W / 2 )) $(( H / 2 )) &&  # picks it; the row updates in place
+  tap_id settings.theme &&
+  tap_id choice.light &&                   # picks it; the row updates in place
   { adb shell input swipe $(( W / 2 )) $(( H * 3 / 4 )) $(( W / 2 )) $(( H / 4 )) 300; sleep 2; alive "scroll Settings"; } &&
-  tap "Download tab" $(( W / 2 )) "$nav_y" &&
-  tap "Link field" $(( W / 2 )) $(dp 140) &&
-  { adb shell input keyevent KEYCODE_HOME; sleep 3; adb shell am start -n "$ACTIVITY"; sleep 5; alive "background and back"; }
+  tap_id nav.home &&
+  tap_id url &&
+  { adb shell input keyevent KEYCODE_BACK; sleep 2; alive "Back closes the keyboard"; } &&
+  { adb shell input keyevent KEYCODE_HOME; sleep 3; adb shell am start -n "$ACTIVITY"; sleep 5; alive "background and back"; } &&
+  { adb shell settings put system user_rotation 1; adb shell settings put system accelerometer_rotation 0; sleep 4;
+    alive "landscape"; } &&
+  tap_id nav.settings &&
+  { adb shell settings put system user_rotation 0; sleep 4; alive "portrait again"; }
 
 echo "----- app log -----"
 adb logcat -d 2>/dev/null | grep -a -E "python|UDCRASH|AndroidRuntime|libc|DEBUG|SDL" | tail -n 300
 if grep -a -q "UDCRASH" <<<"$(adb logcat -d 2>/dev/null)"; then
   echo "FAIL: Python reported an error (UDCRASH above)"
   status=1
+fi
+
+if [ -n "${UD_SMOKE:-}" ]; then
+  adb shell am force-stop "$PKG"
+  exit $status
 fi
 
 # The YouTube sign-in page: a WebView over the app that closes again (the

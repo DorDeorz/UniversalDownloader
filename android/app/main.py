@@ -37,6 +37,7 @@ from kivy.metrics import dp, sp
 from kivy.properties import BooleanProperty, NumericProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.stacklayout import StackLayout
 from kivy.uix.widget import Widget
@@ -48,8 +49,10 @@ from kivymd.uix.dialog import (MDDialog, MDDialogButtonContainer, MDDialogConten
 from kivymd.uix.label import MDLabel
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.slider import MDSlider, MDSliderHandle
-from kivymd.uix.snackbar import MDSnackbar, MDSnackbarText
-from kivymd.uix.textfield import MDTextField, MDTextFieldHelperText, MDTextFieldHintText
+from kivymd.uix.snackbar import (MDSnackbar, MDSnackbarActionButton, MDSnackbarActionButtonText,
+                                 MDSnackbarButtonContainer, MDSnackbarSupportingText, MDSnackbarText)
+from kivymd.uix.textfield import (MDTextField, MDTextFieldHelperText, MDTextFieldHintText,
+                                  MDTextFieldLeadingIcon)
 
 import android_env
 import app_settings
@@ -58,9 +61,11 @@ import browser_route
 import crash_report
 import events
 import filenames
+import formats
 import history
 import i18n
 import layout
+import licenses
 import logic
 import md_patches
 import media_tools
@@ -73,6 +78,7 @@ import worker
 import youtube_login
 from app_settings import AppSettings
 from lite import LiteHeadline, LiteRow, LiteSection, LiteWrappedText
+from playlist import AnalysisResult, QueueItem
 from results import ItemStatus
 
 md_patches.disable_gpu_ripple()  # before any KivyMD widget exists; see md_patches
@@ -80,12 +86,17 @@ if android_env.on_android():
     md_patches.disable_hover()
 
 APP_NAME = "Orbida"    # the Android app's name; keep in step with title in android/buildozer.spec
-APP_VERSION = "1.2.3"  # keep in step with android/buildozer.spec
+APP_VERSION = version.__version__  # buildozer.spec reads it from version.py too
 # KivyMD's Roboto fonts cover Latin, Greek and Cyrillic; languages in other
 # scripts fall back to English.
 FONT_LANGUAGES = [code for code in i18n.LANGUAGES if code not in {"ja", "ko", "zh"}]
-LOG_LINES = 150
-HISTORY_SHOWN = 100  # newest entries listed; each row is a handful of widgets
+LOG_LINES = 1000     # kept, and copied by Copy
+LOG_SHOWN = 300      # drawn in the Details panel (the newest)
+LOG_CHUNK = 25       # lines per label: one texture each, far below a phone's size limit
+HISTORY_STEP = 50    # History rows made at a time; "Show more" adds the next ones
+PICKER_PAGE = 100    # playlist picker rows made at a time
+CONTENT_WIDTH = 720  # dp; wider screens (tablets, landscape) centre the pages at this width
+WHERE_SECONDS = 1    # how often the UI self-test reports where its named widgets are
 TAB_SECONDS = 0.2    # tab switch animation
 PREBUILD_SECONDS = 0.5  # after start-up, fill in Settings and History in the background
 NETWORK_CHECK_SECONDS = 5  # how often Wi-Fi only looks at the network during a download
@@ -147,6 +158,24 @@ def _ffmpeg_https(path):
     return error is None and "https" in out.stdout.split()
 
 
+def _on_screen(widget):
+    """The window position of ``widget``'s centre when it can be tapped now, else None."""
+    if widget.get_root_window() is None or widget.opacity == 0 or widget.disabled:
+        return None
+    x, y = widget.to_window(*widget.center)
+    if not (0 <= x <= Window.width and 0 <= y <= Window.height):
+        return None
+    parent = widget.parent
+    while parent is not None and parent is not Window:
+        if isinstance(parent, ScrollView):  # scrolled out of its view
+            left, bottom = parent.to_window(parent.x, parent.y)
+            right, top = parent.to_window(parent.right, parent.top)
+            if not (left <= x <= right and bottom <= y <= top):
+                return None
+        parent = parent.parent
+    return x, y
+
+
 def _show(widget, visible):
     """Show or hide a widget, taking it out of its layout while hidden."""
     parent = getattr(widget, "_home", None) or widget.parent
@@ -189,6 +218,10 @@ class ProgressRing(Widget):
 
 class Root(MDBoxLayout):
     pass
+
+
+class LogChunk(Label):
+    """LOG_CHUNK lines of the activity log (layout.KV draws it)."""
 
 
 class SwitchRow(BoxLayout):
@@ -271,6 +304,7 @@ class UniversalDownloaderApp(MDApp):
         self.settings_path = os.path.join(self.user_data_dir, "settings.json")
         self.settings = app_settings.load(self.settings_path)
         self.history = history.History(os.path.join(self.user_data_dir, "history.json"))
+        self.choices_path = os.path.join(self.user_data_dir, "playlist_choices.json")
         self.events = events.EventQueue()
         self.manager = None
         self.session = None
@@ -296,8 +330,22 @@ class UniversalDownloaderApp(MDApp):
         self.tools_ready = False
         self._selftest = None
         self._selftest_passes = []
-        self._log_lines = []
+        self._log_lines = deque(maxlen=LOG_LINES)
+        self._log_total = 0     # lines ever logged: line n is in chunk n // LOG_CHUNK
+        self._log_chunks = {}   # chunk number -> (LogChunk, text it shows)
         self._log_trigger = Clock.create_trigger(self._render_log, 0.25)
+        self.last_file = None     # the newest file the last download saved
+        self.last_summary = None  # results.JobSummary of the last download
+        self.last_url = None      # the link the last download came from (Download again)
+        self._preview = None      # worker.preview() of the analysed video
+        self._history_shown = HISTORY_STEP
+        self._history_filter = ""
+        self._history_rows = {}   # path -> LiteRow while History lists every entry (no search)
+        self._settings_rows = []  # [(section, [rows])] for the Settings search
+        self._named = {}          # name -> widget, for the UI self-test
+        self._where = None
+        self._options = None      # the options of the last download (Retry failed)
+        self._battery_asked = False
         # Settings and History are rebuilt when shown, and only after a change.
         self._stale = {"settings": True, "history": True}
         self._dark = None
@@ -323,6 +371,7 @@ class UniversalDownloaderApp(MDApp):
         self._wire_handlers()
         Clock.schedule_interval(lambda *_: self.events.dispatch_pending(), 0.1)
         Clock.schedule_interval(self._watch_network, NETWORK_CHECK_SECONDS)
+        Clock.schedule_interval(self._poll_notice, 0.5)
         Window.bind(on_keyboard=self._on_key)
         return self.root_view
 
@@ -348,6 +397,7 @@ class UniversalDownloaderApp(MDApp):
         self.events.register(events.TOOLS_CHECKED, self._on_tools_checked)
         self.events.register(events.ANALYSIS_DONE, self._on_analysis_done)
         self.events.register(events.ANALYSIS_FAILED, self._on_analysis_failed)
+        self.events.register(events.ANALYSIS_PROGRESS, self._on_analysis_progress)
         self.events.register(events.ITEM_STARTED, self._on_item_started)
         self.events.register(events.PROGRESS, self._on_progress)
         self.events.register(events.STAGE, self._on_stage)
@@ -367,7 +417,14 @@ class UniversalDownloaderApp(MDApp):
         _show(self.ids.queue_row, False)
         _show(self.ids.progress_card, False)
         _show(self.ids.trim_box, False)
-        _show(self.ids.log, False)
+        _show(self.ids.log_card, False)
+        _show(self.ids.error_card, False)
+        _show(self.ids.btn_skipped, False)
+        _show(self.ids.done_row, False)
+        _show(self.ids.media_thumb, False)
+        self._show_options(self.settings.show_options)
+        Window.bind(size=lambda *_: self._fit_width())
+        self._fit_width()
         self._show_week()
         self.set_busy(False)
         self.ids.btn_download.disabled = True
@@ -449,14 +506,28 @@ class UniversalDownloaderApp(MDApp):
 
     def _fit_system_bars(self, *_):
         try:
-            top, bottom = android_env.system_bar_insets(Window.height)
+            left, top, right, bottom = android_env.system_bar_insets(Window.height)
         except Exception as e:
             _log.warning("System bar insets: %s", e)
             return
-        self.root_view.padding = [0, top, 0, bottom]
+        self.root_view.padding = [left, top, right, bottom]
+
+    def _fit_width(self, *_):
+        """On a tablet or in landscape the pages keep a readable width, centred (B3-13)."""
+        side = max(dp(16), (Window.width - dp(CONTENT_WIDTH)) / 2)
+        self.ids.home_box.padding = [side, dp(8), side, dp(24)]
+        self.ids.action_bar.padding = [side, dp(8), side, dp(8)]
+        for name in ("history_search_box", "settings_search_box"):
+            self.ids[name].padding = [side, 0, side, dp(4)]
+        list_side = max(0, side - dp(16))
+        self.ids.history_list.padding = [list_side + dp(8), 0, list_side + dp(8), dp(16)]
+        self.ids.settings_list.padding = [list_side, 0, list_side, dp(24)]
 
     def on_resume(self):
         self._paused = False
+        if self._battery_asked:  # coming back from Android's battery question
+            self._battery_asked = False
+            self._refresh("settings")
         # Recolouring every widget is slow, so only follow a changed dark mode
         # (wallpaper colours are read again on the next start).
         self._stale["history"] = True  # files may have been moved meanwhile
@@ -616,6 +687,35 @@ class UniversalDownloaderApp(MDApp):
             self._use_link(self.pending_link, shared=True)
         if not update_test and self.settings.check_updates and android_env.on_android():
             self.check_for_updates(quiet=True)
+        if self._intent_extra("selftest_ui"):
+            # CI: say where the named widgets are, so the emulator test taps them by name (B6-1).
+            Clock.schedule_interval(self._report_where, WHERE_SECONDS)
+
+    # Widgets the emulator test can tap by name, besides Settings rows and choices (self._named).
+    UI_IDS = ("btn_paste", "url", "btn_clear", "btn_analyze", "btn_download", "btn_options", "btn_details",
+              "btn_log_copy", "btn_log_clear", "btn_clear_history", "history_search", "settings_search",
+              "trim_switch")
+
+    def _report_where(self, *_):
+        """Log the screen position of every named widget that can be tapped now (when it changes)."""
+        offset = (0, 0)
+        if android_env.on_android():
+            try:
+                offset = android_env.surface_offset()
+            except Exception as e:
+                _log.debug("Surface offset: %s", e)
+        named = {name: self.ids[name] for name in self.UI_IDS}
+        named.update({"nav." + tab.name: tab for tab in self.ids.nav.children})
+        named.update(self._named)
+        spots = []
+        for name, widget in sorted(named.items()):
+            spot = _on_screen(widget)
+            if spot:
+                spots.append(f"{name}={int(offset[0] + spot[0])},{int(offset[1] + Window.height - spot[1])}")
+        line = f"where screen={self.ids.screens.current} " + " ".join(spots)
+        if line != self._where:
+            self._where = line
+            selftest(line)
 
     def _selftest_url(self):
         """The ``selftest_url`` extra of the launching intent (CI only)."""
@@ -640,6 +740,7 @@ class UniversalDownloaderApp(MDApp):
             self._build(name)  # before the slide, so the new screen arrives filled in
         screens.transition.direction = "left" if order.index(name) > order.index(screens.current) else "right"
         screens.current = name
+        self.announce(self.t("nav." + name))
 
     def _build(self, name):
         self._stale[name] = False
@@ -675,22 +776,80 @@ class UniversalDownloaderApp(MDApp):
     def snack(self, text):
         MDSnackbar(MDSnackbarText(text=text), y=dp(96), pos_hint={"center_x": 0.5}, size_hint_x=0.92).open()
 
+    def announce(self, text):
+        """Tell a screen reader (TalkBack) what changed; Kivy's widgets are invisible to it."""
+        try:
+            android_env.announce(text)
+        except Exception as e:
+            _log.debug("Announce: %s", e)
+
     def log(self, message):
         self._log_lines.append(message)
-        del self._log_lines[:-LOG_LINES]
-        if self.ids.log.parent is not None:  # drawn when the details are opened
+        self._log_total += 1
+        if self.ids.log_card.parent is not None:  # drawn when the details are opened
             self._log_trigger()
 
     def _render_log(self, *_):
-        self.ids.log.text = "\n".join(self._log_lines)
+        """Draw the newest LOG_SHOWN lines, LOG_CHUNK to a label; only changed chunks are redrawn (B5-6)."""
+        box = self.ids.log
+        first = max(self._log_total - min(LOG_SHOWN, len(self._log_lines)), 0)
+        lines = list(self._log_lines)[len(self._log_lines) - (self._log_total - first):]
+        wanted = {}
+        for number in range(first // LOG_CHUNK, (self._log_total - 1) // LOG_CHUNK + 1 if lines else 0):
+            start, end = max(number * LOG_CHUNK, first), min((number + 1) * LOG_CHUNK, self._log_total)
+            wanted[number] = "\n".join(lines[start - first:end - first])
+        for number in [n for n in self._log_chunks if n not in wanted]:
+            box.remove_widget(self._log_chunks.pop(number)[0])
+        for number in sorted(wanted):
+            text = wanted[number]
+            label, shown = self._log_chunks.get(number, (None, None))
+            if label is None:
+                label = LogChunk()
+                box.add_widget(label)  # newest last
+            if shown != text:
+                label.text = text
+            self._log_chunks[number] = (label, text)
+        Clock.schedule_once(lambda *_: setattr(self.ids.log_scroll, "scroll_y", 0), 0)  # the newest in view
+
+    def copy_log(self):
+        from kivy.core.clipboard import Clipboard
+        Clipboard.copy("\n".join(self._log_lines))
+        self.snack(self.t("log.copied"))
+
+    def clear_log(self):
+        self._log_lines.clear()
+        self._log_total = 0
+        for label, _text in self._log_chunks.values():
+            self.ids.log.remove_widget(label)
+        self._log_chunks = {}
 
     def toggle_details(self):
-        visible = self.ids.log.parent is None
+        visible = self.ids.log_card.parent is None
+        _show(self.ids.log_card, visible)
         if visible:
             self._render_log()
-        _show(self.ids.log, visible)
         self.ids.details_icon.icon = "chevron-up" if visible else "chevron-down"
         self.ids.details_text.text = self.t("home.hide_details" if visible else "home.details")
+
+    def toggle_options(self):
+        shown = self.ids.options_box.parent is None
+        self._show_options(shown)
+        self._save_settings(show_options=shown)
+
+    def _show_options(self, shown):
+        _show(self.ids.options_box, shown)
+        self.ids.options_icon.icon = "chevron-up" if shown else "chevron-down"
+        self.ids.options_text.text = self.t("home.fewer_options" if shown else "home.more_options")
+
+    def show_error(self, text):
+        """The error card (B3-6): stays until closed, or until the next link is analysed."""
+        self.ids.error_card.ids.error_text.text = text
+        _show(self.ids.error_card, True)
+        Clock.schedule_once(lambda *_: self.ids.home_scroll.scroll_to(self.ids.error_card, padding=dp(16)), 0)
+        self.announce(text)
+
+    def hide_error(self):
+        _show(self.ids.error_card, False)
 
     def _dialog(self, title, body=None, content=None, buttons=()):
         """A Material 3 dialog; ``buttons`` are (text, callback or None)."""
@@ -733,8 +892,9 @@ class UniversalDownloaderApp(MDApp):
         for value, label, *icon in options:
             chosen = value == current
             lead = icon[0] if icon else ("radiobox-marked" if chosen else "radiobox-blank")
-            rows.add_widget(LiteRow(icon=lead, accent=chosen and not icon, headline=label,
-                                    on_release=lambda _i, v=value: pick(v)))
+            row = LiteRow(icon=lead, accent=chosen and not icon, headline=label, on_release=lambda _i, v=value: pick(v))
+            rows.add_widget(row)
+            self._named[f"choice.{value}"] = row  # the emulator test taps choices by value
         visible = min(len(options) * dp(56), Window.height * 0.5)
         scroll = ScrollView(size_hint_y=None, height=visible, do_scroll_x=False,
                             bar_width=dp(4) if len(options) * dp(56) > visible else 0)
@@ -781,8 +941,8 @@ class UniversalDownloaderApp(MDApp):
 
     def _use_link(self, link, shared=False):
         self.pending_link = None
-        if self.job == "download":
-            # Shared while a download runs: it waits in the queue, as a typed link does.
+        if self.job in ("download", "analyze"):
+            # Shared while a download runs or a link is read: it waits in the queue, as a typed link does.
             self.queue_link(link)
             return
         if self.job is not None:
@@ -820,6 +980,11 @@ class UniversalDownloaderApp(MDApp):
             self._analysis_dropped = False
             self.job = "analyze"
             self.analysis = None
+            self._preview = None
+            self.hide_error()
+            _show(self.ids.btn_skipped, False)
+            _show(self.ids.media_thumb, False)
+            _show(self.ids.done_row, False)
             # A song opened inside a YouTube Mix is analyzed alone; the Mix is offered afterwards.
             self._mix = None if keep_mix else urls.youtube_mix(self.ids.url.text)
             self.mix_url = None
@@ -834,6 +999,33 @@ class UniversalDownloaderApp(MDApp):
         self.ids.media_title.text = title
         self.ids.media_sub.text = subtitle
         self.ids.media_icon.icon = icon
+        _show(self.ids.media_icon, True)
+        _show(self.ids.media_thumb, False)
+
+    def _show_preview(self, preview):
+        """The analysed video's picture and about how big the file will be (B4-12)."""
+        self._preview = preview
+        if not preview:
+            return
+        thumbnail = preview.get("thumbnail")
+        # With a proxy set, nothing goes around it: no picture then.
+        if thumbnail and not self.settings.proxy:
+            self.ids.media_thumb.source = thumbnail
+            _show(self.ids.media_thumb, True)
+            _show(self.ids.media_icon, False)
+        self._show_size()
+
+    def _show_size(self):
+        """Add "≈ 45 MB" to the media card for the mode and quality chosen now."""
+        if not self._preview or self.analysis is None or self.analysis.is_playlist:
+            return
+        base = self.ids.media_sub.text.split("  ·  ≈")[0]
+        size = worker.estimate_size(self._preview["info"], MODES[self.mode], self.quality[self.mode])
+        self.ids.media_sub.text = f"{base}  ·  ≈ {history.format_size(size)}" if size else base
+
+    def thumbnail_failed(self):
+        _show(self.ids.media_thumb, False)
+        _show(self.ids.media_icon, True)
 
     # --- Choices ------------------------------------------------------------------
 
@@ -855,6 +1047,7 @@ class UniversalDownloaderApp(MDApp):
     def _show_choices(self):
         self.ids.btn_quality.label = f"{self.t('home.quality')}: {self._quality_label(self.quality[self.mode])}"
         self.ids.btn_format.label = f"{self.t('home.format')}: {self.fmt[self.mode].upper()}"
+        self._show_size()
 
     def choose_quality(self, _caller=None):
         values = worker.VIDEO_QUALITIES if self.mode == "video" else worker.AUDIO_QUALITIES
@@ -941,11 +1134,21 @@ class UniversalDownloaderApp(MDApp):
         options = worker.build_options(MODES[self.mode], self.download_dir, fmt=self.fmt[self.mode],
                                        quality=self.quality[self.mode], trim_start=start, trim_end=end)
         if self.settings.subtitles:
-            options.update(subtitles=True, subtitle_langs=logic.subtitle_languages(i18n.current()))
+            options.update(subtitles=True,
+                           subtitle_langs=logic.subtitle_languages(i18n.current(), self.settings.subtitle_langs),
+                           subtitle_embed=self.settings.subtitle_embed)
         if self.settings.sponsorblock:
-            options["sponsorblock"] = True
+            options.update(sponsorblock=True, sponsorblock_categories=self.settings.sponsorblock_categories)
+        self._start_download(dataclasses.replace(self.analysis, items=list(self.chosen)), options, mobile_data_ok)
+
+    def _start_download(self, analysis, options, mobile_data_ok=False):
         self._set_platform_options()
-        if self.session.download(dataclasses.replace(self.analysis, items=list(self.chosen)), options):
+        if self.session.download(analysis, options):
+            self._options = options
+            self.last_url = self.analysis_url
+            self.last_file = None
+            _show(self.ids.done_row, False)
+            self.hide_error()
             self.job = "download"
             self._cancelled = False
             self._mobile_data_ok = mobile_data_ok
@@ -965,15 +1168,26 @@ class UniversalDownloaderApp(MDApp):
                 f" / {len(self.analysis.items)}"
 
     def choose_videos(self):
-        """Tick the playlist entries to download; ones downloaded before are marked."""
+        """Tick the playlist entries to download; ones downloaded before are marked.
+
+        A search narrows the list; rows are made PICKER_PAGE at a time ("Show
+        more"), so a list of thousands opens at once (B3-9, B5-5). Entries the
+        site does not offer are listed at the end with the reason.
+        """
         if self.analysis is None or self.job is not None:
             return
         items = self.analysis.items
+        skipped = self.analysis.skipped
         before = {id(item) for item in playlist.downloaded_before(items, [e.url for e in self.history.entries])}
         ticked = {id(item) for item in self.chosen}
         rows = BoxLayout(orientation="vertical", size_hint_y=None)
         rows.bind(minimum_height=rows.setter("height"))
-        lines = []
+        lines = []        # (row, item) on screen
+        shown = [items]   # the entries the search leaves
+        more_text = MDButtonText(text="")
+        more = MDButton(more_text, style="text")
+        count = MDLabel(text="", adaptive_height=True, font_style="Body", role="small",
+                        theme_text_color="Secondary")
 
         def draw(row, item):
             row.icon = "checkbox-marked" if id(item) in ticked else "checkbox-blank-outline"
@@ -982,20 +1196,48 @@ class UniversalDownloaderApp(MDApp):
         def toggle(row, item):
             ticked.symmetric_difference_update({id(item)})
             draw(row, item)
+            show_count()
+
+        def show_count():
+            count.text = self.tr("playlist.selected", count=len(ticked)) + f" / {len(items)}"
 
         def tick(which):
-            ticked.clear()
-            ticked.update(id(item) for item in items if which(item))
+            ticked.difference_update(id(item) for item in shown[0])
+            ticked.update(id(item) for item in shown[0] if which(item))  # only what the search shows
             for row, item in lines:
                 draw(row, item)
+            show_count()
 
-        for item in items:
-            title = f"{item.index}. {item.title}" if item.index else item.title
-            row = LiteRow(headline=title, supporting=self.tr("playlist.downloaded") if id(item) in before else "")
-            row.bind(on_release=lambda r, i=item: toggle(r, i))
-            draw(row, item)
-            rows.add_widget(row)
-            lines.append((row, item))
+        def add_rows(*_):
+            start = len(lines)
+            for item in shown[0][start:start + PICKER_PAGE]:
+                title = f"{item.index}. {item.title}" if item.index else item.title
+                row = LiteRow(headline=title, supporting=self.tr("playlist.downloaded") if id(item) in before else "")
+                row.bind(on_release=lambda r, i=item: toggle(r, i))
+                draw(row, item)
+                rows.add_widget(row, index=len(rows.children) - len(lines))  # above the skipped ones
+                lines.append((row, item))
+            left = len(shown[0]) - len(lines)
+            more_text.text = self.tr("history.more", count=left) if left > 0 else ""
+            _show(more, left > 0)
+
+        def search(text):
+            words = text.casefold().split()
+            shown[0] = [item for item in items if all(w in (item.title or "").casefold() for w in words)]
+            for row, _item in lines:
+                rows.remove_widget(row)
+            lines.clear()
+            add_rows()
+            if not shown[0]:
+                more_text.text = self.tr("playlist.no_match")
+                _show(more, True)
+
+        for item in skipped:  # at the end, not tickable
+            rows.add_widget(LiteRow(icon="cancel", headline=item.title or item.url,
+                                    supporting=i18n.tr_message(item.skip_reason or "")))
+        field = MDTextField(MDTextFieldLeadingIcon(icon="magnify"),
+                            MDTextFieldHintText(text=self.tr("playlist.search")), mode="outlined", multiline=False)
+        field.bind(text=lambda _f, text: search(text))
         # The buttons wrap onto a second line when their texts do not fit.
         quick = StackLayout(size_hint_y=None, spacing=dp(8))
         quick.bind(minimum_height=quick.setter("height"))
@@ -1004,15 +1246,23 @@ class UniversalDownloaderApp(MDApp):
                             (self.tr("playlist.select_new"), lambda i: id(i) not in before)):
             quick.add_widget(MDButton(MDButtonText(text=text), style="outlined",
                                       on_release=lambda _b, w=which: tick(w)))
-        visible = min(len(items) * dp(72), Window.height * 0.45)
-        scroll = ScrollView(size_hint_y=None, height=visible, do_scroll_x=False, bar_width=dp(4))
-        scroll.add_widget(rows)
-        box = MDBoxLayout(quick, scroll, orientation="vertical", adaptive_height=True, spacing=dp(8))
+        more.bind(on_release=add_rows)
+        scroll = ScrollView(size_hint_y=None, height=Window.height * 0.4, do_scroll_x=False, bar_width=dp(4))
+        page = BoxLayout(orientation="vertical", size_hint_y=None)
+        page.bind(minimum_height=page.setter("height"))
+        page.add_widget(rows)
+        page.add_widget(more)
+        scroll.add_widget(page)
+        add_rows()
+        show_count()
+        box = MDBoxLayout(field, quick, count, scroll, orientation="vertical", adaptive_height=True, spacing=dp(8))
 
         def done():
             self.chosen = [item for item in items if id(item) in ticked]
             self._show_chosen()
             self.ids.btn_download.disabled = not self.chosen
+            app_settings.save_playlist_choice(self.choices_path, self.analysis_url, [i.url for i in items],
+                                              [i.url for i in self.chosen])
 
         self._dialog(self.tr("playlist.title"), content=box,
                      buttons=[(self.t("common.cancel"), None), (self.t("common.done"), done)])
@@ -1027,7 +1277,8 @@ class UniversalDownloaderApp(MDApp):
         try:
             if wanted and not self._notice.running and self.job == "download":
                 self._finished = None
-                self._notice.start(self.t("notify.channel"), self.tr("progress.starting"))
+                self._notice.start(self.t("notify.channel"), self.tr("progress.starting"),
+                                   labels=self._notice_labels())
             elif not wanted and self._notice.running:
                 # Only worth a notification when the user is not looking at the app.
                 title, text = self._finished if self._finished and self._paused else (None, "")
@@ -1040,9 +1291,29 @@ class UniversalDownloaderApp(MDApp):
             return
         try:
             self._notice.update(self.ids.progress_title.text, self.ids.progress_detail.text,
-                                int(self.ids.progress.value), force=force)
+                                int(self.ids.progress.value), force=force,
+                                paused=self.session is not None and self.session.paused)
         except Exception as e:
             _log.warning("Download notification: %s", e)
+
+    def _notice_labels(self):
+        return (self.tr("action.pause"), self.tr("action.resume"), self.tr("action.cancel"), self.t("home.open"))
+
+    def _poll_notice(self, *_):
+        """Pause, Resume and Cancel pressed in the notification (B4-1)."""
+        if self._notice is None or not self._notice.running:
+            return
+        try:
+            action = self._notice.take_action()
+        except Exception as e:
+            _log.warning("Notification buttons: %s", e)
+            return
+        if not action or self.job != "download":
+            return
+        if action == "cancel":
+            self.download()  # Download reads Cancel while a download runs
+        elif (action == "pause") != self.session.paused:
+            self.toggle_pause()
 
     def _ask_notifications(self):
         if self._notice is None or self._asked_notifications:
@@ -1094,7 +1365,15 @@ class UniversalDownloaderApp(MDApp):
         """True for the result of a cancelled analysis that was already on its way."""
         return self.job is None and self._analysis_dropped
 
-    def _on_analysis_done(self, analysis, url):
+    def _on_analysis_progress(self, count, total=None):
+        """A long playlist is being read: "120 / 850 read" (Cancel stops it)."""
+        if self.job != "analyze" or self._dropped():
+            return
+        text = (self.tr("link.read_count_of", count=count, total=total) if total
+                else self.tr("link.read_count", count=count))
+        self._show_media(self.tr("link.reading"), text, "timer-sand")
+
+    def _on_analysis_done(self, analysis, url, preview=None):
         if self._dropped():
             return
         self.job = None
@@ -1102,10 +1381,16 @@ class UniversalDownloaderApp(MDApp):
         self.analysis = analysis
         self.analysis_url = self.ids.url.text.strip()
         self.set_busy(False)
-        # Playlist entries downloaded before start unticked.
-        before = {id(item) for item in playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries])
-                  } if analysis.is_playlist else set()
-        self.chosen = [item for item in analysis.items if id(item) not in before]
+        # Playlist entries downloaded before start unticked; a playlist opened
+        # before gets the entries the user ticked then (B4-8).
+        before = playlist.downloaded_before(analysis.items, [e.url for e in self.history.entries]) \
+            if analysis.is_playlist else []
+        saved = app_settings.load_playlist_choices(self.choices_path).get(self.analysis_url) \
+            if analysis.is_playlist else None
+        remembered = app_settings.remembered_choice(saved, analysis.items, before)
+        ids_before = {id(item) for item in before}
+        self.chosen = remembered if remembered is not None else [
+            item for item in analysis.items if id(item) not in ids_before]
         if playlist.found_by_search(analysis) and self.mode != "audio":
             # Spotify links are songs: download them as audio (the user can
             # switch back). Only for this link; the next one gets the mode back.
@@ -1118,6 +1403,8 @@ class UniversalDownloaderApp(MDApp):
             self._show_mode()
         _show(self.ids.btn_pick, analysis.is_playlist and bool(analysis.items))
         self._show_chosen()
+        _show(self.ids.btn_skipped, bool(analysis.skipped) and bool(analysis.items))
+        self.ids.skipped_text.text = self.t("home.skipped_why", count=len(analysis.skipped))
         if analysis.is_playlist:
             sub = self.tr("media.videos", count=len(analysis.items))
             if analysis.skipped:
@@ -1127,6 +1414,7 @@ class UniversalDownloaderApp(MDApp):
                              skipped=len(analysis.skipped)))
         elif analysis.items:
             self._show_media(analysis.title, self.tr("media.video"), "movie-open-outline")
+            self._show_preview(preview)
             self.log(self.tr("log.video", title=analysis.title))
             if mix and not self._from_queue:
                 self.mix_url = mix
@@ -1137,7 +1425,9 @@ class UniversalDownloaderApp(MDApp):
             text = (self.tr("link.nothing_reason", reason=i18n.tr_message(reason)) if reason
                     else self.tr("link.nothing"))
             self._show_media(text, "", "alert-circle-outline")
+            self.show_error(text)
         self.ids.btn_download.disabled = not self.chosen
+        self.announce(self.ids.media_title.text)
         if browser_route.enabled():
             self.log(self.t("youtube.browser_count", count=browser_route.request_count()))
         selftest(f"analysis items={len(analysis.items)} title={analysis.title!r} "
@@ -1188,6 +1478,7 @@ class UniversalDownloaderApp(MDApp):
         elif needs:
             message = self.t("signin.not_here", site=needs)
         self._show_media(self.tr("link.nothing_reason", reason=i18n.tr_message(message)), "", "alert-circle-outline")
+        self.show_error(i18n.tr_message(message))
         self.log(i18n.tr_message(message))
         if self._from_queue:
             self._from_queue = False
@@ -1206,6 +1497,20 @@ class UniversalDownloaderApp(MDApp):
         else:
             self._dialog(self.t("youtube.bot_title"), self.t("youtube.bot_body"),
                          buttons=[(self.t("youtube.ok_button"), None)])
+
+    def show_skipped(self):
+        """Why each left-out entry of the playlist was left out (B3-4)."""
+        if self.analysis is None or not self.analysis.skipped:
+            return
+        rows = BoxLayout(orientation="vertical", size_hint_y=None)
+        rows.bind(minimum_height=rows.setter("height"))
+        for item in self.analysis.skipped[:PICKER_PAGE * 5]:
+            rows.add_widget(LiteRow(icon="cancel", headline=item.title or item.url,
+                                    supporting=i18n.tr_message(item.skip_reason or "")))
+        visible = min(len(rows.children) * dp(72), Window.height * 0.5)
+        scroll = ScrollView(size_hint_y=None, height=visible, do_scroll_x=False, bar_width=dp(4))
+        scroll.add_widget(rows)
+        self._dialog(self.t("home.skipped_title", count=len(self.analysis.skipped)), content=scroll)
 
     def _offer_sign_in(self, site):
         """``site`` refused a post without sign-in: offer the in-app sign-in, then analyse again."""
@@ -1274,10 +1579,12 @@ class UniversalDownloaderApp(MDApp):
     def _on_item_done(self, result):
         if result.status is ItemStatus.COMPLETED:
             self.log(self.tr("log.saved", path=result.path))
+            self.last_file = result.path or self.last_file
             if self.settings.save_history and result.path:
-                self.history.add(result.title, result.path, url=result.url,
-                                 kind="audio" if self.mode == "audio" else "video")
-                self._refresh("history")
+                # Written once at the end of the job (and every few entries meanwhile; B5-3).
+                entry = self.history.add(result.title, result.path, url=result.url,
+                                         kind="audio" if self.mode == "audio" else "video", save=False)
+                self._history_added(entry)
                 self._show_week()
             if android_env.on_android():
                 try:
@@ -1303,6 +1610,11 @@ class UniversalDownloaderApp(MDApp):
                                     nothing=self.tr("summary.nothing"))
         self._finished = (self.tr(summary.title_key()), headline)
         self.job = None
+        self.last_summary = summary
+        try:
+            self.history.flush()
+        except OSError as e:
+            _log.warning("Cannot save the history: %s", e)
         self.set_busy(False)
         self._keep_awake(False)
         self.log(self.tr("log.result", summary=headline))
@@ -1311,6 +1623,12 @@ class UniversalDownloaderApp(MDApp):
         if summary.all_ok:
             self.ids.progress.value = 100
             self.ids.progress_detail.text = self.t("home.saved", folder=self.download_dir)
+        self._show_done_buttons()
+        failed = summary.with_status(ItemStatus.FAILED)
+        if failed:
+            first = i18n.tr_message(failed[0].error or "")
+            self.show_error(self.tr("band.failed", count=len(failed)) + (f"\n{first}" if first else ""))
+        self.announce(f"{self.ids.progress_title.text}. {headline}")
         selftest(f"job done all_ok={summary.all_ok}")
         if self._cancelled and self.link_queue:
             self.clear_link_queue()  # Cancel stops the whole queue
@@ -1318,6 +1636,45 @@ class UniversalDownloaderApp(MDApp):
             Clock.schedule_once(lambda *_: self._next_in_queue(), 0)
         elif self._selftest:
             self._next_selftest_pass()
+
+    def _show_done_buttons(self):
+        """Open / Share the last file, Retry failed, Download again (B3-5, B4-5)."""
+        failed = len(self._failed_items())
+        has_file = bool(self.last_file) and os.path.exists(self.last_file)
+        _show(self.ids.btn_open_file, has_file)
+        _show(self.ids.btn_share_file, has_file)
+        _show(self.ids.btn_retry, failed > 0)
+        self.ids.retry_text.text = self.tr("action.retry_n", count=failed)
+        _show(self.ids.btn_again, bool(self.last_url))
+        _show(self.ids.done_row, has_file or failed > 0 or bool(self.last_url))
+
+    def _failed_items(self):
+        if self.last_summary is None:
+            return []
+        return [r.source or {"url": r.url, "title": r.title} for r in self.last_summary.with_status(ItemStatus.FAILED)]
+
+    def open_last_file(self, share=False):
+        if self.last_file:
+            self.open_file(self.last_file, share=share)
+
+    def retry_failed(self):
+        """Download only the items that failed last time, with the same choices."""
+        items = self._failed_items()
+        if not items or self.job is not None or self.session is None:
+            return
+        self.log(self.tr("log.retrying", count=len(items)))
+        fields = {f.name for f in dataclasses.fields(QueueItem)}
+        queue = [QueueItem(**{k: v for k, v in item.items() if k in fields}) for item in items]
+        title = self.analysis.title if self.analysis else queue[0].title
+        self._start_download(AnalysisResult(title=title, items=queue, is_playlist=len(queue) > 1),
+                             self._options or {}, self._mobile_data_ok)
+
+    def download_again(self):
+        """Read the last download's link again, to download it once more (another mode or quality)."""
+        if self.last_url and self.job is None:
+            self.ids.url.text = self.last_url
+            self.go_to("home")
+            self.analyze()
 
     # --- Link queue ---------------------------------------------------------------
 
@@ -1361,6 +1718,33 @@ class UniversalDownloaderApp(MDApp):
         _show(self.ids.queue_row, bool(count))
         self._sync_background()
 
+    def show_link_queue(self):
+        """The waiting links (B3-8): tap one to move it up or take it out."""
+        if not self.link_queue:
+            return
+        options = [(i, link, "link-variant") for i, link in enumerate(self.link_queue)]
+
+        def picked(index):
+            if index >= len(self.link_queue):
+                return
+            link = self.link_queue[index]
+            moves = [("up", self.tr("queue.up"), "arrow-up"), ("remove", self.tr("queue.remove"), "close")]
+
+            def act(action):
+                if link not in self.link_queue:
+                    return
+                where = self.link_queue.index(link)
+                if action == "remove":
+                    del self.link_queue[where]
+                elif where > 0:
+                    self.link_queue.insert(where - 1, self.link_queue.pop(where))
+                self._show_link_queue()
+                self.show_link_queue()
+
+            self._choose(link, [m for m in moves if m[0] != "up" or index > 0], None, act)
+
+        self._choose(self.tr("queue.waiting", count=len(self.link_queue)), options, None, picked)
+
     def _next_in_queue(self):
         """Analyze and download the next queued link, if any."""
         if not self.link_queue or self.job is not None:
@@ -1380,43 +1764,138 @@ class UniversalDownloaderApp(MDApp):
     # --- History ------------------------------------------------------------------
 
     def build_history(self):
+        """The History list: newest first, HISTORY_STEP rows at a time, narrowed by the search (B3-10).
+
+        Whether each file is still there is looked up on a worker thread, so
+        a long list opens without waiting for the storage (B5-4).
+        """
         box = self.ids.history_list
         box.clear_widgets()
-        entries = self.history.entries[:HISTORY_SHOWN]
+        self._history_rows = {}
+        entries = self.history.search(self._history_filter)
         if not entries:
-            box.add_widget(MDLabel(text=self.t("history.empty"), halign="center", adaptive_height=True,
+            text = self.tr("history.no_match") if self._history_filter else self.t("history.empty")
+            box.add_widget(MDLabel(text=text, halign="center", adaptive_height=True,
                                    padding=(dp(24), dp(48)), theme_text_color="Secondary"))
             return
-        for entry in entries:
-            exists = os.path.exists(entry.path)
-            when = time.strftime("%d.%m.%Y %H:%M", time.localtime(entry.time)) if entry.time else ""
-            ext = os.path.splitext(entry.path)[1].lstrip(".").upper()
-            sub = " · ".join(part for part in (ext, when) if part)
-            if not exists:
-                sub += f" · {self.t('history.missing')}"
-            item = LiteRow(
-                icon="music-note" if entry.kind == "audio" else "movie-outline",
-                headline=entry.title or os.path.basename(entry.path),
-                supporting=sub,
-                trailing="dots-vertical",
-                on_release=lambda _i, e=entry: self._history_menu(_i, e),
-            )
-            box.add_widget(item)
+        shown = entries[:self._history_shown]
+        for entry in shown:
+            row = self._history_row(entry)
+            box.add_widget(row)
+            if not self._history_filter:
+                self._history_rows[entry.path] = row
+        left = len(entries) - len(shown)
+        if left > 0:
+            more = LiteRow(icon="chevron-down", headline=self.tr("history.more", count=left))
+            more.bind(on_release=lambda *_: self._more_history())
+            box.add_widget(more)
+        rows = [(entry, row) for entry, row in zip(shown, list(reversed(box.children))) if isinstance(row, LiteRow)]
+        threading.Thread(target=self._check_history_files, args=(rows,), daemon=True).start()
+
+    def _history_row(self, entry):
+        when = android_env.format_date(entry.time) if entry.time else ""
+        ext = os.path.splitext(entry.path)[1].lstrip(".").upper()
+        row = LiteRow(
+            icon="music-note" if entry.kind == "audio" else "movie-outline",
+            headline=entry.title or os.path.basename(entry.path),
+            supporting=" · ".join(part for part in (ext, when) if part),
+            trailing="dots-vertical",
+        )
+        row.bind(on_release=lambda r, e=entry: self._history_menu(r, e))
+        return row
+
+    def _check_history_files(self, rows):
+        """Worker thread: mark the rows whose file was moved or deleted."""
+        missing = [(entry, row) for entry, row in rows if not os.path.exists(entry.path)]
+        if missing:
+            Clock.schedule_once(lambda *_: self._mark_missing(missing), 0)
+
+    def _mark_missing(self, missing):
+        note = self.t("history.missing")
+        for _entry, row in missing:
+            if note not in row.supporting:
+                row.supporting += f" · {note}"
+
+    def _more_history(self):
+        self._history_shown += HISTORY_STEP
+        self._build("history")
+
+    def search_history(self, text):
+        self._history_filter = text.strip()
+        self._history_shown = HISTORY_STEP
+        self._refresh("history")
+
+    def _history_added(self, entry):
+        """A download finished: put its row on top instead of making the whole list again (B5-2)."""
+        box = self.ids.history_list
+        if self._stale["history"] or self._history_filter or not self._history_rows:
+            self._refresh("history")
+            return
+        old = self._history_rows.pop(entry.path, None)
+        if old is not None:
+            box.remove_widget(old)
+        row = self._history_row(entry)
+        box.add_widget(row, index=len(box.children))  # the top
+        self._history_rows[entry.path] = row
+
+    def _history_removed(self, path):
+        row = self._history_rows.pop(path, None)
+        if row is None or self._history_filter:
+            self._refresh("history")
+        else:
+            self.ids.history_list.remove_widget(row)
+            if not self.history.entries:
+                self._refresh("history")
 
     def _history_menu(self, _caller, entry):
         options = [("open", self.t("home.open"), "open-in-new"),
                    ("share", self.t("history.share"), "share-variant-outline"),
+                   ("again", self.tr("history.again"), "download-multiple"),
                    ("remove", self.t("history.delete"), "delete-outline")]
 
         def picked(action):
             if action == "remove":
-                self.history.remove(entry.path)
-                self._refresh("history")
+                removed = self.history.remove(entry.path)
+                self._history_removed(entry.path)
                 self._show_week()
+                if removed:
+                    self._undo_snack(self.tr("history.removed", title=entry.title or os.path.basename(entry.path)),
+                                     lambda: self._restore_history(*removed))
+            elif action == "again":
+                if not entry.url:
+                    self.snack(self.t("history.no_link"))
+                elif self.job is not None:
+                    self.queue_link(entry.url)
+                else:
+                    self.go_to("home")
+                    self.ids.url.text = entry.url
+                    self.analyze()
             else:
                 self.open_file(entry.path, share=action == "share")
 
         self._choose(entry.title or os.path.basename(entry.path), options, None, picked)
+
+    def _restore_history(self, entry, index):
+        self.history.restore(entry, index)
+        self._refresh("history")
+        self._show_week()
+
+    def _undo_snack(self, text, undo):
+        """A message with an Undo button, a little longer than the others."""
+        bar = None
+
+        def pressed(*_):
+            bar.dismiss()
+            undo()
+
+        bar = MDSnackbar(
+            MDSnackbarSupportingText(text=text),
+            MDSnackbarButtonContainer(
+                MDSnackbarActionButton(MDSnackbarActionButtonText(text=self.tr("history.undo")), on_release=pressed),
+                pos_hint={"center_y": 0.5}),
+            y=dp(96), orientation="horizontal", pos_hint={"center_x": 0.5}, size_hint_x=0.92, duration=6)
+        bar.open()
+        return bar
 
     def open_file(self, path, share=False):
         if not os.path.exists(path):
@@ -1438,12 +1917,22 @@ class UniversalDownloaderApp(MDApp):
 
     def confirm_clear_history(self):
         def clear():
+            entries = list(self.history.entries)
             self.history.clear()
             self._refresh("history")
             self._show_week()
+            if entries:
+                self._undo_snack(self.t("history.cleared"), lambda: self._undo_clear(entries))
 
         self._dialog(self.t("history.clear"), self.t("history.clear_body"),
                      buttons=[(self.t("common.cancel"), None), (self.t("common.remove"), clear)])
+
+    def _undo_clear(self, entries):
+        self.history.entries = entries + [e for e in self.history.entries if e.path not in {x.path for x in entries}]
+        del self.history.entries[history.LIMIT:]
+        self.history.save()
+        self._refresh("history")
+        self._show_week()
 
     # --- YouTube sign-in ----------------------------------------------------------
 
@@ -1466,7 +1955,7 @@ class UniversalDownloaderApp(MDApp):
             return
         self._login = youtube_login.LoginView(
             lambda header: self.events.post("youtube_login", header=header, site=site.name),
-            done_text=self.t("youtube.done"), site=site)
+            done_text=self.t("youtube.done"), site=site, dark=bool(self._dark))
         try:
             self._login.open(url)
         except Exception as e:
@@ -1520,15 +2009,18 @@ class UniversalDownloaderApp(MDApp):
             _log.warning("Cannot save settings: %s", e)
 
     def build_settings(self):
-        box = self.ids.settings_list
-        box.clear_widgets()
         s = self.settings
         t = self.t
+        groups = self._settings_rows = []  # [(section, [rows])], for the search
+
+        def add(row, name):
+            groups[-1][1].append(row)  # search_settings puts them on the page
+            self._named["settings." + name] = row
 
         def section(title):
-            box.add_widget(LiteSection(text=title))
+            groups.append((LiteSection(text=title), []))
 
-        def choice(icon, title, options, current, apply):
+        def choice(icon, title, options, current, apply, name):
             """A row showing the current value; picking another updates it in place."""
             labels = {value: label for value, label, *_ in options}
             row = LiteRow(icon=icon, headline=title, supporting=labels.get(current, str(current)))
@@ -1540,63 +2032,71 @@ class UniversalDownloaderApp(MDApp):
                 apply(value)
 
             row.bind(on_release=lambda _r: self._choose(title, options, chosen[0], picked))
-            box.add_widget(row)
+            add(row, name)
 
-        def switch(icon, title, active, apply, supporting=""):
-            box.add_widget(SwitchRow(apply, icon=icon, headline=title, supporting=supporting, active=active))
+        def switch(icon, title, active, apply, supporting="", name=""):
+            add(SwitchRow(apply, icon=icon, headline=title, supporting=supporting, active=active), name or icon)
 
-        def info(icon, title, *lines, on_release=None):
+        def info(icon, title, *lines, on_release=None, name=""):
             row = LiteRow(icon=icon, headline=title, supporting=lines[0] if lines else "",
                           tertiary=lines[1] if len(lines) > 1 else "")
             if on_release:
                 row.bind(on_release=lambda _r: on_release())
-            box.add_widget(row)
+            add(row, name or icon)
+            return row
 
         # Appearance
         section(t("settings.appearance"))
         themes = [(v, t("theme." + v)) for v in app_settings.THEMES]
-        choice("theme-light-dark", t("settings.theme"), themes, s.theme, lambda v: self._change_look(theme=v))
+        choice("theme-light-dark", t("settings.theme"), themes, s.theme, lambda v: self._change_look(theme=v), "theme")
         switch("palette-outline", t("settings.dynamic"), s.dynamic_color,
                lambda v: self._change_look(dynamic_color=v), t("settings.dynamic_hint"))
         switch("circle-half-full", t("settings.pure_black"), s.pure_black,
                lambda v: self._change_look(pure_black=v), t("settings.pure_black_hint"))
         accents = [(v, t("accent." + v)) for v in app_settings.ACCENTS]
-        choice("format-color-fill", t("settings.accent"), accents, s.accent, lambda v: self._change_look(accent=v))
+        choice("format-color-fill", t("settings.accent"), accents, s.accent,
+               lambda v: self._change_look(accent=v), "accent")
         languages = [(i18n.AUTO, i18n.tr("settings.language_auto"))] + [
             (code, i18n.LANGUAGES[code]) for code in FONT_LANGUAGES]
-        choice("translate", t("settings.language"), languages, s.language, self._change_language)
+        choice("translate", t("settings.language"), languages, s.language, self._change_language, "language")
 
         # Downloads
         section(t("settings.downloads"))
         modes = [("video", t("home.video")), ("audio", t("home.audio"))]
         choice("tune-variant", t("settings.default_mode"), modes, s.default_mode,
-               lambda v: self._change_default(default_mode=v))
+               lambda v: self._change_default(default_mode=v), "default_mode")
         qualities = [(v, self._quality_label(v)) for v in worker.VIDEO_QUALITIES]
         choice("high-definition", t("settings.video_quality"), qualities, s.video_quality,
-               lambda v: self._change_default(video_quality=v))
+               lambda v: self._change_default(video_quality=v), "video_quality")
         containers = [(v, v.upper()) for v in app_settings.VIDEO_CONTAINERS]
         choice("filmstrip", t("settings.video_container"), containers, s.video_container,
-               lambda v: self._change_default(video_container=v))
+               lambda v: self._change_default(video_container=v), "video_container")
         audio_formats = [(v, v.upper()) for v in app_settings.AUDIO_FORMATS]
         choice("music-box-outline", t("settings.audio_format"), audio_formats, s.audio_format,
-               lambda v: self._change_default(audio_format=v))
+               lambda v: self._change_default(audio_format=v), "audio_format")
         audio_q = [(v, self._quality_label(v)) for v in app_settings.AUDIO_QUALITIES]
         choice("equalizer-outline", t("settings.audio_quality"), audio_q, s.audio_quality,
-               lambda v: self._change_default(audio_quality=v))
-        self._add_fragments_row(box)
+               lambda v: self._change_default(audio_quality=v), "audio_quality")
+        add(self._add_fragments_row(), "fragments")
         switch("subtitles-outline", t("settings.subtitles"), s.subtitles,
-               lambda v: self._save_settings(subtitles=v))
+               lambda v: self._save_settings(subtitles=v), name="subtitles")
+        info("translate-variant", self.tr("settings.sub_langs"),
+             s.subtitle_langs or t("settings.sub_langs_auto"), on_release=self.edit_subtitle_langs, name="sub_langs")
+        switch("subtitles", self.tr("settings.sub_embed"), s.subtitle_embed,
+               lambda v: self._save_settings(subtitle_embed=v), name="sub_embed")
         switch("content-cut", t("settings.sponsorblock"), s.sponsorblock,
-               lambda v: self._save_settings(sponsorblock=v))
-        info("folder-download-outline", t("settings.folder"), self.download_dir or "…")
+               lambda v: self._save_settings(sponsorblock=v), name="sponsorblock")
+        info("format-list-checks", t("settings.sponsor_parts"), self._sponsor_text(),
+             on_release=self.choose_sponsor_categories, name="sponsor_parts")
+        info("folder-download-outline", t("settings.folder"), self.download_dir or "…", name="folder")
 
         # Connection
         section(t("settings.connection"))
         limits = [(n, f"{n} MB/s" if n else t("speed.unlimited")) for n in app_settings.SPEED_LIMITS]
         choice("speedometer", t("settings.speed_limit"), limits, s.speed_limit,
-               lambda v: self._change_network(speed_limit=v))
+               lambda v: self._change_network(speed_limit=v), "speed_limit")
         info("server-network", t("settings.proxy"), s.proxy or t("settings.proxy_none"),
-             on_release=self.edit_proxy)
+             on_release=self.edit_proxy, name="proxy")
 
         # Behaviour
         section(t("settings.behaviour"))
@@ -1609,6 +2109,9 @@ class UniversalDownloaderApp(MDApp):
         switch("wifi", t("settings.wifi_only"), s.wifi_only,
                lambda v: self._save_settings(wifi_only=v), t("settings.wifi_only_hint"))
         switch("history", t("settings.history"), s.save_history, self._change_save_history)
+        if android_env.on_android():
+            info("battery-heart-variant", t("battery.title"), self._battery_text(),
+                 on_release=self.ask_battery, name="battery")
 
         # YouTube
         section(t("youtube.section"))
@@ -1640,15 +2143,39 @@ class UniversalDownloaderApp(MDApp):
         # About
         section(t("settings.about"))
         info("information-outline", t("settings.version"), f"{APP_VERSION} · {t('settings.whats_new')}",
-             on_release=self.show_release_notes)
-        info("update", t("update.check"), on_release=self.check_for_updates)
+             on_release=self.show_release_notes, name="version")
+        info("update", t("update.check"), on_release=self.check_for_updates, name="check_updates")
         switch("cellphone-arrow-down", t("update.auto"), s.check_updates,
-               lambda v: self._save_settings(check_updates=v), t("update.auto_hint"))
-        info("puzzle-outline", t("settings.components"), *self._components_text())
+               lambda v: self._save_settings(check_updates=v), t("update.auto_hint"), name="auto_update")
+        channels = [("stable", self.tr("settings.channel_stable")), ("beta", self.tr("settings.channel_beta"))]
+        choice("source-branch", self.tr("settings.update_channel"), channels, s.update_channel,
+               lambda v: self._save_settings(update_channel=v, skipped_version=""), "update_channel")
+        info("puzzle-outline", t("settings.components"), *self._components_text(), name="components")
+        info("license", self.tr("about.licenses"), on_release=self.show_licenses, name="licenses")
         if android_env.on_android():
             info("bug-outline", t("settings.diagnostics"), t("settings.diagnostics_hint"),
-                 on_release=self.copy_diagnostics)
-        info("restore", t("settings.reset"), on_release=self.confirm_reset)
+                 on_release=self.copy_diagnostics, name="diagnostics")
+        info("restore", t("settings.reset"), on_release=self.confirm_reset, name="reset")
+        self.search_settings(self.ids.settings_search.text)
+
+    def search_settings(self, text):
+        """Show only the settings whose texts contain every word of ``text`` (B3-11)."""
+        words = text.casefold().split()
+        box = self.ids.settings_list
+        box.clear_widgets()
+        found = 0
+        for heading, rows in self._settings_rows:
+            texts = [(row, " ".join(str(getattr(row, k, "")) for k in ("headline", "supporting", "tertiary"))
+                      + " " + heading.text) for row in rows]
+            matching = [row for row, words_of in texts if all(w in words_of.casefold() for w in words)]
+            if matching:
+                box.add_widget(heading)
+                for row in matching:
+                    box.add_widget(row)
+                found += len(matching)
+        if not found:
+            box.add_widget(MDLabel(text=self.tr("history.no_match"), halign="center", adaptive_height=True,
+                                   padding=(dp(24), dp(48)), theme_text_color="Secondary"))
 
     # --- Updates ------------------------------------------------------------------
 
@@ -1665,7 +2192,8 @@ class UniversalDownloaderApp(MDApp):
 
         def work():
             try:
-                found, error = self_update.check(APP_VERSION, url), None
+                found, error = self_update.check(APP_VERSION, url, channel=self.settings.update_channel,
+                                                 skipped=self.settings.skipped_version if quiet else ""), None
             except self_update.UpdateError as e:
                 found, error = None, str(e)
             ytdlp = None
@@ -1707,7 +2235,8 @@ class UniversalDownloaderApp(MDApp):
         scroll = MDScrollView(label, size_hint_y=None, height=min(dp(320), Window.height * 0.45),
                               do_scroll_x=False)
         self._dialog(self.t("update.title", version=update.version), content=scroll,
-                     buttons=[(self.t("update.later"), None),
+                     buttons=[(self.tr("update.skip"), lambda: self._save_settings(skipped_version=update.version)),
+                              (self.t("update.later"), None),
                               (self.t("update.install"), lambda: self.install_update(update))])
 
     def install_update(self, update):
@@ -1789,7 +2318,7 @@ class UniversalDownloaderApp(MDApp):
 
         Clock.schedule_interval(poll, 0.5)
 
-    def _add_fragments_row(self, box):
+    def _add_fragments_row(self):
         row = BoxLayout(orientation="vertical", size_hint_y=None, padding=(dp(16), dp(10), dp(24), dp(4)))
         row.bind(minimum_height=row.setter("height"))
         title = LiteHeadline()
@@ -1808,7 +2337,8 @@ class UniversalDownloaderApp(MDApp):
         row.add_widget(title)
         row.add_widget(slider)
         row.add_widget(hint)
-        box.add_widget(row)
+        row.headline = self.t("settings.fragments")  # for the search
+        return row
 
     def _components_text(self):
         c = self.components
@@ -1840,6 +2370,81 @@ class UniversalDownloaderApp(MDApp):
         box = MDBoxLayout(field, orientation="vertical", adaptive_height=True, padding=(0, dp(8)))
         self._dialog(self.t("settings.proxy"), content=box,
                      buttons=[(self.t("common.cancel"), None), (self.t("common.ok"), save)])
+
+    def edit_subtitle_langs(self):
+        """Subtitle languages (B4-6): codes such as "en, tr"; empty for the app's language, then English."""
+        field = MDTextField(MDTextFieldHintText(text="en, tr"),
+                            MDTextFieldHelperText(text=self.tr("settings.sub_langs_hint"), mode="persistent"),
+                            text=self.settings.subtitle_langs, multiline=False)
+
+        def save():
+            langs = logic.subtitle_languages("", field.text) if field.text.strip() else []
+            self._save_settings(subtitle_langs=", ".join(langs))
+            self._refresh("settings")
+
+        box = MDBoxLayout(field, orientation="vertical", adaptive_height=True, padding=(0, dp(8)))
+        self._dialog(self.tr("settings.sub_langs"), content=box,
+                     buttons=[(self.t("common.cancel"), None), (self.t("common.ok"), save)])
+
+    def _sponsor_text(self):
+        chosen = formats.sponsorblock_categories(self.settings.sponsorblock_categories)
+        if len(chosen) == len(formats.SPONSORBLOCK_CATEGORIES):
+            return self.t("settings.sponsor_all")
+        return ", ".join(self.tr("sponsor." + c) for c in chosen) or self.t("settings.sponsor_none")
+
+    def choose_sponsor_categories(self):
+        """Which SponsorBlock parts are cut (B4-7)."""
+        ticked = set(formats.sponsorblock_categories(self.settings.sponsorblock_categories))
+        rows = BoxLayout(orientation="vertical", size_hint_y=None)
+        rows.bind(minimum_height=rows.setter("height"))
+
+        def draw(row, category):
+            row.icon = "checkbox-marked" if category in ticked else "checkbox-blank-outline"
+            row.accent = category in ticked
+
+        def toggle(row, category):
+            ticked.symmetric_difference_update({category})
+            draw(row, category)
+
+        for category in formats.SPONSORBLOCK_CATEGORIES:
+            row = LiteRow(headline=self.tr("sponsor." + category))
+            row.bind(on_release=lambda r, c=category: toggle(r, c))
+            draw(row, category)
+            rows.add_widget(row)
+            self._named["choice." + category] = row
+
+        def save():
+            self._save_settings(sponsorblock_categories=",".join(c for c in formats.SPONSORBLOCK_CATEGORIES
+                                                                   if c in ticked))
+            self._refresh("settings")
+
+        hint = self.tr("settings.sponsorblock_hint", option=self.t("settings.sponsorblock"))
+        self._dialog(self.t("settings.sponsor_parts"), hint, content=rows,
+                     buttons=[(self.t("common.cancel"), None), (self.t("common.done"), save)])
+
+    def _battery_text(self):
+        try:
+            free = android_env.ignoring_battery_optimizations()
+        except Exception as e:
+            _log.warning("Battery optimisation: %s", e)
+            return self.t("battery.hint")
+        return self.t("battery.free") if free else self.t("battery.hint")
+
+    def ask_battery(self):
+        """Ask Android to let downloads run in the background without battery limits (B4-11)."""
+        try:
+            android_env.ask_ignore_battery_optimizations()
+        except Exception as e:
+            _log.warning("Battery optimisation: %s", e)
+            self.snack(self.t("crash.error", error=e))
+            return
+        self._battery_asked = True  # the answer shows when the app is back (on_resume)
+
+    def show_licenses(self):
+        label = MDLabel(text=licenses.text(), adaptive_height=True, font_style="Body", role="small")
+        scroll = MDScrollView(label, size_hint_y=None, height=min(dp(420), Window.height * 0.55),
+                              do_scroll_x=False)
+        self._dialog(self.tr("about.licenses"), content=scroll)
 
     def _change_save_history(self, value):
         self._save_settings(save_history=value)

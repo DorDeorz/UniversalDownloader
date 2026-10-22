@@ -196,9 +196,13 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Make a test video and serve it
         run: |
-          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+          # A static FFmpeg from PyPI: apt-get on the runners has hung for over
+          # half an hour at times, and only this one test video needs it.
+          python3 -m venv "$RUNNER_TEMP/ffmpeg-venv"
+          "$RUNNER_TEMP/ffmpeg-venv/bin/pip" install -q imageio-ffmpeg
+          ffmpeg=$("$RUNNER_TEMP/ffmpeg-venv/bin/python" -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
           mkdir -p served
-          ffmpeg -loglevel error -f lavfi -i testsrc=size=320x240:rate=25 -f lavfi -i sine=frequency=440 \
+          "$ffmpeg" -loglevel error -f lavfi -i testsrc=size=320x240:rate=25 -f lavfi -i sine=frequency=440 \
             -t 4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest served/sample.mp4
           # An "update" for the app to find, download and install: the same APK
           # listed as a newer release, like the GitHub API lists one.

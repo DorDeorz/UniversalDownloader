@@ -473,10 +473,17 @@ def test_settings_page_fits_without_scrolling(monkeypatch, screen, dpi, text_siz
         window.open_settings()
         pump(window, timeout=0.5)
         view = window.settings_view
+        # The result of an update check takes room too (the longest: a failed check).
+        window._set_update_status(lambda: ui.tr("update.failed"))
         assert not any(isinstance(w, ctk.CTkScrollableFrame) for w in _descendants(view))
-        assert view.content_fits
-        assert view.winfo_reqheight() <= view.winfo_height() + 1
-        assert _outer_bottom(window) <= screen[1] - 40
+        for tab in view.TABS:  # General, Advanced and About
+            view.show_tab(tab)
+            pump(window, timeout=0.4)
+            assert view.content_fits, tab
+            assert view.winfo_reqheight() <= view.winfo_height() + 1, tab
+            assert _outer_bottom(window) <= screen[1] - 40, tab
+            header = view.btn_back.master  # nothing in the header is cut off
+            assert header.winfo_reqwidth() <= header.winfo_width() + 1, tab
     finally:
         window.destroy()
         ctk.set_widget_scaling(1.0)

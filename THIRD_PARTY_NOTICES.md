@@ -1,6 +1,6 @@
 # Third-party software
 
-UniversalDownloader bundles or depends on the following software. Each is
+Orbida bundles or depends on the following software. Each is
 distributed under its own license; the full texts are available from the
 linked projects.
 

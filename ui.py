@@ -2,6 +2,7 @@ import functools
 import logging
 import math
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -724,8 +725,10 @@ class PlaylistSelector(ctk.CTkToplevel):
 
 class SettingsView(ctk.CTkFrame):
     """The settings page, shown inside the main window in place of the
-    download page: appearance and language, downloads and what happens
-    after them, updates, and the keyboard shortcuts.
+    download page. Three tabs: General (appearance and language, downloads
+    and what happens after them, updates, the keyboard shortcuts), Advanced
+    (subtitles, SponsorBlock categories, network and diagnostics, other
+    choices) and About (versions and licenses).
 
     The page never scrolls: its cards sit in two columns, each setting on
     one line with a hint under its name. When the window is too short
@@ -749,9 +752,17 @@ class SettingsView(ctk.CTkFrame):
     TWO_COLUMNS = 680  # narrowest width (in unscaled units) for two columns
     FRAGMENT_CHOICES = (1, 2, 4, 8, 16)
 
-    def __init__(self, parent, settings, on_change, on_back, on_check_updates=None, update_status=None):
+    TABS = ("general", "advanced", "about")
+
+    def __init__(self, parent, settings, on_change, on_back, on_check_updates=None, update_status=None,
+                 actions=None, tab="general", versions=None):
+        """``actions``: name -> function for the Advanced tab's buttons (test_connection,
+        copy_diagnostics, forget_archive, reset); ``versions``: (name, version) lines for About."""
         super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.on_change = on_change
+        self.actions = actions or {}
+        self.settings = settings
+        self.tab = None  # set by show_tab
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self._hints = []
@@ -766,17 +777,12 @@ class SettingsView(ctk.CTkFrame):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=32, pady=(14, 10))
         self._spacing.append((header, (14, 10), (8, 8)))
-        header.grid_columnconfigure(2, weight=1)
+        header.grid_columnconfigure(3, weight=1)
         self.btn_back = secondary_button(header, "←  " + tr("settings.back"), on_back, width=100, height=34)
         self.btn_back.grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(header, text=tr("settings.title"), font=font(26, "bold"), text_color=TEXT).grid(
-            row=0, column=1, sticky="w", padx=16)
-        ctk.CTkLabel(header, text=f"{DISPLAY_NAME} {__version__}", font=font(12), text_color=MUTED).grid(
-            row=0, column=2, sticky="e", padx=12)
-        self.btn_extension = secondary_button(header, tr("extension.title"), self.open_extension_help, height=34)
-        self.btn_extension.grid(row=0, column=3, sticky="e", padx=(0, 8))
-        self.btn_logs = secondary_button(header, tr("settings.logs"), self.open_logs, height=34)
-        self.btn_logs.grid(row=0, column=4, sticky="e")
+        # The tabs name the page (the top bar's Settings button is lit), so no title takes their room.
+        self.seg_tabs = segmented(header, list(self.TABS), self.show_tab, label=lambda t: tr(f"settings.tab_{t}"))
+        self.seg_tabs.grid(row=0, column=1, sticky="w", padx=16)
 
         self.body = body = ctk.CTkFrame(self, fg_color="transparent")
         body.grid(row=1, column=0, sticky="new", padx=32, pady=(0, 16))
@@ -858,11 +864,13 @@ class SettingsView(ctk.CTkFrame):
         self._spacing.append((row, (0, 10), (0, 8)))
         self.btn_check = secondary_button(row, tr("settings.check_now"), on_check_updates or (lambda: None),
                                           height=32)
-        self.btn_check.pack(side="left", padx=(0, 8))
-        self.btn_whats_new = secondary_button(row, tr("settings.whats_new"), self.open_whats_new, height=32)
-        self.btn_whats_new.pack(side="left")
-        self.lbl_update = ctk.CTkLabel(upd, text="", font=font(12), text_color=MUTED, anchor="w", justify="left")
-        self.lbl_update.grid(row=3, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 12))
+        self.btn_check.pack(side="left", padx=(0, 10))
+        # Beside the button, so a result costs no height (the page must not scroll).
+        # "What's new" is on the About tab.
+        self.lbl_update = ctk.CTkLabel(row, text="", font=font(12), text_color=MUTED, anchor="w", justify="left",
+                                       wraplength=220)
+        self.lbl_update.pack(side="left", fill="x", expand=True)
+        self._spacing[-1] = (row, (0, 14), (0, 10))
         self.show_update_status(update_status)
 
         # Keyboard
@@ -880,9 +888,209 @@ class SettingsView(ctk.CTkFrame):
                 self._spacing.append((widget, (0, 14 if last else 6), (0, 10 if last else 3)))
         self.card_keys.grid_columnconfigure(0, weight=0)
 
+        self._build_advanced(settings)
+        self._build_about(versions or ())
+        self.show_tab(tab if tab in self.TABS else "general")
         self._set_tight(False)
         # The frame's own resize event (CTkFrame.bind would bind its canvas).
         tkinter.Misc.bind(self, "<Configure>", self._schedule_fit, "+")
+
+    def _page(self):
+        """A tab's page: two columns of cards, like General's (see _layout)."""
+        page = ctk.CTkFrame(self, fg_color="transparent")
+        page.columns = [ctk.CTkFrame(page, fg_color="transparent") for _ in range(2)]
+        for column in page.columns:
+            column.grid_columnconfigure(0, weight=1)
+        page.cards = ([], [])  # cards of the left and right column
+        return page
+
+    def _build_advanced(self, settings):
+        self.page_advanced = page = self._page()
+        left, right = page.cards
+
+        # Subtitles: which languages, which file type, inside the video or next to it
+        self.card_subtitles = subs = self._section(page, tr("settings.card_subtitles"))
+        self.ent_sub_langs = ctk.CTkEntry(subs, width=150, height=34, fg_color=FIELD, border_width=0,
+                                          corner_radius=FIELD_RADIUS, font=font(13), placeholder_text="en, tr")
+        if settings.subtitle_langs:
+            self.ent_sub_langs.insert(0, settings.subtitle_langs)
+        self.ent_sub_langs.bind("<Return>", lambda _e: self._save_sub_langs())
+        self.ent_sub_langs.bind("<FocusOut>", lambda _e: self._save_sub_langs())
+        self._setting_row(subs, 1, tr("settings.sub_langs"), tr("settings.sub_langs_hint"), self.ent_sub_langs)
+        self.seg_sub_format = segmented(subs, list(settings_store.SUBTITLE_FORMATS),
+                                        lambda v: self.on_change("subtitle_format", v), label=str.upper)
+        self.seg_sub_format.set(settings.subtitle_format)
+        self._inline_row(subs, 3, tr("settings.sub_format"), self.seg_sub_format)
+        self.sw_sub_embed = self._switch(subs, 4, tr("settings.sub_embed"), settings.subtitle_embed,
+                                         "subtitle_embed")
+        self._spacing[-1] = (self._spacing[-1][0], (0, 14), (0, 10))
+        left.append(subs)
+
+        # SponsorBlock: which kinds of segments are cut
+        self.card_sponsor = sponsor = self._section(page, tr("settings.card_sponsorblock"))
+        hint = ctk.CTkLabel(sponsor, text=tr("settings.sponsorblock_hint", option=tr("options.sponsorblock")),
+                            font=font(12), text_color=MUTED,
+                            anchor="w", justify="left", wraplength=300)
+        hint.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 8))
+        self._hints.append(hint)
+        chosen = set(formats.sponsorblock_categories(settings.sponsorblock_categories))
+        self.sponsor_boxes = {}
+        boxes = ctk.CTkFrame(sponsor, fg_color="transparent")
+        boxes.grid(row=2, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((boxes, (0, 14), (0, 8)))
+        for i, category in enumerate(formats.SPONSORBLOCK_CATEGORIES):
+            box = ctk.CTkCheckBox(boxes, text=tr(f"sponsor.{category}"), font=font(12), text_color=TEXT,
+                                  fg_color=ACCENT, hover_color=ACCENT_HOVER, checkbox_width=18,
+                                  checkbox_height=18, command=self._save_sponsor_categories)
+            if category in chosen:
+                box.select()
+            box.grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 12), pady=2)
+            self.sponsor_boxes[category] = box
+        left.append(sponsor)
+
+        # Network and diagnostics
+        self.card_diag = diag = self._section(page, tr("settings.diagnostics"))
+        row = ctk.CTkFrame(diag, fg_color="transparent")
+        row.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 8), (0, 4)))
+        self.btn_test = secondary_button(row, tr("settings.test_connection"), self.test_connection, height=32)
+        self.btn_test.pack(side="left", padx=(0, 10))
+        self.lbl_test = ctk.CTkLabel(row, text="", font=font(12), text_color=MUTED, anchor="w", justify="left")
+        self.lbl_test.pack(side="left", fill="x", expand=True)
+        self.sw_verbose = self._switch(diag, 2, tr("settings.verbose_log"), settings.verbose_log, "verbose_log")
+        row = ctk.CTkFrame(diag, fg_color="transparent")
+        row.grid(row=3, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 14), (0, 10)))
+        self.btn_diagnostics = secondary_button(row, tr("settings.copy_diagnostics"), self.copy_diagnostics,
+                                                height=32)
+        self.btn_diagnostics.pack(side="left", padx=(0, 8))
+        self.btn_logs = secondary_button(row, tr("settings.logs"), self.open_logs, height=32)
+        self.btn_logs.pack(side="left")
+        right.append(diag)
+
+        # Other
+        self.card_other = other = self._section(page, tr("settings.other"))
+        self.sw_live = self._switch(other, 1, tr("settings.live_from_start"), settings.live_from_start,
+                                    "live_from_start")
+        self.seg_channel = segmented(other, list(settings_store.UPDATE_CHANNELS),
+                                     lambda v: self.on_change("update_channel", v),
+                                     label=lambda c: tr(f"settings.channel_{c}"))
+        self.seg_channel.set(settings.update_channel)
+        self._setting_row(other, 2, tr("settings.update_channel"), tr("settings.update_channel_hint"),
+                          self.seg_channel)
+        row = ctk.CTkFrame(other, fg_color="transparent")
+        row.grid(row=4, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 14), (0, 10)))
+        self.btn_forget = secondary_button(row, tr("settings.forget_archive"),
+                                           lambda: self._act("forget_archive"), height=32)
+        self.btn_forget.pack(side="left", padx=(0, 8))
+        self.btn_reset = secondary_button(row, tr("settings.reset"), lambda: self._act("reset"), height=32)
+        self.btn_reset.pack(side="left")
+        right.append(other)
+
+    def _build_about(self, versions):
+        self.page_about = page = self._page()
+        left, right = page.cards
+        self.card_about = about = self._section(page, f"{DISPLAY_NAME} {__version__}")
+        lines = [tr("about.text")] + [f"{name}: {version}" for name, version in versions]
+        self.lbl_versions = ctk.CTkLabel(about, text="\n".join(lines), font=font(12), text_color=TEXT,
+                                         anchor="w", justify="left", wraplength=320)
+        self.lbl_versions.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((self.lbl_versions, (0, 10), (0, 6)))
+        row = ctk.CTkFrame(about, fg_color="transparent")
+        row.grid(row=2, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((row, (0, 14), (0, 10)))
+        secondary_button(row, tr("settings.whats_new"), self.open_whats_new, height=32).pack(
+            side="left", padx=(0, 8))
+        secondary_button(row, "GitHub", lambda: webbrowser.open(f"https://github.com/{GITHUB_REPO}"),
+                         height=32).pack(side="left")
+        left.append(about)
+
+        # Browser extension (on this tab: the header has no room for it with large text)
+        self.card_extension = ext = self._section(page, tr("extension.title"))
+        hint = ctk.CTkLabel(ext, text=tr("extension.description"), font=font(12), text_color=MUTED, anchor="w",
+                            justify="left", wraplength=300)
+        hint.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16, pady=(0, 8))
+        self._hints.append(hint)
+        self.btn_extension = secondary_button(ext, tr("extension.title") + "…", self.open_extension_help, height=32)
+        self.btn_extension.grid(row=2, column=0, sticky="w", padx=16)
+        self._spacing.append((self.btn_extension, (0, 14), (0, 10)))
+        left.append(ext)
+
+        self.card_licenses = lic = self._section(page, tr("about.licenses"))
+        self.txt_licenses = ctk.CTkTextbox(lic, font=font(11), fg_color=FIELD, text_color=TEXT, wrap="word",
+                                           height=230, border_width=0, corner_radius=FIELD_RADIUS)
+        self.txt_licenses.insert("1.0", license_text())
+        self.txt_licenses.configure(state="disabled")
+        self.txt_licenses.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16)
+        self._spacing.append((self.txt_licenses, (0, 14), (0, 10)))
+        right.append(lic)
+
+    def show_tab(self, tab):
+        """Show one tab's page: "general", "advanced" or "about"."""
+        if tab == self.tab:
+            return
+        self.tab = tab
+        self.seg_tabs.set(tab)
+        pages = {"general": self.body, "advanced": self.page_advanced, "about": self.page_about}
+        for name, page in pages.items():
+            if name == tab:
+                page.grid(row=1, column=0, sticky="new", padx=32, pady=(0, 16))
+            else:
+                page.grid_remove()
+        self._columns = None  # lay out the new page's cards
+        self._schedule_fit()
+
+    def _act(self, name, *args):
+        action = self.actions.get(name)
+        if action is not None:
+            return action(*args)
+
+    def _save_sub_langs(self):
+        text = ", ".join(logic.subtitle_languages("", self.ent_sub_langs.get())) \
+            if self.ent_sub_langs.get().strip() else ""
+        if text != self.ent_sub_langs.get().strip():
+            self.ent_sub_langs.delete(0, "end")
+            self.ent_sub_langs.insert(0, text)
+        if text != self.settings.subtitle_langs:
+            self.on_change("subtitle_langs", text)
+
+    def _save_sponsor_categories(self):
+        chosen = [c for c, box in self.sponsor_boxes.items() if box.get()]
+        self.on_change("sponsorblock_categories", ",".join(chosen))
+
+    def test_connection(self):
+        """Ask the app to test the connection (with the proxy); show_test_result shows the answer."""
+        self.btn_test.configure(state="disabled")
+        self.lbl_test.configure(text=tr("settings.testing"), text_color=MUTED)
+        if self._act("test_connection") is None and "test_connection" not in self.actions:
+            self.show_test_result(None, "no test")
+
+    def show_test_result(self, seconds, error):
+        try:
+            self.btn_test.configure(state="normal")
+            if error:
+                self.lbl_test.configure(text=tr("settings.test_failed", error=i18n.tr_message(error)[:120]),
+                                        text_color=DANGER)
+            else:
+                self.lbl_test.configure(text=tr("settings.test_ok", ms=round(seconds * 1000)), text_color=SUCCESS)
+        except tkinter.TclError:
+            pass  # page closed
+
+    def copy_diagnostics(self):
+        text = self._act("copy_diagnostics")
+        if text:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self.btn_diagnostics.configure(text=tr("settings.copied"))
+            self.after(2000, lambda: self._restore_text(self.btn_diagnostics, tr("settings.copy_diagnostics")))
+
+    @staticmethod
+    def _restore_text(widget, text):
+        try:
+            widget.configure(text=text)
+        except tkinter.TclError:
+            pass
 
     def _section(self, parent, title):
         frame = card(parent)
@@ -939,6 +1147,9 @@ class SettingsView(ctk.CTkFrame):
     def _layout(self, columns):
         """Place the cards in one column or two."""
         self._columns = columns
+        if self.tab not in (None, "general"):
+            self._layout_page(self.page_advanced if self.tab == "advanced" else self.page_about, columns)
+            return
         body = self.body
         body.grid_columnconfigure(0, weight=1, uniform="col")
         body.grid_columnconfigure(1, weight=1 if columns == 2 else 0, uniform="col" if columns == 2 else "")
@@ -967,6 +1178,25 @@ class SettingsView(ctk.CTkFrame):
         if not self.shortcuts_shown:
             self.card_keys.grid_remove()
 
+    @staticmethod
+    def _layout_page(page, columns):
+        page.grid_columnconfigure(0, weight=1, uniform="col")
+        page.grid_columnconfigure(1, weight=1 if columns == 2 else 0, uniform="col" if columns == 2 else "")
+        left, right = page.columns
+        if columns == 2:
+            left.grid(row=0, column=0, columnspan=1, sticky="new", padx=(0, 8))
+            right.grid(row=0, column=1, sticky="new", padx=(8, 0))
+            order = [(c, left) for c in page.cards[0]] + [(c, right) for c in page.cards[1]]
+        else:
+            left.grid(row=0, column=0, columnspan=2, sticky="new", padx=0)
+            right.grid_remove()
+            order = [(c, left) for c in page.cards[0] + page.cards[1]]
+        rows = {}
+        for widget, column in order:
+            row = rows.get(column, 0)
+            rows[column] = row + 1
+            widget.grid(in_=column, row=row, column=0, sticky="ew", pady=(0 if row == 0 else 12, 0))
+
     # Spacing taken off every tight gap at the tightest level (TIGHTEST).
     TIGHTEST_TRIM = 4
     TIGHTEST = 2
@@ -977,7 +1207,9 @@ class SettingsView(ctk.CTkFrame):
         trim = self.TIGHTEST_TRIM if tight == self.TIGHTEST else 0
         for widget, normal, small in self._spacing:
             widget.grid_configure(pady=tuple(max(0, v - trim) for v in small) if tight else normal)
-        self.body.grid_configure(pady=(0, 4 if trim else 16))
+        for page in (self.body, self.page_advanced, self.page_about):
+            if page.winfo_manager():
+                page.grid_configure(pady=(0, 4 if trim else 16))
 
     def _show_hints(self, show):
         self.hints_shown = show
@@ -986,6 +1218,8 @@ class SettingsView(ctk.CTkFrame):
 
     def _show_shortcuts(self, show):
         self.shortcuts_shown = show
+        if self.tab != "general":
+            return
         if self._columns == 2:
             self._layout(2)  # the cards change columns (see _layout)
         else:
@@ -1049,7 +1283,6 @@ class SettingsView(ctk.CTkFrame):
         """``text`` is a function giving the (translated) result of the last check, or None."""
         try:
             self.lbl_update.configure(text=text() if text else "")
-            self.lbl_update.grid() if text else self.lbl_update.grid_remove()
         except tkinter.TclError:
             return
         self._schedule_fit()
@@ -1057,6 +1290,26 @@ class SettingsView(ctk.CTkFrame):
     @staticmethod
     def open_whats_new():
         webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases/tag/{updates.TAG_PREFIX}{__version__}")
+
+
+def license_text():
+    """THIRD_PARTY_NOTICES.md (bundled with the app) as plain text for the About tab."""
+    try:
+        with open(resource_path("THIRD_PARTY_NOTICES.md"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return f"https://github.com/{GITHUB_REPO}/blob/main/THIRD_PARTY_NOTICES.md"
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
+        line = re.sub(r"\*\*|__|`", "", line)
+        line = re.sub(r"^#+\s*", "", line)
+        if re.fullmatch(r"\|?[-| :]+\|?", line.strip()):
+            continue  # a table's divider
+        if line.startswith("|"):
+            line = " · ".join(cell.strip() for cell in line.strip().strip("|").split("|"))
+        lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
 def open_file(path):
@@ -1362,6 +1615,8 @@ class App(ctk.CTk):
         self.settings_path = os.path.join(app_setup.data_dir(), "settings.json")
         self.settings = settings_store.load(self.settings_path, default_download_dir())
         logic.set_network_options(self.settings.proxy)
+        logic.set_verbose(self.settings.verbose_log)
+        app_setup.set_verbose_logging(self.settings.verbose_log)
         self._reddit = None  # browser_cookies.RedditSignIn while the setting is on
         self._apply_reddit_sign_in()
         ctk.set_appearance_mode(appearance_mode(self.settings.theme))
@@ -1413,6 +1668,7 @@ class App(ctk.CTk):
         self.events.register(events.UPDATE_PROGRESS, self._on_update_progress)
         self.events.register(events.UPDATE_READY, self._on_update_ready)
         self.events.register(events.UPDATE_FAILED, self._on_update_failed)
+        self.events.register(events.CONNECTION_TESTED, self._on_connection_tested)
         self.available_update = None   # updates.Release newer than this version
         self.update_dialog = None
         self._update_status = None     # function giving the last check's result text
@@ -1427,6 +1683,7 @@ class App(ctk.CTk):
         self.tools = None
 
         self.settings_view = None
+        self._settings_tab = "general"  # the settings tab shown last
         self.history_view = None
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -1865,6 +2122,9 @@ class App(ctk.CTk):
                 messagebox.showinfo(tr("reddit.ask_title"), self.reddit_status(), parent=self)
         if name == "close_to_tray":
             self._apply_tray()
+        if name == "verbose_log":
+            logic.set_verbose(value)
+            app_setup.set_verbose_logging(value)
         if name == "accent":
             recolor(self, apply_accent(value))
 
@@ -1939,21 +2199,103 @@ class App(ctk.CTk):
             self._build_settings_view()
             self.settings_view.cmb_language.focus_set()
     def _build_settings_view(self):
+        tab = self.settings_view.tab if self.settings_view is not None else self._settings_tab
         if self.settings_view is not None:
             self.settings_view.destroy()
         self.settings_view = SettingsView(self, self.settings, self._on_setting_changed, self.close_settings,
                                           on_check_updates=lambda: self.check_for_updates(manual=True),
-                                          update_status=self._update_status)
+                                          update_status=self._update_status, tab=tab,
+                                          actions={"test_connection": self.test_connection,
+                                                   "copy_diagnostics": self.diagnostics,
+                                                   "forget_archive": self.forget_archive,
+                                                   "reset": self.reset_settings},
+                                          versions=self.versions())
         self.settings_view.grid(row=1, column=0, sticky="nsew")
     def close_settings(self):
         """Back to the download page."""
         if self.settings_view is None:
             return
+        self._settings_tab = self.settings_view.tab
         self.settings_view.destroy()
         self.settings_view = None
         self.main_frame.grid()
         self._sync_nav()
         self.after_idle(self._fill_height)
+    # --- Settings › Advanced and About ---------------------------------------------
+
+    def test_connection(self):
+        """Reach a site (through the proxy, when one is set) on a worker thread."""
+        proxy = self.settings.proxy
+
+        def work():
+            seconds, error = logic.check_connection(proxy)
+            self.events.post(events.CONNECTION_TESTED, seconds=seconds, error=error)
+        threading.Thread(target=work, name="orbida-connection-test", daemon=True).start()
+        return True
+
+    def _on_connection_tested(self, seconds, error):
+        if error:
+            self._append_log(tr("settings.test_failed", error=i18n.tr_message(error)))
+        if self.settings_view is not None:
+            self.settings_view.show_test_result(seconds, error)
+
+    def versions(self):
+        """(name, version) of the parts Orbida runs on, for About."""
+        import platform
+        ffmpeg = self.tools.version.split("-")[0] if self.tools is not None and self.tools.version else "-"
+        return [("yt-dlp", ytdlp_updates.running_version()), ("FFmpeg", ffmpeg),
+                ("Python", platform.python_version()), (tr("about.system"), platform.platform(terse=True))]
+
+    def diagnostics(self):
+        """Text for a bug report (Settings › Advanced › Copy diagnostics)."""
+        return app_setup.diagnostics(self.settings, self.tools, ytdlp_updates.running_version(),
+                                     os.path.join(app_setup.log_dir(), "app.log"))
+
+    def forget_archive(self):
+        """Forget every link downloaded before; playlists then offer every entry as new."""
+        if not messagebox.askyesno(tr("settings.forget_archive"), tr("settings.forget_archive_confirm"),
+                                   parent=self):
+            return False
+        self.archive.clear()
+        self._append_log(tr("log.archive_cleared"))
+        return True
+
+    # Settings a reset keeps: where files go, and what the app remembers about itself.
+    KEPT_ON_RESET = ("download_folder", "last_version", "onboarded", "window_geometry", "skipped_version")
+
+    def reset_settings(self, confirm=True):
+        """Every setting back to its default (the download folder stays)."""
+        if confirm and not messagebox.askyesno(tr("settings.reset"), tr("settings.reset_confirm"), parent=self):
+            return False
+        old = self.settings
+        fresh = settings_store.Settings(**{name: getattr(old, name) for name in self.KEPT_ON_RESET})
+        self.settings = fresh.normalized(default_download_dir())
+        logic.set_network_options(self.settings.proxy)
+        logic.set_verbose(self.settings.verbose_log)
+        app_setup.set_verbose_logging(self.settings.verbose_log)
+        self._apply_reddit_sign_in()
+        self._apply_tray()
+        self._watch_clipboard()
+        for widget, on in ((self.chk_subtitles, self.settings.subtitles),
+                           (self.chk_sponsorblock, self.settings.sponsorblock)):
+            widget.select() if on else widget.deselect()
+        self._auto_mode = None
+        self._apply_mode(self.settings.mode, self.settings.format, self.settings.quality)
+        if old.accent != self.settings.accent:
+            recolor(self, apply_accent(self.settings.accent))
+        if old.theme != self.settings.theme:
+            self._on_theme_changed(self.settings.theme)
+        if old.text_size != self.settings.text_size:
+            ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
+            self.after(50, self._fit_to_content)
+        if old.language != self.settings.language:
+            i18n.set_language(self.settings.language)
+            self._apply_language()  # also rebuilds the settings page
+        self._save_settings()
+        self._rebuild_settings_view()
+        self._append_log(tr("log.settings_reset"))
+        return True
+
     def open_history(self):
         """Show the History page in place of the download page."""
         if self.history_view is not None:

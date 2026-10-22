@@ -27,6 +27,7 @@ UPDATE_CHECKED = "update_checked"    # payload: release (updates.Release or None
 UPDATE_PROGRESS = "update_progress"  # payload: done, total (bytes of the installer)
 UPDATE_READY = "update_ready"        # payload: path (verified installer)
 UPDATE_FAILED = "update_failed"      # payload: error
+CONNECTION_TESTED = "connection_tested"  # payload: seconds (or None), error (or None)
 LINK_RECEIVED = "link_received"      # payload: url (from the browser extension)
 TRAY_SHOW = "tray_show"              # no payload (the tray icon was clicked)
 TRAY_QUIT = "tray_quit"              # no payload (Quit in the tray icon's menu)

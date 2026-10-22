@@ -2604,7 +2604,7 @@ class App(ctk.CTk):
         elif name == "text_size":
             smaller = settings_store.TEXT_SIZES[value] < ctk.ScalingTracker.get_widget_scaling(self)
             ctk.set_widget_scaling(settings_store.TEXT_SIZES[value])
-            self.after(50, lambda: self._fit_to_content(shrink=smaller))
+            self._fit_after_rescale(shrink=smaller)
         elif name == "language":
             i18n.set_language(value)
             self._apply_language()
@@ -2613,6 +2613,14 @@ class App(ctk.CTk):
     LOG_MIN_HEIGHT = 60
 
     DEFAULT_SIZE = (1040, 800)  # the window's size at the first start (units)
+
+    def _fit_after_rescale(self, shrink=False):
+        """Fit the window after a text size change, and again once CustomTkinter
+        lets it change size: after a scaling change it holds the window at its
+        old size for a second (maxsize, on Windows), so the first fit alone
+        could leave Larger text scrolling in a window that has room to grow."""
+        self.after(50, lambda: self._fit_to_content(shrink=shrink))
+        self.after(1100, lambda: self._fit_to_content(shrink=shrink))
 
     def _fit_to_content(self, shrink=False):
         """Fit the window to its content within the screen's work area.
@@ -2771,7 +2779,7 @@ class App(ctk.CTk):
             self._on_theme_changed(self.settings.theme)
         if old.text_size != self.settings.text_size:
             ctk.set_widget_scaling(settings_store.TEXT_SIZES[self.settings.text_size])
-            self.after(50, self._fit_to_content)
+            self._fit_after_rescale(shrink=True)
         if old.language != self.settings.language:
             i18n.set_language(self.settings.language)
             self._apply_language()  # also rebuilds the settings page

@@ -1604,8 +1604,12 @@ def test_playlist_picker_queue_and_background_service(tmp_path):
     (tmp_path / "old.mp4").write_bytes(b"x")
     env = dict(os.environ, KIVY_HOME=str(tmp_path / "kivy"), XDG_CONFIG_HOME=str(tmp_path / "config"),
                HOME=str(tmp_path), KIVY_NO_ARGS="1")
-    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env,
-                         cwd=tmp_path)
+    try:
+        out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, env=env,
+                             cwd=tmp_path)
+    except subprocess.TimeoutExpired as e:
+        output = f"{(e.stdout or b'')[-4000:]!r} {(e.stderr or b'')[-6000:]!r}"
+        raise AssertionError(f"the probe did not finish: {output}") from e
     line = next((x for x in out.stdout.splitlines() if x.startswith("UIPROBE ")), None)
     assert line, out.stdout[-3000:] + out.stderr[-3000:]
     r = json.loads(line[len("UIPROBE "):])

@@ -435,6 +435,10 @@ def test_larger_text_stays_above_the_taskbar(monkeypatch, larger_text, area_heig
     monkeypatch.setattr(ui, "work_area", lambda window: (0, 0, 1920, area_height))
     window = make_app(monkeypatch)
     try:
+        # Let the start settle first: after a scaling change CustomTkinter
+        # holds every window at its size for a second (_set_scaled_min_max),
+        # which on a slow CI runner still covers this test's fit.
+        pump(window, timeout=1.2)
         window.geometry("+0+300")  # start low, as a restored window might
         pump(window, timeout=0.2)
         window._fit_to_content()
@@ -451,7 +455,7 @@ def test_larger_text_stays_above_the_taskbar(monkeypatch, larger_text, area_heig
 
 @needs_display
 def test_activity_box_takes_spare_height(app):
-    pump(app, timeout=0.3)  # the window's own fit at start comes first
+    pump(app, timeout=1.2)  # the window's own fit at start comes first (see above)
     app.geometry("1040x1000")
     pump(app, timeout=0.5)
     tall = app.console.cget("height")
